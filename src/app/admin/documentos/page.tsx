@@ -70,7 +70,7 @@ export default function GerenciamentoDocumentosPage() {
     // Placeholder for Supabase API call to delete documento (metadata and file from Storage)
     // try {
     //   // 1. Delete file from Supabase Storage
-    //   // const { error: storageError } = await supabase.storage.from('documentos_bucket').remove([`path_to_file/${documentoToDelete.id}`]);
+    //   // const { error: storageError } = await supabase.storage.from('documentos_bucket').remove([`path_to_file/${documentoToDelete.id}`]); // Replace with actual path logic
     //   // if (storageError) throw storageError;
 
     //   // 2. Delete metadata from Supabase database
@@ -97,20 +97,49 @@ export default function GerenciamentoDocumentosPage() {
   };
 
   const handleDownload = (documento: Documento) => {
-    console.log(`Downloading documento: ${documento.titulo} (ID: ${documento.id}) (placeholder - Supabase Storage download link needed)`);
-    // In a real app, construct a download URL from Supabase Storage or trigger a download.
-    // For example: const { data, error } = await supabase.storage.from('bucket_name').download(`path_to_file/${documento.id}`);
-    // if (error) // handle error
-    // else { // create a link and click it to download data.blob }
-    // toast({ title: "Download Iniciado", description: `O download de ${documento.titulo} começará em breve.`});
+    console.log(`Downloading documento: ${documento.titulo} (ID: ${documento.id})`);
+    // Placeholder for Supabase Storage download logic
+    // In a real app:
+    // 1. Get a signed URL or public URL for the file from Supabase Storage.
+    //    const { data, error } = await supabase.storage
+    //      .from('documentos_bucket') // your bucket name
+    //      .download(`path_to_your_file/${documento.id}`); // or a path stored in 'documento' object
+    // 2. If successful, create a temporary link and trigger download.
+    //    if (data) {
+    //      const url = URL.createObjectURL(data);
+    //      const a = document.createElement('a');
+    //      a.href = url;
+    //      a.download = documento.titulo; // Or actual file name
+    //      document.body.appendChild(a);
+    //      a.click();
+    //      document.body.removeChild(a);
+    //      URL.revokeObjectURL(url);
+    //      // toast({ title: "Download Iniciado", description: `O download de ${documento.titulo} começará em breve.`});
+    //    } else if (error) {
+    //      console.error('Error downloading file:', error);
+    //      // toast({ title: "Erro no Download", description: `Não foi possível baixar o arquivo: ${error.message}`, variant: "destructive" });
+    //    }
+    // toast({ title: "Download Iniciado (Simulado)", description: `O download de ${documento.titulo} começaria agora.`});
   }
 
   const handleView = (documento: Documento) => {
-    console.log(`Viewing documento: ${documento.titulo} (ID: ${documento.id}) (placeholder - Supabase Storage public URL or signed URL needed)`);
-    // In a real app, open the document in a new tab or modal.
-    // For example: const { data } = supabase.storage.from('bucket_name').getPublicUrl(`path_to_file/${documento.id}`);
-    // window.open(data.publicUrl, '_blank');
-    // toast({ title: "Visualizando Documento", description: `Abrindo ${documento.titulo}...`});
+    console.log(`Viewing documento: ${documento.titulo} (ID: ${documento.id})`);
+    // Placeholder for Supabase Storage view logic
+    // In a real app:
+    // 1. Get a public URL for the file from Supabase Storage if the file is public.
+    //    const { data } = supabase.storage
+    //      .from('documentos_bucket') // your bucket name
+    //      .getPublicUrl(`path_to_your_file/${documento.id}`); // or a path stored in 'documento' object
+    // 2. Open the URL in a new tab.
+    //    if (data.publicUrl) {
+    //      window.open(data.publicUrl, '_blank');
+    //      // toast({ title: "Visualizando Documento", description: `Abrindo ${documento.titulo}...`});
+    //    } else {
+    //      console.error('Could not get public URL for file.');
+    //      // toast({ title: "Erro ao Visualizar", description: "Não foi possível obter o link do arquivo.", variant: "destructive" });
+    //    }
+    // For non-public files, you might generate a signed URL.
+    // toast({ title: "Visualizando Documento (Simulado)", description: `Abrindo ${documento.titulo} em nova aba...`});
   }
 
   const formatDate = (dateString: string) => {
@@ -245,8 +274,8 @@ export default function GerenciamentoDocumentosPage() {
         - Document list will be fetched from a Supabase table (e.g., 'documentos_metadata') containing metadata about files stored in Supabase Storage.
         - Search functionality will query the Supabase metadata table.
         - "Upload de Novo Documento" button links to '/admin/documentos/novo'. This page handles the file upload to Supabase Storage and metadata saving to the database.
-        - "Visualizar" button will likely open a public or signed URL from Supabase Storage.
-        - "Download" button will initiate a download of the file from Supabase Storage.
+        - "Visualizar" button: Will obtain a public or signed URL from Supabase Storage for the file associated with 'documento.id' (or a stored path) and open it in a new tab.
+        - "Download" button: Will obtain a download URL (possibly signed) from Supabase Storage for the file and trigger a browser download.
         - "Excluir" button will trigger a Supabase API call to delete the file from Storage and its metadata from the database after confirmation.
       */}
     </div>
