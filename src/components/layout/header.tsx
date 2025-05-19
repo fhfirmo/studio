@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -9,7 +10,8 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/s
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const navItems: { href: string; label: string }[] = [
-  // { href: '/', label: 'Home' }, // Removed
+  { href: '/admin/clientes', label: 'Clientes' },
+  { href: '/admin/usuarios', label: 'Usuários' },
   // { href: '/quem-somos', label: 'Quem Somos' }, // Removed
   // { href: '/servicos', label: 'Serviços' }, // Removed
 ];
@@ -31,7 +33,16 @@ export function Header() {
           </Link>
           <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
           <nav className="hidden md:flex space-x-6 items-center">
-            {/* Placeholder for nav items if any were to be shown during loading */}
+            {navItems.map((item) => (
+              <li key={item.href} className="list-none">
+                <Link
+                  href={item.href}
+                  className="text-sm font-medium text-transparent bg-muted rounded animate-pulse h-5 w-20 inline-block"
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
           </nav>
         </div>
       </header>
@@ -82,7 +93,7 @@ export function Header() {
                     </ul>
                   </nav>
                 )}
-                <div className="p-4 border-t mt-auto"> {/* Added mt-auto to push to bottom if nav is empty */}
+                <div className="p-4 border-t mt-auto">
                   <p className="text-xs text-muted-foreground text-center">INBM &copy; {new Date().getFullYear()}</p>
                 </div>
               </div>
