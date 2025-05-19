@@ -244,7 +244,7 @@ export default function GerenciamentoDocumentosPage() {
         Supabase Integration Notes:
         - Document list will be fetched from a Supabase table (e.g., 'documentos_metadata') containing metadata about files stored in Supabase Storage.
         - Search functionality will query the Supabase metadata table.
-        - "Upload de Novo Documento" button links to '/admin/documentos/novo'.
+        - "Upload de Novo Documento" button links to '/admin/documentos/novo'. This page handles the file upload to Supabase Storage and metadata saving to the database.
         - "Visualizar" button will likely open a public or signed URL from Supabase Storage.
         - "Download" button will initiate a download of the file from Supabase Storage.
         - "Excluir" button will trigger a Supabase API call to delete the file from Storage and its metadata from the database after confirmation.
@@ -252,3 +252,5 @@ export default function GerenciamentoDocumentosPage() {
     </div>
   );
 }
+
+    
