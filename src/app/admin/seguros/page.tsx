@@ -178,7 +178,7 @@ export default function GerenciamentoSegurosPage() {
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" asChild aria-label={`Editar seguro ${seguro.numeroApolice}`}>
-                          <Link href={`/admin/seguros/${seguro.id}/editar`}> {/* Placeholder Link - To be created */}
+                          <Link href={`/admin/seguros/${seguro.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
                         </Button>
@@ -233,12 +233,14 @@ export default function GerenciamentoSegurosPage() {
         - Insurance list will be fetched from a Supabase table (e.g., 'seguros'), potentially with a join to 'veiculos' to get vehicle details.
         - Search functionality will query the Supabase 'seguros' table by policy number or vehicle plate.
         - "Cadastrar Novo Seguro" button links to '/admin/seguros/novo'.
-        - "Detalhes" button links to '/admin/seguros/[id]', passing the insurance ID. This page needs to be created.
+        - "Detalhes" button links to '/admin/seguros/[id]', passing the insurance ID.
         - "Editar" button links to '/admin/seguros/[id]/editar', passing the insurance ID. This page needs to be created.
         - "Excluir" button will trigger a Supabase API call (DELETE to 'seguros' table) after confirmation.
       */}
     </div>
   );
 }
+
+    
 
     
