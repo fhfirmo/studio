@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Car, UserPlus, Edit3, Trash2, Search, Info, AlertTriangle } from "lucide-react"; // Changed Users to Car for icon
+import { Car, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react"; // Changed UserPlus to PlusCircle for semantic consistency
 // import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
 
 // Placeholder data - In a real app, this would come from Supabase
@@ -105,8 +105,8 @@ export default function GerenciamentoVeiculosPage() {
             </p>
           </div>
           <Button asChild className="mt-4 sm:mt-0">
-            <Link href="/admin/veiculos/novo"> {/* Link to future new vehicle page */}
-              <UserPlus className="mr-2 h-5 w-5" /> Cadastrar Novo Veículo
+            <Link href="/admin/veiculos/novo"> 
+              <PlusCircle className="mr-2 h-5 w-5" /> Cadastrar Novo Veículo
             </Link>
           </Button>
         </div>
@@ -164,12 +164,12 @@ export default function GerenciamentoVeiculosPage() {
                       <TableCell className="hidden lg:table-cell">{veiculo.ano}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa}`}>
-                           <Link href={`/admin/veiculos/${veiculo.id}`}> {/* Placeholder link */}
+                           <Link href={`/admin/veiculos/${veiculo.id}`}> {/* Placeholder link for future details page */}
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" asChild aria-label={`Editar veículo ${veiculo.placa}`}>
-                          <Link href={`/admin/veiculos/${veiculo.id}/editar`}> {/* Placeholder link */}
+                          <Link href={`/admin/veiculos/${veiculo.id}/editar`}> {/* Placeholder link for future edit page */}
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
                         </Button>
@@ -231,3 +231,4 @@ export default function GerenciamentoVeiculosPage() {
     </div>
   );
 }
+
