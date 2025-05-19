@@ -11,9 +11,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 const navItems: { href: string; label: string }[] = [
   { href: '/admin/clientes', label: 'Clientes' },
-  { href: '/admin/usuarios', label: 'Usuários' },
-  // { href: '/quem-somos', label: 'Quem Somos' }, // Removed
-  // { href: '/servicos', label: 'Serviços' }, // Removed
+  // { href: '/admin/usuarios', label: 'Usuários' }, // Removed as per user request
 ];
 
 export function Header() {
