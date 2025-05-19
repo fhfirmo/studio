@@ -14,6 +14,7 @@ const navItems: { href: string; label: string }[] = [
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
   { href: '/admin/documentos', label: 'Documentos' },
+  { href: '/admin/relatorios', label: 'Relatórios' },
 ];
 
 export function Header() {
