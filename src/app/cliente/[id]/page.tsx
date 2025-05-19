@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/utils"; // Added import for cn
 
 // Placeholder function to get client data by ID
 // In a real app, this would fetch from Supabase
