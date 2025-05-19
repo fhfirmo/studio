@@ -19,7 +19,7 @@ export default function Home() {
             Área Administrativa
           </Link>
         </Button>
-        <Button asChild variant="outline" size="lg" className="min-w-[220px] sm:min-w-[250px] py-3 px-6">
+        <Button asChild variant="secondary" size="lg" className="min-w-[220px] sm:min-w-[250px] py-3 px-6">
           <Link href="/login">
             Login
           </Link>
