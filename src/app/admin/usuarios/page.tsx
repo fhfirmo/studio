@@ -82,8 +82,8 @@ export default function GerenciamentoUsuariosPage() {
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          user.perfil === 'Administrador' ? 'bg-primary/10 text-primary' : 
-                          user.perfil === 'Operador' ? 'bg-accent/10 text-accent' : 
+                          user.perfil === 'Administrador' ? 'bg-primary/10 text-primary' :
+                          user.perfil === 'Operador' ? 'bg-accent/10 text-accent' :
                           'bg-muted text-muted-foreground'
                         }`}>
                           {user.perfil}
@@ -94,13 +94,13 @@ export default function GerenciamentoUsuariosPage() {
                       </TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="outline" size="sm" asChild aria-label={`Editar usuário ${user.nome}`}>
-                          <Link href={`/admin/usuarios/${user.id}/editar`}> {/* Placeholder link */}
+                          <Link href={`/admin/usuarios/${user.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-2 hidden sm:inline">Editar</span>
                           </Link>
                         </Button>
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
+                        <Button
+                          variant="destructive"
+                          size="sm"
                           onClick={() => handleDeleteUser(user.id)}  // Placeholder action
                           aria-label={`Excluir usuário ${user.nome}`}
                         >
@@ -122,20 +122,19 @@ export default function GerenciamentoUsuariosPage() {
           {/* Add pagination controls here in the future if needed */}
         </CardContent>
       </Card>
-      {/* 
+      {/*
         Supabase Integration Notes:
         - User list will be fetched from a Supabase table (e.g., 'profiles' or 'users').
-        - "Cadastrar Novo Usuário" button will navigate to a form page which, upon submission, 
+        - "Cadastrar Novo Usuário" button will navigate to a form page which, upon submission,
           will call Supabase to insert a new user (e.g., using Supabase Auth and a 'profiles' table).
-        - "Editar" button will navigate to a form page pre-filled with user data (fetched from Supabase by ID), 
+        - "Editar" button will navigate to a form page pre-filled with user data (fetched from Supabase by ID),
           which upon submission will call Supabase to update the user's record.
-        - "Excluir" button will trigger a Supabase API call to delete the user's record, 
+        - "Excluir" button will trigger a Supabase API call to delete the user's record,
           likely after a confirmation modal.
         - Search/filter functionality will query the Supabase table.
       */}
     </div>
   );
 }
-
 
     
