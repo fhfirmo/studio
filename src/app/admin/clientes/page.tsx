@@ -175,7 +175,6 @@ export default function GerenciamentoClientesPage() {
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" asChild aria-label={`Editar cliente ${client.nomeCompleto}`}>
-                           {/* Placeholder: Link to /admin/clientes/[id]/editar which needs to be created */}
                           <Link href={`/admin/clientes/${client.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
@@ -234,7 +233,7 @@ export default function GerenciamentoClientesPage() {
         - "Cadastrar Novo Cliente" button links to '/admin/clientes/novo'.
         - The "Detalhes" button in the Ações column dynamically links to `/cliente/[id]`, passing the client's ID.
           The `/cliente/[id]` page is set up to receive this ID and fetch/display detailed client information from Supabase.
-        - "Editar" button will link to '/admin/clientes/[id]/editar' (to be created), dynamically passing the client's ID.
+        - "Editar" button will link to '/admin/clientes/[id]/editar', dynamically passing the client's ID.
         - "Excluir" button will trigger a Supabase API call (e.g., DELETE request) to remove the client's record,
           using the client's ID, after user confirmation via the modal.
       */}
@@ -242,5 +241,7 @@ export default function GerenciamentoClientesPage() {
   );
 }
 
+
+    
 
     
