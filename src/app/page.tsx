@@ -15,7 +15,7 @@ export default function Home() {
       
       <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
         <Button asChild size="lg" className="min-w-[220px] sm:min-w-[250px] py-3 px-6">
-          <Link href="/admin">
+          <Link href="/admin-auth">
             Área Administrativa
           </Link>
         </Button>
