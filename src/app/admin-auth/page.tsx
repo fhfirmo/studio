@@ -25,13 +25,17 @@ export default function AdminAuthPage() {
     setIsLoading(true);
     console.log('Admin login attempt with:', { email, password });
 
-    // Placeholder for Supabase Auth logic for admin access
+    // Placeholder for Supabase Auth logic for admin access.
+    // This might involve checking for a specific admin role or using a separate admin user table.
     // try {
     //   const { data, error } = await supabase.auth.signInWithPassword({
     //     email: email,
     //     password: password,
     //   });
     //   if (error) throw error;
+    //   // Potentially, check for an admin role here:
+    //   // const { data: userRole, error: roleError } = await supabase.from('user_roles').select('role').eq('user_id', data.user.id).single();
+    //   // if (roleError || userRole?.role !== 'admin') throw new Error("Not an admin user.");
     //   console.log('Admin login successful:', data);
     //   // Redirect to admin panel or show success message
     //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel..."});
@@ -62,7 +66,7 @@ export default function AdminAuthPage() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl sm:text-3xl font-bold text-primary">
-            Login: Área Administrativa
+            Acesso à Área Administrativa INBM
           </CardTitle>
           <CardDescription>
             Acesso exclusivo para administradores.
@@ -71,11 +75,11 @@ export default function AdminAuthPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="email">E-mail Administrativo</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="seu.admin@email.com"
+                placeholder="Seu e-mail administrativo"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -83,12 +87,12 @@ export default function AdminAuthPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password">Senha Administrativa</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Senha administrativa"
+                  placeholder="Sua senha administrativa"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -106,8 +110,8 @@ export default function AdminAuthPage() {
                 </Button>
               </div>
             </div>
-            <Button type="submit" className="w-full text-base py-3" disabled={isLoading}>
-              {isLoading ? 'Verificando...' : 'Acessar Área Administrativa'}
+            <Button type="submit" className="w-full text-base py-3" variant="secondary" disabled={isLoading}>
+              {isLoading ? 'Verificando...' : 'Entrar na Área Administrativa'}
             </Button>
           </form>
         </CardContent>
