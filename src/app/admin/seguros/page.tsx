@@ -92,7 +92,7 @@ export default function GerenciamentoSegurosPage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+    return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
   }
 
   const formatCurrency = (value: number) => {
@@ -173,7 +173,7 @@ export default function GerenciamentoSegurosPage() {
                       <TableCell className="hidden lg:table-cell text-right">{formatCurrency(seguro.valorTotal)}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do seguro ${seguro.numeroApolice}`}>
-                           <Link href={`/admin/seguros/${seguro.id}`}> {/* Placeholder Link - To be created */}
+                           <Link href={`/admin/seguros/${seguro.id}`}>
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
@@ -240,6 +240,5 @@ export default function GerenciamentoSegurosPage() {
     </div>
   );
 }
-
 
     
