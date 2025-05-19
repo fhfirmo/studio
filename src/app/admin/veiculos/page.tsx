@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Car, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react"; // Changed UserPlus to PlusCircle for semantic consistency
+import { Car, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react";
 // import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
 
 // Placeholder data - In a real app, this would come from Supabase
@@ -26,7 +26,7 @@ interface Veiculo {
   modelo: string;
   marca: string;
   ano: number;
-  dataCadastro: string; // Added for consistency, can be hidden if not needed in table
+  dataCadastro: string; 
 }
 
 export default function GerenciamentoVeiculosPage() {
@@ -164,12 +164,12 @@ export default function GerenciamentoVeiculosPage() {
                       <TableCell className="hidden lg:table-cell">{veiculo.ano}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa}`}>
-                           <Link href={`/admin/veiculos/${veiculo.id}`}> {/* Placeholder link for future details page */}
+                           <Link href={`/admin/veiculos/${veiculo.id}`}>
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" asChild aria-label={`Editar veículo ${veiculo.placa}`}>
-                          <Link href={`/admin/veiculos/${veiculo.id}/editar`}> {/* Placeholder link for future edit page */}
+                          <Link href={`/admin/veiculos/${veiculo.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
                         </Button>
@@ -224,8 +224,8 @@ export default function GerenciamentoVeiculosPage() {
         - Vehicle list will be fetched from a Supabase table (e.g., 'veiculos').
         - Search functionality will query the Supabase 'veiculos' table by placa, modelo, or marca.
         - "Cadastrar Novo Veículo" button links to '/admin/veiculos/novo'.
-        - "Detalhes" button links to '/admin/veiculos/[id]'.
-        - "Editar" button links to '/admin/veiculos/[id]/editar'.
+        - "Detalhes" button links to '/admin/veiculos/[id]', passing the vehicle's ID. This page will fetch and display vehicle details from Supabase.
+        - "Editar" button links to '/admin/veiculos/[id]/editar', passing the vehicle's ID. This page will pre-fill a form with vehicle data for editing.
         - "Excluir" button will trigger a Supabase API call (DELETE to 'veiculos' table) after confirmation.
       */}
     </div>
