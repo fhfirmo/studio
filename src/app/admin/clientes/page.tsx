@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger as it's not used directly when opening programmatically
-import { UserPlus, Edit3, Trash2, Search, Info, Users, AlertTriangle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; 
+import { UserPlus, Edit3, Trash2, Search, Info, Users, AlertTriangle, DownloadCloud } from "lucide-react";
+import { ExportDataDialog } from '@/components/shared/ExportDataDialog'; 
 // import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
 
 // Placeholder data - In a real app, this would come from Supabase
@@ -95,7 +96,7 @@ export default function GerenciamentoClientesPage() {
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
       <header className="mb-8 md:mb-12">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
               <Users className="mr-3 h-8 w-8" /> Listagem de Clientes
@@ -104,11 +105,14 @@ export default function GerenciamentoClientesPage() {
               Visualize, cadastre, edite e remova clientes do sistema.
             </p>
           </div>
-          <Button asChild className="mt-4 sm:mt-0">
-            <Link href="/admin/clientes/novo">
-              <UserPlus className="mr-2 h-5 w-5" /> Cadastrar Novo Cliente
-            </Link>
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <ExportDataDialog dataTypeName="Clientes" />
+            <Button asChild>
+              <Link href="/admin/clientes/novo">
+                <UserPlus className="mr-2 h-5 w-5" /> Cadastrar Novo Cliente
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -129,10 +133,6 @@ export default function GerenciamentoClientesPage() {
             <Button type="submit">
               <Search className="mr-2 h-4 w-4" /> Buscar
             </Button>
-            {/* Placeholder for more advanced filter button */}
-            {/* <Button variant="outline">
-              <ListFilter className="mr-2 h-4 w-4" /> Filtros Avançados
-            </Button> */}
           </form>
         </CardContent>
       </Card>
@@ -170,7 +170,7 @@ export default function GerenciamentoClientesPage() {
                       </TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do cliente ${client.nomeCompleto}`}>
-                           <Link href={`/cliente/${client.id}`}>
+                           <Link href={`/cliente/${client.id}`}> {/* This link takes user to public client detail page */}
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
@@ -200,7 +200,6 @@ export default function GerenciamentoClientesPage() {
               </TableBody>
             </Table>
           </div>
-          {/* Add pagination controls here in the future if needed */}
         </CardContent>
       </Card>
 
@@ -236,9 +235,8 @@ export default function GerenciamentoClientesPage() {
         - "Editar" button will link to '/admin/clientes/[id]/editar', dynamically passing the client's ID.
         - "Excluir" button will trigger a Supabase API call (e.g., DELETE request to 'clientes' table using the client's ID) 
           after user confirmation via the modal. The list should be re-fetched or updated locally upon successful deletion.
+        - Export functionality will call a Supabase endpoint/function to generate and download data.
       */}
     </div>
   );
 }
-
-      
