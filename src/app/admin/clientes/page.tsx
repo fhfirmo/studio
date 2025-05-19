@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { UserPlus, Edit3, Trash2, Search, Info, ListFilter, Users, AlertTriangle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger as it's not used directly when opening programmatically
+import { UserPlus, Edit3, Trash2, Search, Info, Users, AlertTriangle } from "lucide-react";
 // import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
 
 // Placeholder data - In a real app, this would come from Supabase
@@ -38,7 +38,7 @@ export default function GerenciamentoClientesPage() {
   // In a real app, clients would be fetched from Supabase:
   // useEffect(() => {
   //   async function fetchClients() {
-  //     // const { data, error } = await supabase.from('clientes_table_name').select('*');
+  //     // const { data, error } = await supabase.from('clientes').select('*'); // Replace 'clientes' with your table name
   //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar clientes."}) */ }
   //     // else { setClients(data || []); }
   //   }
@@ -48,7 +48,7 @@ export default function GerenciamentoClientesPage() {
   // Placeholder for search logic - will query Supabase in a real app
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
-    console.log(`Searching for: ${searchTerm} (placeholder - Supabase query needed)`);
+    console.log(`Searching for: ${searchTerm} (placeholder - Supabase query needed for 'clientes' table)`);
     // const filteredClients = initialClients.filter(client => 
     //   client.nomeCompleto.toLowerCase().includes(searchTerm.toLowerCase()) ||
     //   client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -56,7 +56,7 @@ export default function GerenciamentoClientesPage() {
     // );
     // setClients(filteredClients);
     // if (filteredClients.length === 0) {
-    //   toast({ title: "Nenhum Resultado", description: `Não foram encontrados clientes para "${searchTerm}".` });
+    //   // toast({ title: "Nenhum Resultado", description: `Não foram encontrados clientes para "${searchTerm}".` });
     // }
   };
 
@@ -71,13 +71,13 @@ export default function GerenciamentoClientesPage() {
     console.log(`Attempting to delete client ID: ${clientToDelete.id}, Name: ${clientToDelete.nome}`);
     // Placeholder for Supabase API call to delete client
     // try {
-    //   // const { error } = await supabase.from('clientes_table_name').delete().eq('id', clientToDelete.id);
+    //   // const { error } = await supabase.from('clientes').delete().eq('id', clientToDelete.id); // Replace 'clientes'
     //   // if (error) throw error;
     //   setClients(prevClients => prevClients.filter(c => c.id !== clientToDelete.id));
     //   // toast({ title: "Cliente Excluído!", description: `O cliente ${clientToDelete.nome} foi excluído com sucesso.` });
     // } catch (error: any) {
     //   console.error('Failed to delete client:', error.message);
-    //   // toast({ title: "Erro ao Excluir", description: error.message, variant: "destructive" });
+    //   // toast({ title: "Erro ao Excluir", description: `Falha ao excluir cliente: ${error.message}`, variant: "destructive" });
     // } finally {
     //   setIsAlertOpen(false);
     //   setClientToDelete(null);
@@ -217,7 +217,7 @@ export default function GerenciamentoClientesPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setClientToDelete(null)}>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setClientToDelete(null); }}>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={confirmDeleteClient} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                 Confirmar Exclusão
               </AlertDialogAction>
@@ -234,14 +234,11 @@ export default function GerenciamentoClientesPage() {
         - The "Detalhes" button in the Ações column dynamically links to `/cliente/[id]`, passing the client's ID.
           The `/cliente/[id]` page is set up to receive this ID and fetch/display detailed client information from Supabase.
         - "Editar" button will link to '/admin/clientes/[id]/editar', dynamically passing the client's ID.
-        - "Excluir" button will trigger a Supabase API call (e.g., DELETE request) to remove the client's record,
-          using the client's ID, after user confirmation via the modal.
+        - "Excluir" button will trigger a Supabase API call (e.g., DELETE request to 'clientes' table using the client's ID) 
+          after user confirmation via the modal. The list should be re-fetched or updated locally upon successful deletion.
       */}
     </div>
   );
 }
 
-
-    
-
-    
+      
