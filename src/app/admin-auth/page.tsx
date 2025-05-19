@@ -3,6 +3,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,7 @@ export default function AdminAuthPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter(); // Initialize router
   // const { toast } = useToast(); // Uncomment if you want to use toasts for feedback
 
   const handleSubmit = async (event: FormEvent) => {
@@ -45,7 +47,7 @@ export default function AdminAuthPage() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated admin login finished');
     setIsLoading(false);
-    // On successful real login, you'd likely redirect the user to the admin dashboard
+    router.push('/admin/dashboard'); // Redirect to dashboard
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
