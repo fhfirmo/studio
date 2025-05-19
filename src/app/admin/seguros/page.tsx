@@ -173,12 +173,12 @@ export default function GerenciamentoSegurosPage() {
                       <TableCell className="hidden lg:table-cell text-right">{formatCurrency(seguro.valorTotal)}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do seguro ${seguro.numeroApolice}`}>
-                           <Link href={`/admin/seguros/${seguro.id}`}> {/* Placeholder Link */}
+                           <Link href={`/admin/seguros/${seguro.id}`}> {/* Placeholder Link - To be created */}
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" asChild aria-label={`Editar seguro ${seguro.numeroApolice}`}>
-                          <Link href={`/admin/seguros/${seguro.id}/editar`}> {/* Placeholder Link */}
+                          <Link href={`/admin/seguros/${seguro.id}/editar`}> {/* Placeholder Link - To be created */}
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
                         </Button>
@@ -230,13 +230,16 @@ export default function GerenciamentoSegurosPage() {
 
       {/*
         Supabase Integration Notes:
-        - Insurance list will be fetched from a Supabase table (e.g., 'seguros'), potentially with a join to 'veiculos'.
+        - Insurance list will be fetched from a Supabase table (e.g., 'seguros'), potentially with a join to 'veiculos' to get vehicle details.
         - Search functionality will query the Supabase 'seguros' table by policy number or vehicle plate.
         - "Cadastrar Novo Seguro" button links to '/admin/seguros/novo'.
-        - "Detalhes" button links to '/admin/seguros/[id]', passing the insurance ID.
-        - "Editar" button links to '/admin/seguros/[id]/editar', passing the insurance ID.
+        - "Detalhes" button links to '/admin/seguros/[id]', passing the insurance ID. This page needs to be created.
+        - "Editar" button links to '/admin/seguros/[id]/editar', passing the insurance ID. This page needs to be created.
         - "Excluir" button will trigger a Supabase API call (DELETE to 'seguros' table) after confirmation.
       */}
     </div>
   );
 }
+
+
+    
