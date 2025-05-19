@@ -229,13 +229,18 @@ export default function GerenciamentoClientesPage() {
 
       {/*
         Supabase Integration Notes:
-        - Client list will be fetched from a Supabase table (e.g., 'clientes').
+        - Client list will be fetched from a Supabase table (e.g., 'clientes') using Supabase API calls.
         - Search functionality will query the Supabase 'clientes' table.
         - "Cadastrar Novo Cliente" button links to '/admin/clientes/novo'.
-        - "Detalhes" button links to '/cliente/[id]'.
-        - "Editar" button will link to '/admin/clientes/[id]/editar' (to be created).
-        - "Excluir" button will trigger a Supabase API call to delete the client's record.
+        - The "Detalhes" button in the Ações column dynamically links to `/cliente/[id]`, passing the client's ID.
+          The `/cliente/[id]` page is set up to receive this ID and fetch/display detailed client information from Supabase.
+        - "Editar" button will link to '/admin/clientes/[id]/editar' (to be created), dynamically passing the client's ID.
+        - "Excluir" button will trigger a Supabase API call (e.g., DELETE request) to remove the client's record,
+          using the client's ID, after user confirmation via the modal.
       */}
     </div>
   );
 }
+
+
+    
