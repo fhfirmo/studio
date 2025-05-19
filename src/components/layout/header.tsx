@@ -13,6 +13,7 @@ const navItems: { href: string; label: string }[] = [
   { href: '/admin/clientes', label: 'Clientes' },
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
+  { href: '/admin/documentos', label: 'Documentos' },
 ];
 
 export function Header() {
