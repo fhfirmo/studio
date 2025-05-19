@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, BarChartBig, ListChecks, Settings, Search, ChevronRight } from "lucide-react";
+import { Users, BarChartBig, ListChecks, Settings, Search, ChevronRight, UserPlus } from "lucide-react";
 
 // Placeholder data - In a real app, this would come from Supabase
 const dashboardData = {
@@ -31,12 +31,21 @@ export default function AdminDashboardPage() {
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
       <header className="mb-8 md:mb-12">
-        <h1 className="text-3xl md:text-4xl font-bold text-primary">
-          Painel Administrativo INBM
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Visão geral e insights do seu negócio.
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-primary">
+              Painel Administrativo INBM
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Visão geral e insights do seu negócio.
+            </p>
+          </div>
+          <Button asChild className="mt-4 sm:mt-0">
+            <Link href="/admin/clientes/novo">
+              <UserPlus className="mr-2 h-5 w-5" /> Novo Cliente
+            </Link>
+          </Button>
+        </div>
       </header>
 
       {/* Search Section */}
