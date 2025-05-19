@@ -1,4 +1,6 @@
 
+"use client"; // Add this directive
+
 // src/app/admin/usuarios/page.tsx
 // This page will display a list of users and allow for their management.
 // Data will be fetched from Supabase in a real application.
@@ -134,3 +136,4 @@ export default function GerenciamentoUsuariosPage() {
     </div>
   );
 }
+
