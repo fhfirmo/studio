@@ -3,15 +3,15 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
-import { InbmLogo } from '@/components/icons/inbm-logo';
+import { InbmLogo } from '@/components/icons/inbm-logo'; // This is the existing header logo (square design)
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-const navItems = [
-  { href: '/', label: 'Home' },
-  { href: '/quem-somos', label: 'Quem Somos' },
-  { href: '/servicos', label: 'Serviços' },
+const navItems: { href: string; label: string }[] = [
+  // { href: '/', label: 'Home' }, // Removed
+  // { href: '/quem-somos', label: 'Quem Somos' }, // Removed
+  // { href: '/servicos', label: 'Serviços' }, // Removed
 ];
 
 export function Header() {
@@ -31,9 +31,7 @@ export function Header() {
           </Link>
           <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
           <nav className="hidden md:flex space-x-6 items-center">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-4 w-20 bg-muted rounded-md animate-pulse"></div>
-            ))}
+            {/* Placeholder for nav items if any were to be shown during loading */}
           </nav>
         </div>
       </header>
@@ -66,43 +64,47 @@ export function Header() {
                     </Button>
                   </SheetClose>
                 </div>
-                <nav className="flex-grow p-4">
-                  <ul className="space-y-4">
-                    {navItems.map((item) => (
-                      <li key={item.href}>
-                        <SheetClose asChild>
-                          <Link
-                            href={item.href}
-                            className="text-lg font-medium text-foreground hover:text-primary transition-colors block py-2 rounded-md hover:bg-accent/50 px-2"
-                          >
-                            {item.label}
-                          </Link>
-                        </SheetClose>
-                      </li>
-                    ))}
-                  </ul>
-                </nav>
-                <div className="p-4 border-t">
+                {navItems.length > 0 && (
+                  <nav className="flex-grow p-4">
+                    <ul className="space-y-4">
+                      {navItems.map((item) => (
+                        <li key={item.href}>
+                          <SheetClose asChild>
+                            <Link
+                              href={item.href}
+                              className="text-lg font-medium text-foreground hover:text-primary transition-colors block py-2 rounded-md hover:bg-accent/50 px-2"
+                            >
+                              {item.label}
+                            </Link>
+                          </SheetClose>
+                        </li>
+                      ))}
+                    </ul>
+                  </nav>
+                )}
+                <div className="p-4 border-t mt-auto"> {/* Added mt-auto to push to bottom if nav is empty */}
                   <p className="text-xs text-muted-foreground text-center">INBM &copy; {new Date().getFullYear()}</p>
                 </div>
               </div>
             </SheetContent>
           </Sheet>
         ) : (
-          <nav>
-            <ul className="flex space-x-6 items-center">
-              {navItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          navItems.length > 0 && (
+            <nav>
+              <ul className="flex space-x-6 items-center">
+                {navItems.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )
         )}
       </div>
     </header>
