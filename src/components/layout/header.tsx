@@ -12,6 +12,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 const navItems: { href: string; label: string }[] = [
   { href: '/admin/clientes', label: 'Clientes' },
   { href: '/admin/veiculos', label: 'Veículos' },
+  { href: '/admin/seguros', label: 'Seguros' },
 ];
 
 export function Header() {
