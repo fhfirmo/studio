@@ -13,9 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"; // Renamed
-import { UserCog, Save, XCircle, HomeIcon, InfoIcon, AlertTriangle, Users, Briefcase, Link2, CalendarDays, ClipboardUser, Edit3 as EditIcon, PlusCircle } from 'lucide-react'; // Added ClipboardUser, EditIcon
+import { UserCog, Save, XCircle, HomeIcon, InfoIcon, AlertTriangle, Users, Briefcase, Link2, CalendarDays, ClipboardList, Edit3 as EditIcon, PlusCircle } from 'lucide-react'; // Changed ClipboardUser to ClipboardList
 import { format, parseISO, isValid } from "date-fns";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog'; // Added Dialog components
+import { cn } from '@/lib/utils';
 // import { useToast } from "@/hooks/use-toast";
 
 const brazilianStates = [
@@ -67,6 +68,7 @@ const initialCnhFormData: CNHData = {
   primeira_habilitacao: null, local_emissao_cidade: null, local_emissao_uf: null, observacoes_cnh: null,
 };
 
+// Placeholder function to simulate fetching PessoaFisica data
 async function getPessoaFisicaById(id: string) {
   console.log(`Fetching PessoaFisica data for ID: ${id} (placeholder)`);
   await new Promise(resolve => setTimeout(resolve, 500));
@@ -100,6 +102,22 @@ async function getPessoaFisicaById(id: string) {
   return null; 
 }
 
+// Helper function to format date for display, ensuring valid dates
+function formatDateForDisplay(dateString: string | null | undefined): string {
+    if (!dateString) return "N/A";
+    try {
+        const date = parseISO(dateString);
+        if (isValid(date)) {
+            return format(date, "dd/MM/yyyy");
+        }
+        return "Data inválida";
+    } catch (e) {
+        console.error("Error formatting date:", e, "Original string:", dateString);
+        return "Data inválida";
+    }
+}
+
+
 export default function EditarPessoaFisicaPage() {
   const router = useRouter();
   const params = useParams();
@@ -120,7 +138,7 @@ export default function EditarPessoaFisicaPage() {
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
   const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create');
   const [cnhFormData, setCnhFormData] = useState<CNHData>(initialCnhFormData);
-  const [currentDbCnh, setCurrentDbCnh] = useState<CNHData | null>(null); // Stores CNH data from DB
+  const [currentDbCnh, setCurrentDbCnh] = useState<CNHData | null>(null); // Stores CNH data from DB (or simulated)
 
   const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
 
@@ -132,7 +150,7 @@ export default function EditarPessoaFisicaPage() {
           if (data) {
             setFormData({
               nomeCompleto: data.nomeCompleto || '', cpf: data.cpf || '', rg: data.rg || '',
-              dataNascimento: data.dataNascimento ? parseISO(data.dataNascimento) : undefined,
+              dataNascimento: data.dataNascimento && isValid(parseISO(data.dataNascimento)) ? parseISO(data.dataNascimento) : undefined,
               email: data.email || '', telefone: data.telefone || '', tipoRelacao: data.tipoRelacao || '',
               organizacaoVinculadaId: data.organizacaoVinculadaId || '',
               logradouro: data.logradouro || '', numero: data.numero || '', complemento: data.complemento || '',
@@ -141,8 +159,7 @@ export default function EditarPessoaFisicaPage() {
             });
             if (data.estado) { /* @ts-ignore */ setCurrentMunicipios(placeholderMunicipios[data.estado] || []); }
             if (data.dataCadastro) {
-              try { setDataCadastroDisplay(format(parseISO(data.dataCadastro), "dd/MM/yyyy")); } 
-              catch (e) { console.error("Error formatting dataCadastro:", e); setDataCadastroDisplay("Data inválida");}
+               setDataCadastroDisplay(formatDateForDisplay(data.dataCadastro));
             }
             setCurrentDbCnh(data.cnh || null); // Store CNH data from DB
             setPessoaFisicaFound(true);
@@ -177,13 +194,9 @@ export default function EditarPessoaFisicaPage() {
   const handleOpenCnhModal = () => {
     if (currentDbCnh) {
       setCnhModalMode('edit');
-      setCnhFormData({
-        numero_registro: currentDbCnh.numero_registro, categoria: currentDbCnh.categoria,
-        data_emissao: currentDbCnh.data_emissao, data_validade: currentDbCnh.data_validade,
-        primeira_habilitacao: currentDbCnh.primeira_habilitacao,
-        local_emissao_cidade: currentDbCnh.local_emissao_cidade,
-        local_emissao_uf: currentDbCnh.local_emissao_uf,
-        observacoes_cnh: currentDbCnh.observacoes_cnh,
+      setCnhFormData({ // Ensure all fields are initialized, even optional ones
+        ...initialCnhFormData, // Start with defaults
+        ...currentDbCnh, // Override with actual data
         id_cnh: currentDbCnh.id_cnh // Keep existing ID for edits
       });
     } else {
@@ -214,12 +227,21 @@ export default function EditarPessoaFisicaPage() {
     // Supabase: POST (create) or PUT/PATCH (edit) to public.CNHs
     // On success, update currentDbCnh state and close modal
     // toast({ title: "CNH Salva! (Simulado)", description: "Dados da CNH salvos." });
-    const newCnhData: CNHData = {
-        ...initialCnhFormData, // ensures all fields exist even if not set in cnhFormData
-        ...cnhFormData,
-        id_cnh: cnhModalMode === 'edit' && currentDbCnh ? currentDbCnh.id_cnh : `cnh_temp_${Date.now()}`
+    
+    // Ensure all fields from CNHData are present, even if null from form
+    const newCnhDataFromForm: CNHData = {
+        id_cnh: cnhModalMode === 'edit' && currentDbCnh ? currentDbCnh.id_cnh : `cnh_temp_${Date.now()}`,
+        numero_registro: cnhFormData.numero_registro,
+        categoria: cnhFormData.categoria,
+        data_emissao: cnhFormData.data_emissao,
+        data_validade: cnhFormData.data_validade,
+        primeira_habilitacao: cnhFormData.primeira_habilitacao || null,
+        local_emissao_cidade: cnhFormData.local_emissao_cidade || null,
+        local_emissao_uf: cnhFormData.local_emissao_uf || null,
+        observacoes_cnh: cnhFormData.observacoes_cnh || null,
     };
-    setCurrentDbCnh(newCnhData);
+
+    setCurrentDbCnh(newCnhDataFromForm);
     setIsCnhModalOpen(false);
   };
 
@@ -261,7 +283,7 @@ export default function EditarPessoaFisicaPage() {
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-2 mb-6"> {/* Added CNH tab */}
              <TabsTrigger value="infoPessoais" className="flex items-center gap-2"><Users className="h-4 w-4" /> Informações Pessoais</TabsTrigger>
              <TabsTrigger value="vinculo" className="flex items-center gap-2"><Link2 className="h-4 w-4" /> Vínculo e Relação</TabsTrigger>
-             <TabsTrigger value="cnh" className="flex items-center gap-2"><ClipboardUser className="h-4 w-4" /> CNH</TabsTrigger> {/* CNH Tab */}
+             <TabsTrigger value="cnh" className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> CNH</TabsTrigger> {/* Changed ClipboardUser to ClipboardList */}
              <TabsTrigger value="endereco" className="flex items-center gap-2"><HomeIcon className="h-4 w-4" /> Endereço</TabsTrigger>
              <TabsTrigger value="outrasInfo" className="flex items-center gap-2"><InfoIcon className="h-4 w-4" /> Outras Informações</TabsTrigger>
           </TabsList>
@@ -313,9 +335,9 @@ export default function EditarPessoaFisicaPage() {
                     <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
                         <p><strong>Nº Registro:</strong> {currentDbCnh.numero_registro}</p>
                         <p><strong>Categoria:</strong> {currentDbCnh.categoria}</p>
-                        <p><strong>Emissão:</strong> {formatDate(currentDbCnh.data_emissao)}</p>
-                        <p><strong>Validade:</strong> {formatDate(currentDbCnh.data_validade)}</p>
-                        <p><strong>Primeira Habilitação:</strong> {formatDate(currentDbCnh.primeira_habilitacao)}</p>
+                        <p><strong>Emissão:</strong> {formatDateForDisplay(currentDbCnh.data_emissao)}</p>
+                        <p><strong>Validade:</strong> {formatDateForDisplay(currentDbCnh.data_validade)}</p>
+                        <p><strong>Primeira Habilitação:</strong> {formatDateForDisplay(currentDbCnh.primeira_habilitacao)}</p>
                         <p><strong>Local:</strong> {currentDbCnh.local_emissao_cidade || 'N/A'} - {currentDbCnh.local_emissao_uf || 'N/A'}</p>
                         {currentDbCnh.observacoes_cnh && <p className="sm:col-span-2"><strong>Observações:</strong> {currentDbCnh.observacoes_cnh}</p>}
                     </div>
@@ -373,14 +395,14 @@ export default function EditarPessoaFisicaPage() {
             <div><Label htmlFor="cnh_categoria_modal">Categoria <span className="text-destructive">*</span></Label><Input id="cnh_categoria_modal" name="categoria" value={cnhFormData.categoria} onChange={handleCnhFormChange} required placeholder="Ex: AB, B, C"/></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><Label htmlFor="cnh_data_emissao_modal">Data de Emissão <span className="text-destructive">*</span></Label>
-                <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_emissao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_emissao ? format(parseISO(cnhFormData.data_emissao), "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_emissao ? parseISO(cnhFormData.data_emissao) : undefined} onSelect={(d) => handleCnhDateChange('data_emissao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
+                <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_emissao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_emissao ? formatDateForDisplay(cnhFormData.data_emissao) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_emissao ? parseISO(cnhFormData.data_emissao) : undefined} onSelect={(d) => handleCnhDateChange('data_emissao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
               </div>
               <div><Label htmlFor="cnh_data_validade_modal">Data de Validade <span className="text-destructive">*</span></Label>
-                <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_validade && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_validade ? format(parseISO(cnhFormData.data_validade), "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_validade ? parseISO(cnhFormData.data_validade) : undefined} onSelect={(d) => handleCnhDateChange('data_validade', d)} captionLayout="dropdown-buttons" fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 15} initialFocus /></PopoverContent></Popover>
+                <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_validade && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_validade ? formatDateForDisplay(cnhFormData.data_validade) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_validade ? parseISO(cnhFormData.data_validade) : undefined} onSelect={(d) => handleCnhDateChange('data_validade', d)} captionLayout="dropdown-buttons" fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 15} initialFocus /></PopoverContent></Popover>
               </div>
             </div>
             <div><Label htmlFor="cnh_primeira_habilitacao_modal">Primeira Habilitação</Label>
-              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.primeira_habilitacao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.primeira_habilitacao ? format(parseISO(cnhFormData.primeira_habilitacao), "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.primeira_habilitacao ? parseISO(cnhFormData.primeira_habilitacao) : undefined} onSelect={(d) => handleCnhDateChange('primeira_habilitacao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
+              <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.primeira_habilitacao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.primeira_habilitacao ? formatDateForDisplay(cnhFormData.primeira_habilitacao) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.primeira_habilitacao ? parseISO(cnhFormData.primeira_habilitacao) : undefined} onSelect={(d) => handleCnhDateChange('primeira_habilitacao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><Label htmlFor="cnh_local_emissao_cidade_modal">Cidade de Emissão</Label><Input id="cnh_local_emissao_cidade_modal" name="local_emissao_cidade" value={cnhFormData.local_emissao_cidade || ''} onChange={handleCnhFormChange} /></div>
@@ -406,3 +428,4 @@ export default function EditarPessoaFisicaPage() {
     </div>
   );
 }
+

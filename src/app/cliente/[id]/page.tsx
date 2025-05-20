@@ -15,7 +15,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info, Link2, HomeIcon, Briefcase, FileText, CarIcon as Car, Download, Eye, GripVertical, ClipboardUser, CheckSquare } from "lucide-react";
+import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info, Link2, HomeIcon, Briefcase, FileText, CarIcon as Car, Download, Eye, GripVertical, ClipboardList, CheckSquare, PlusCircle } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid } from "date-fns";
@@ -305,7 +305,7 @@ export default function PessoaFisicaDetailsPage({ params }: PessoaFisicaDetailsP
           {/* Dados da CNH Card */}
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center text-xl"><ClipboardUser className="mr-2 h-5 w-5 text-primary" /> Dados da CNH</CardTitle>
+                <CardTitle className="flex items-center text-xl"><ClipboardList className="mr-2 h-5 w-5 text-primary" /> Dados da CNH</CardTitle>
                 {currentCnhOnPage ? (
                     <Button variant="outline" size="sm" onClick={() => handleOpenCnhModal('edit')}><Edit3 className="mr-2 h-4 w-4"/>Editar CNH</Button>
                 ) : (
