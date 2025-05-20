@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-const navItems: { href: string; label: string }[] = [
-  { href: '/admin/clientes', label: 'Pessoas Físicas' }, // Updated label
+// Main navigation items for general admin sections
+const mainAdminNavItems: { href: string; label: string }[] = [
+  { href: '/admin/clientes', label: 'Pessoas Físicas' },
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
   { href: '/admin/documentos', label: 'Documentos' },
@@ -19,19 +20,35 @@ const navItems: { href: string; label: string }[] = [
   { href: '/admin/relatorios', label: 'Relatórios' },
 ];
 
+// Specific navigation item for the user management section
+const userManagementNavItem: { href: string; label: string } = {
+  href: '/admin/usuarios', label: 'Usuários'
+};
+
 export function Header() {
   const [isMounted, setIsMounted] = useState(false);
   const isMobile = useIsMobile();
   const pathname = usePathname();
 
-  // Show nav items only if not on the homepage "/", login, or admin-auth pages
-  const showNavItems = pathname !== '/' && pathname !== '/login' && pathname !== '/admin-auth';
-
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Determine which navigation items to display
+  let itemsToDisplay: { href: string; label: string }[] = [];
+
+  if (pathname.startsWith('/admin/usuarios')) {
+    itemsToDisplay = [userManagementNavItem];
+  } else if (pathname.startsWith('/admin/') && pathname !== '/admin-auth') {
+    // For other /admin pages (but not /admin/auth itself)
+    itemsToDisplay = mainAdminNavItems;
+  }
+  // For non-admin pages like '/', '/login', '/admin-auth', '/contato', etc., itemsToDisplay remains empty.
+
+  const showNavigation = itemsToDisplay.length > 0;
+
   if (!isMounted) {
+    // Simplified skeleton for header
     return (
       <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -40,16 +57,15 @@ export function Header() {
               <div className="h-8 md:h-10 w-20 bg-muted animate-pulse rounded"></div>
             </div>
           </Link>
-          {showNavItems && (
+          {/* Skeleton for nav area if it's an admin page that should have nav */}
+          {(pathname.startsWith('/admin/') && pathname !== '/admin-auth') && (
             <>
               <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
               <nav className="hidden md:flex space-x-6 items-center">
-                {navItems.map((item) => (
-                  <li key={item.href} className="list-none">
-                    <span
-                      className="text-sm font-medium text-transparent bg-muted rounded animate-pulse h-5 w-20 inline-block"
-                    >
-                      {/* Placeholder for text to keep layout */}
+                {[...Array(3)].map((_, i) => ( // Show a few skeleton nav items
+                  <li key={i} className="list-none">
+                    <span className="text-sm font-medium text-transparent bg-muted rounded animate-pulse h-5 w-20 inline-block">
+                      {/* Placeholder */}
                     </span>
                   </li>
                 ))}
@@ -70,7 +86,7 @@ export function Header() {
           </div>
         </Link>
 
-        {isMobile && showNavItems && navItems.length > 0 ? (
+        {isMobile && showNavigation ? (
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Abrir menu">
@@ -93,7 +109,7 @@ export function Header() {
                 </div>
                 <nav className="flex-grow p-4">
                   <ul className="space-y-4">
-                    {navItems.map((item) => (
+                    {itemsToDisplay.map((item) => (
                       <li key={item.href}>
                         <SheetClose asChild>
                           <Link
@@ -114,10 +130,10 @@ export function Header() {
             </SheetContent>
           </Sheet>
         ) : (
-          !isMobile && showNavItems && navItems.length > 0 && (
+          !isMobile && showNavigation && (
             <nav>
               <ul className="flex space-x-6 items-center">
-                {navItems.map((item) => (
+                {itemsToDisplay.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
