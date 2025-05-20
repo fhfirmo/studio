@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info, Link2, HomeIcon, Briefcase, FileText, CarIcon as Car, Download, Eye, GripVertical, ClipboardList, CheckSquare, PlusCircle } from "lucide-react";
 import Link from "next/link";
+import { useParams, useRouter } from 'next/navigation'; // Import useParams and useRouter
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid } from "date-fns";
 // import { useToast } from "@/hooks/use-toast";
@@ -141,7 +142,7 @@ async function getPessoaFisicaById(pessoaFisicaId: string): Promise<PessoaFisica
       documentos: [], veiculos: [], observacoes: "Interessado em seguros veiculares.", status: "Ativo", cnh: null,
     };
   }
-  const baseId = pessoaFisicaId.slice(-1);
+  const baseId = typeof pessoaFisicaId === 'string' ? pessoaFisicaId.slice(-1) : '0';
   return {
       id: pessoaFisicaId, nomeCompleto: `Pessoa Exemplo ${baseId}`, cpf: `000.000.000-0${baseId}`, rg: `00.000.000-${baseId}`,
       dataNascimento: `199${baseId}-01-01`, email: `pessoa${baseId}@example.com`, telefone: `(XX) XXXXX-XXX${baseId}`,
@@ -150,9 +151,6 @@ async function getPessoaFisicaById(pessoaFisicaId: string): Promise<PessoaFisica
   };
 }
 
-interface PessoaFisicaDetailsPageProps {
-  params: { id: string };
-}
 
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
   if (value === null || value === undefined || value === '') return null;
@@ -172,8 +170,11 @@ const initialCnhFormData: Omit<CNHData, 'id_cnh'> = {
   primeira_habilitacao: null, local_emissao_cidade: null, local_emissao_uf: null, observacoes_cnh: null
 };
 
-export default function PessoaFisicaDetailsPage({ params }: PessoaFisicaDetailsPageProps) {
+export default function PessoaFisicaDetailsPage() {
   // const { toast } = useToast();
+  const params = useParams();
+  const pessoaFisicaId = params.id as string;
+
   const [pessoaFisica, setPessoaFisica] = useState<PessoaFisica | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
@@ -182,9 +183,9 @@ export default function PessoaFisicaDetailsPage({ params }: PessoaFisicaDetailsP
   const [currentCnhOnPage, setCurrentCnhOnPage] = useState<CNHData | null>(null); // To update UI after modal save
 
   useEffect(() => {
-    if (params.id) {
+    if (pessoaFisicaId) {
       setIsLoading(true);
-      getPessoaFisicaById(params.id)
+      getPessoaFisicaById(pessoaFisicaId)
         .then(data => {
           setPessoaFisica(data);
           setCurrentCnhOnPage(data?.cnh || null);
@@ -192,7 +193,7 @@ export default function PessoaFisicaDetailsPage({ params }: PessoaFisicaDetailsP
         .catch(console.error)
         .finally(() => setIsLoading(false));
     }
-  }, [params.id]);
+  }, [pessoaFisicaId]);
 
   const formatDate = (dateString: string | null | undefined, outputFormat = "dd/MM/yyyy") => {
     if (!dateString) return "N/A";
@@ -460,3 +461,4 @@ export default function PessoaFisicaDetailsPage({ params }: PessoaFisicaDetailsP
     </div>
   );
 }
+
