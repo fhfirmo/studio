@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/s
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const navItems: { href: string; label: string }[] = [
-  { href: '/admin/clientes', label: 'Clientes' },
+  { href: '/admin/clientes', label: 'Pessoas Físicas' }, // Updated label
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
   { href: '/admin/documentos', label: 'Documentos' },
