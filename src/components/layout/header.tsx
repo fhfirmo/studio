@@ -18,12 +18,17 @@ const mainAdminNavItems: { href: string; label: string }[] = [
   { href: '/admin/documentos', label: 'Documentos' },
   { href: '/admin/organizacoes', label: 'Organizações' },
   { href: '/admin/relatorios', label: 'Relatórios' },
-  { href: '/admin/configuracoes', label: 'Configurações' },
+  // "Configurações" is removed from here and handled separately
 ];
 
 // Specific navigation item for the user management section
 const userManagementNavItem: { href: string; label: string } = {
   href: '/admin/usuarios', label: 'Usuários'
+};
+
+// Specific navigation item for the system configuration section
+const configuracoesNavItem: { href: string; label: string } = {
+  href: '/admin/configuracoes', label: 'Configurações'
 };
 
 export function Header() {
@@ -41,13 +46,13 @@ export function Header() {
   const isHomePage = pathname === '/';
 
   if (!isLoginPage && !isHomePage) {
-    if (pathname.startsWith('/admin/usuarios')) {
-      itemsToDisplay = [userManagementNavItem];
-    } else if (pathname.startsWith('/admin/')) {
+    if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
+      itemsToDisplay = [userManagementNavItem, configuracoesNavItem];
+    } else if (pathname.startsWith('/admin/')) { // For other /admin/ pages not covered above
       itemsToDisplay = mainAdminNavItems;
     }
   }
-  // For non-admin pages like '/', '/login', '/admin-auth', '/contato', etc., itemsToDisplay remains empty by default.
+  // For non-admin pages or specific admin login pages, itemsToDisplay remains empty by default.
 
 
   const showNavigation = itemsToDisplay.length > 0;
@@ -59,7 +64,7 @@ export function Header() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
             <div className="bg-primary p-1 rounded-md">
-              <div className="h-8 md:h-10 w-20 bg-muted animate-pulse rounded"></div>
+              <InbmBrandLogo className="h-8 md:h-10 w-auto" />
             </div>
           </Link>
           {/* Skeleton for nav area if it's an admin page that should have nav */}
