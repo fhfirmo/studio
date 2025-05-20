@@ -15,6 +15,7 @@ const navItems: { href: string; label: string }[] = [
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
   { href: '/admin/documentos', label: 'Documentos' },
+  { href: '/admin/organizacoes', label: 'Organizações' },
   { href: '/admin/relatorios', label: 'Relatórios' },
 ];
 
