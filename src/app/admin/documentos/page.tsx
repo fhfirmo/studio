@@ -8,25 +8,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileText, Search, Eye, Trash2, Download, Upload, AlertTriangle, Edit3 } from "lucide-react"; // Added Edit3
+import { FileText, Search, Eye, Trash2, Download, Upload, AlertTriangle, Edit3, Link2 } from "lucide-react";
 // import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
-
-// Placeholder data - In a real app, this would come from Supabase
-const initialDocumentos = [
-  { id: "doc_001", titulo: "Contrato Cliente Alfa", tipo: "Contrato", dataUpload: "2025-07-05", tamanho: "1.2 MB" },
-  { id: "doc_002", titulo: "Laudo Veículo XYZ", tipo: "Laudo", dataUpload: "2025-07-10", tamanho: "800 KB" },
-  { id: "doc_003", titulo: "Apólice Seguro 123", tipo: "Apólice", dataUpload: "2025-07-15", tamanho: "2.5 MB" },
-  { id: "doc_004", titulo: "Proposta Comercial Beta", tipo: "Proposta", dataUpload: "2025-07-18", tamanho: "550 KB" },
-  { id: "doc_005", titulo: "Termo de Confidencialidade Gama", tipo: "Termo", dataUpload: "2025-07-20", tamanho: "300 KB" },
-];
 
 interface Documento {
   id: string;
   titulo: string;
-  tipo: string;
+  tipo: string; // This is 'tipo_documento' from Arquivos table
   dataUpload: string;
   tamanho: string;
+  associadoA_nome: string | null; // Name of the associated entity
+  associadoA_tipo: 'Pessoa Física' | 'Organização' | 'Veículo' | 'Seguro' | 'Nenhum'; // Type of association
 }
+
+// Updated placeholder data
+const initialDocumentos: Documento[] = [
+  { id: "doc_001", titulo: "Contrato João", tipo: "Contrato", dataUpload: "2024-01-01", tamanho: "500 KB", associadoA_nome: "João da Silva Sauro", associadoA_tipo: "Pessoa Física" },
+  { id: "doc_002", titulo: "Apólice ABC-1234", tipo: "Apólice", dataUpload: "2024-01-05", tamanho: "1.2 MB", associadoA_nome: "ABC-1234 (Onix)", associadoA_tipo: "Veículo" },
+  { id: "doc_003", titulo: "CNPJ Cooperativa", tipo: "CNPJ", dataUpload: "2024-01-10", tamanho: "300 KB", associadoA_nome: "Cooperativa Alfa", associadoA_tipo: "Organização" },
+  { id: "doc_004", titulo: "Proposta Seguro X", tipo: "Proposta", dataUpload: "2024-01-15", tamanho: "800 KB", associadoA_nome: "Apólice 98765", associadoA_tipo: "Seguro" },
+  { id: "doc_005", titulo: "Manual do Sistema", tipo: "Manual", dataUpload: "2024-01-20", tamanho: "2.5 MB", associadoA_nome: null, associadoA_tipo: "Nenhum" },
+];
+
 
 export default function GerenciamentoDocumentosPage() {
   const [documentos, setDocumentos] = useState<Documento[]>(initialDocumentos);
@@ -38,9 +41,44 @@ export default function GerenciamentoDocumentosPage() {
   // In a real app, documentos would be fetched from Supabase:
   // useEffect(() => {
   //   async function fetchDocumentos() {
-  //     // const { data, error } = await supabase.from('Arquivos').select('*'); // Example metadata table
-  //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar documentos."}) */ }
-  //     // else { setDocumentos(data || []); } // Format data as needed for display
+  //     // const { data, error } = await supabase.from('Arquivos')
+  //     // .select(`
+  //     //   id, titulo, tipo_documento, data_upload, tamanho_bytes,
+  //     //   PessoasFisicas ( nome_completo ),
+  //     //   Entidades ( nome_fantasia ),
+  //     //   Veiculos ( placa, ModelosVeiculo ( nome_modelo ) ),
+  //     //   Seguros ( numero_apolice )
+  //     // `); 
+  //     // if (error) { /* handle error */ }
+  //     // else { 
+  //     //   const formattedData = data.map(doc => {
+  //     //     let associadoA_nome = null;
+  //     //     let associadoA_tipo = 'Nenhum';
+  //     //     if (doc.PessoasFisicas) {
+  //     //       associadoA_nome = doc.PessoasFisicas.nome_completo;
+  //     //       associadoA_tipo = 'Pessoa Física';
+  //     //     } else if (doc.Entidades) {
+  //     //       associadoA_nome = doc.Entidades.nome_fantasia;
+  //     //       associadoA_tipo = 'Organização';
+  //     //     } else if (doc.Veiculos) {
+  //     //       associadoA_nome = `${doc.Veiculos.placa} (${doc.Veiculos.ModelosVeiculo?.nome_modelo || 'Modelo Desc.'})`;
+  //     //       associadoA_tipo = 'Veículo';
+  //     //     } else if (doc.Seguros) {
+  //     //       associadoA_nome = doc.Seguros.numero_apolice;
+  //     //       associadoA_tipo = 'Seguro';
+  //     //     }
+  //     //     return {
+  //     //       id: doc.id,
+  //     //       titulo: doc.titulo,
+  //     //       tipo: doc.tipo_documento, // map from db
+  //     //       dataUpload: doc.data_upload,
+  //     //       tamanho: doc.tamanho_bytes ? (doc.tamanho_bytes / 1024).toFixed(2) + ' KB' : 'N/A',
+  //     //       associadoA_nome,
+  //     //       associadoA_tipo,
+  //     //     };
+  //     //   });
+  //     //   setDocumentos(formattedData || []); 
+  //     // }
   //   }
   //   fetchDocumentos();
   // }, []);
@@ -50,7 +88,8 @@ export default function GerenciamentoDocumentosPage() {
     console.log(`Searching for documento: ${searchTerm} (placeholder - Supabase query needed for 'Arquivos' table)`);
     // const filteredDocumentos = initialDocumentos.filter(doc => 
     //   doc.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   doc.tipo.toLowerCase().includes(searchTerm.toLowerCase())
+    //   doc.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    //   (doc.associadoA_nome && doc.associadoA_nome.toLowerCase().includes(searchTerm.toLowerCase()))
     // );
     // setDocumentos(filteredDocumentos);
     // if (filteredDocumentos.length === 0) {
@@ -67,27 +106,6 @@ export default function GerenciamentoDocumentosPage() {
     if (!documentoToDelete) return;
     
     console.log(`Attempting to delete documento ID: ${documentoToDelete.id}, Titulo: ${documentoToDelete.titulo}`);
-    // Placeholder for Supabase API call to delete documento (metadata from 'Arquivos' and file from Storage)
-    // try {
-    //   // 1. Delete file from Supabase Storage
-    //   // const { error: storageError } = await supabase.storage.from('documentos_bucket').remove([`path_to_file/${documentoToDelete.id}`]); // Replace with actual path logic
-    //   // if (storageError) throw storageError;
-
-    //   // 2. Delete metadata from Supabase database
-    //   // const { error: dbError } = await supabase.from('Arquivos').delete().eq('id', documentoToDelete.id);
-    //   // if (dbError) throw dbError;
-
-    //   setDocumentos(prevDocumentos => prevDocumentos.filter(d => d.id !== documentoToDelete.id));
-    //   // toast({ title: "Documento Excluído!", description: `O documento ${documentoToDelete.titulo} foi excluído.` });
-    // } catch (error: any) {
-    //   console.error('Failed to delete documento:', error.message);
-    //   // toast({ title: "Erro ao Excluir", description: `Falha ao excluir documento: ${error.message}`, variant: "destructive" });
-    // } finally {
-    //   setIsAlertOpen(false);
-    //   setDocumentoToDelete(null);
-    // }
-
-    // Simulate API call and update UI
     await new Promise(resolve => setTimeout(resolve, 500));
     setDocumentos(prevDocumentos => prevDocumentos.filter(d => d.id !== documentoToDelete!.id));
     console.log(`Documento ${documentoToDelete.titulo} (ID: ${documentoToDelete.id}) deleted (simulated).`);
@@ -98,28 +116,21 @@ export default function GerenciamentoDocumentosPage() {
 
   const handleDownload = (documento: Documento) => {
     console.log(`Downloading documento: ${documento.titulo} (ID: ${documento.id})`);
-    // Placeholder for Supabase Storage download logic
-    // 1. Get a signed URL or public URL for the file from Supabase Storage.
-    //    const { data, error } = await supabase.storage
-    //      .from('documentos_bucket') 
-    //      .download(`path_to_your_file/${documento.id}`); // or use path stored in 'documento' object
-    // 2. If successful, trigger download.
     // toast({ title: "Download Iniciado (Simulado)", description: `O download de ${documento.titulo} começaria agora.`});
   }
 
   const handleView = (documento: Documento) => {
     console.log(`Viewing documento: ${documento.titulo} (ID: ${documento.id})`);
-    // Placeholder for Supabase Storage view logic
-    // 1. Get a public URL for the file from Supabase Storage.
-    //    const { data } = supabase.storage
-    //      .from('documentos_bucket') 
-    //      .getPublicUrl(`path_to_your_file/${documento.id}`); 
-    // 2. Open the URL in a new tab.
     // toast({ title: "Visualizando Documento (Simulado)", description: `Abrindo ${documento.titulo} em nova aba...`});
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    if (!dateString) return "N/A";
+    try {
+      return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    } catch(e) {
+      return "Data Inválida";
+    }
   }
 
   return (
@@ -145,7 +156,7 @@ export default function GerenciamentoDocumentosPage() {
       <Card className="shadow-lg mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Documentos</CardTitle>
-          <CardDescription>Filtre documentos por título ou tipo.</CardDescription>
+          <CardDescription>Filtre documentos por título, tipo ou entidade associada.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
@@ -175,11 +186,13 @@ export default function GerenciamentoDocumentosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
+                  <TableHead className="w-[60px] hidden sm:table-cell">ID</TableHead>
                   <TableHead>Título</TableHead>
-                  <TableHead className="hidden md:table-cell">Tipo</TableHead>
-                  <TableHead className="hidden lg:table-cell">Data de Upload</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo Doc.</TableHead>
+                  <TableHead className="hidden lg:table-cell">Upload</TableHead>
                   <TableHead className="hidden lg:table-cell">Tamanho</TableHead>
+                  <TableHead className="hidden md:table-cell">Associado a</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo Associação</TableHead>
                   <TableHead className="text-right w-[320px]">Ações</TableHead> 
                 </TableRow>
               </TableHeader>
@@ -192,6 +205,18 @@ export default function GerenciamentoDocumentosPage() {
                       <TableCell className="hidden md:table-cell">{documento.tipo}</TableCell>
                       <TableCell className="hidden lg:table-cell">{formatDate(documento.dataUpload)}</TableCell>
                       <TableCell className="hidden lg:table-cell">{documento.tamanho}</TableCell>
+                      <TableCell className="hidden md:table-cell">{documento.associadoA_nome || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            documento.associadoA_tipo === 'Nenhum' ? 'bg-muted text-muted-foreground' : 
+                            documento.associadoA_tipo === 'Pessoa Física' ? 'bg-blue-100 text-blue-700' :
+                            documento.associadoA_tipo === 'Organização' ? 'bg-purple-100 text-purple-700' :
+                            documento.associadoA_tipo === 'Veículo' ? 'bg-green-100 text-green-700' :
+                            documento.associadoA_tipo === 'Seguro' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
+                        }`}>
+                           {documento.associadoA_tipo}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" onClick={() => handleView(documento)} aria-label={`Visualizar documento ${documento.titulo}`}>
                           <Eye className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Visualizar</span>
@@ -217,7 +242,7 @@ export default function GerenciamentoDocumentosPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center h-24 text-muted-foreground"> {/* Updated colSpan */}
                       Nenhum documento cadastrado no momento.
                     </TableCell>
                   </TableRow>
@@ -252,13 +277,20 @@ export default function GerenciamentoDocumentosPage() {
 
       {/*
         Supabase Integration Notes:
-        - Document list will be fetched from a Supabase table (e.g., 'Arquivos') containing metadata about files stored in Supabase Storage.
-        - Search functionality will query the Supabase metadata table.
+        - Document list will be fetched from 'public.Arquivos'.
+        - To populate 'Associado a' and 'Tipo de Associação':
+          - The query to 'public.Arquivos' will need to conditionally JOIN with:
+            - 'public.PessoasFisicas' on 'Arquivos.id_pessoa_fisica_associada' = 'PessoasFisicas.id' (to get nome_completo).
+            - 'public.Entidades' on 'Arquivos.id_entidade_associada' = 'Entidades.id' (to get nome_fantasia).
+            - 'public.Veiculos' on 'Arquivos.id_veiculo' = 'Veiculos.id' (to get placa and potentially model via another join to ModelosVeiculo).
+            - 'public.Seguros' on 'Arquivos.id_seguro' = 'Seguros.id' (to get numero_apolice).
+          - The frontend logic will then determine which association is active and display the corresponding name and type.
+        - Search functionality will query the metadata in 'public.Arquivos' and potentially the names in the associated tables.
         - "Upload de Novo Documento" button links to '/admin/documentos/novo'.
-        - "Visualizar" button: Will obtain a public or signed URL from Supabase Storage and open it.
-        - "Editar" button links to '/admin/documentos/[id]/editar'. This page will allow editing metadata and associations.
-        - "Download" button: Will obtain a download URL from Supabase Storage and trigger a browser download.
-        - "Excluir" button will trigger a Supabase API call to delete the file from Storage and its metadata from 'Arquivos' after confirmation.
+        - "Visualizar" button: Will obtain a public or signed URL from Supabase Storage.
+        - "Editar" button links to '/admin/documentos/[id]/editar'.
+        - "Download" button: Will obtain a download URL from Supabase Storage.
+        - "Excluir" button will trigger API calls to delete the file from Storage and its metadata from 'Arquivos'.
       */}
     </div>
   );
