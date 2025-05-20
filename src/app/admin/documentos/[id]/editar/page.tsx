@@ -1,15 +1,15 @@
 
 "use client";
 
-import { useState, type FormEvent, type ChangeEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UploadCloud, Save, XCircle, FileText, Link2, User, Building, Car, ShieldCheck } from 'lucide-react';
+import { FileEdit, Save, XCircle, AlertTriangle, Link2, User, Building, Car, ShieldCheck, FileText } from 'lucide-react';
 // import { useToast } from "@/hooks/use-toast";
 
 const documentTypes = [
@@ -46,19 +46,108 @@ const placeholderSeguros = [
 
 type TipoAssociacao = "nenhum" | "pessoa_fisica" | "organizacao" | "veiculo" | "seguro";
 
-export default function NovoDocumentoPage() {
-  const router = useRouter();
-  // const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+interface DocumentoData {
+  id: string;
+  titulo: string;
+  tipoDocumento: string;
+  observacoes?: string;
+  // Association fields - only one should be non-null
+  id_pessoa_fisica_associada?: string | null;
+  id_entidade_associada?: string | null;
+  id_veiculo_associada?: string | null;
+  id_seguro_associada?: string | null;
+  // Placeholder for other fields like nome_arquivo, data_upload etc.
+  nome_arquivo_original?: string;
+  data_upload?: string;
+}
 
+// Placeholder function to fetch document data
+async function getDocumentoById(docId: string): Promise<DocumentoData | null> {
+  console.log(`Fetching documento data for ID: ${docId} (placeholder)`);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  // Supabase: Fetch from public.Arquivos where id = docId
+  if (docId === "doc_001") {
+    return {
+      id: "doc_001",
+      titulo: "Contrato Cliente Alfa Atualizado",
+      tipoDocumento: "contrato",
+      id_pessoa_fisica_associada: "pf_001",
+      nome_arquivo_original: "contrato_alfa_v2.pdf",
+      data_upload: "2025-07-05",
+      observacoes: "Versão final do contrato."
+    };
+  }
+   if (docId === "doc_002") {
+    return {
+      id: "doc_002",
+      titulo: "Laudo Veículo XYZ Detalhado",
+      tipoDocumento: "laudo",
+      id_veiculo_associada: "vei_001",
+      nome_arquivo_original: "laudo_vei_001_det.pdf",
+      data_upload: "2025-07-10",
+    };
+  }
+  // Add more cases as needed or a default for testing
+  return null;
+}
+
+
+export default function EditarDocumentoPage() {
+  const router = useRouter();
+  const params = useParams();
+  const documentoId = params.id as string;
+  // const { toast } = useToast();
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [docFound, setDocFound] = useState<boolean | null>(null);
+  const [originalFileName, setOriginalFileName] = useState<string | null>(null);
+  const [originalUploadDate, setOriginalUploadDate] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     titulo: '',
-    tipoDocumento: '', // Changed from tipo to tipoDocumento for clarity
+    tipoDocumento: '',
     observacoes: '',
     tipoAssociacao: 'nenhum' as TipoAssociacao,
     idAssociado: '',
   });
+
+  useEffect(() => {
+    if (documentoId) {
+      setIsLoading(true);
+      getDocumentoById(documentoId)
+        .then(data => {
+          if (data) {
+            setFormData({
+              titulo: data.titulo,
+              tipoDocumento: data.tipoDocumento,
+              observacoes: data.observacoes || '',
+              tipoAssociacao: 
+                data.id_pessoa_fisica_associada ? 'pessoa_fisica' :
+                data.id_entidade_associada ? 'organizacao' :
+                data.id_veiculo_associada ? 'veiculo' :
+                data.id_seguro_associada ? 'seguro' : 'nenhum',
+              idAssociado: 
+                data.id_pessoa_fisica_associada ||
+                data.id_entidade_associada ||
+                data.id_veiculo_associada ||
+                data.id_seguro_associada || '',
+            });
+            setOriginalFileName(data.nome_arquivo_original || 'Nome não disponível');
+            setOriginalUploadDate(data.data_upload ? new Date(data.data_upload).toLocaleDateString('pt-BR') : 'Data não disponível');
+            setDocFound(true);
+          } else {
+            setDocFound(false);
+            // toast({ title: "Erro", description: "Documento não encontrado.", variant: "destructive" });
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch documento data:", err);
+          setDocFound(false);
+          // toast({ title: "Erro", description: "Falha ao carregar dados do documento.", variant: "destructive" });
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [documentoId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -66,70 +155,74 @@ export default function NovoDocumentoPage() {
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    if (name === 'tipoAssociacao') {
+     if (name === 'tipoAssociacao') {
       setFormData(prev => ({ ...prev, tipoAssociacao: value as TipoAssociacao, idAssociado: '' }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
-      setSelectedFile(file);
-      if (!formData.titulo) {
-        setFormData(prev => ({ ...prev, titulo: file.name }));
-      }
-    } else {
-      setSelectedFile(null);
-    }
-  };
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedFile || !formData.titulo || !formData.tipoDocumento) {
-      // toast({ title: "Campos Obrigatórios", description: "Arquivo, Título e Tipo são obrigatórios.", variant: "destructive" });
-      console.error("Validação: Arquivo, Título e Tipo são obrigatórios.");
-      return;
-    }
-    if (formData.tipoAssociacao !== 'nenhum' && !formData.idAssociado) {
-      // toast({ title: "Campo Obrigatório", description: "Selecione a entidade a ser associada.", variant: "destructive" });
-      console.error("Validação: Selecione a entidade a ser associada se um tipo de associação foi escolhido.");
-      return;
-    }
     setIsLoading(true);
 
-    const submissionPayload = {
+    if (!formData.titulo || !formData.tipoDocumento) {
+      // toast({ title: "Campos Obrigatórios", description: "Título e Tipo são obrigatórios.", variant: "destructive" });
+      console.error("Validação: Título e Tipo são obrigatórios.");
+      setIsLoading(false);
+      return;
+    }
+     if (formData.tipoAssociacao !== 'nenhum' && !formData.idAssociado) {
+      // toast({ title: "Campo Obrigatório", description: "Selecione a entidade a ser associada.", variant: "destructive" });
+      console.error("Validação: Selecione a entidade a ser associada se um tipo de associação foi escolhido.");
+      setIsLoading(false);
+      return;
+    }
+
+    const updatePayload = {
       titulo: formData.titulo,
-      tipoDocumento: formData.tipoDocumento,
+      tipo_documento: formData.tipoDocumento, // ensure this matches DB column name
       observacoes: formData.observacoes,
       id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' ? formData.idAssociado : null,
       id_entidade_associada: formData.tipoAssociacao === 'organizacao' ? formData.idAssociado : null,
       id_veiculo_associada: formData.tipoAssociacao === 'veiculo' ? formData.idAssociado : null,
       id_seguro_associada: formData.tipoAssociacao === 'seguro' ? formData.idAssociado : null,
-      // Supabase: After file upload to Storage, add:
-      // nome_arquivo_storage: selectedFile.name (or generated name),
-      // caminho_storage: path_from_supabase_storage,
-      // mime_type: selectedFile.type,
-      // tamanho_bytes: selectedFile.size,
-      // data_upload: new Date().toISOString(),
+      // Supabase: This request would be a PATCH/PUT to public.Arquivos WHERE id = documentoId
     };
-    console.log('Form data to be submitted (Documento):', submissionPayload);
-    console.log('File to be uploaded:', selectedFile);
+    console.log('Form data to be submitted for update (Documento):', updatePayload);
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('Simulated document upload and metadata save finished');
-    // toast({ title: "Documento Enviado! (Simulado)", description: "O documento foi salvo com sucesso." });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    console.log('Simulated document metadata update finished');
+    // toast({ title: "Documento Atualizado! (Simulado)", description: "Os metadados do documento foram salvos." });
     setIsLoading(false);
     router.push('/admin/documentos'); 
   };
+
+  if (isLoading && docFound === null) {
+    return <div className="container mx-auto px-4 py-8 md:py-12 text-center">Carregando dados do documento...</div>;
+  }
+
+  if (docFound === false) {
+    return (
+      <div className="container mx-auto px-4 py-8 md:py-12 text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-bold text-destructive">Documento não encontrado</h1>
+        <p className="text-muted-foreground mt-2">
+          O documento com o ID "{documentoId}" não foi encontrado ou não pôde ser carregado.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/admin/documentos">Voltar para Lista de Documentos</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
       <header className="mb-8 md:mb-12">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
-            <UploadCloud className="mr-3 h-8 w-8" /> Upload de Novo Documento
+            <FileEdit className="mr-3 h-8 w-8" /> Editar Documento
           </h1>
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/documentos">
@@ -137,15 +230,18 @@ export default function NovoDocumentoPage() {
             </Link>
           </Button>
         </div>
-        <p className="text-muted-foreground mt-1">
-          Selecione um arquivo e forneça os detalhes para adicioná-lo ao sistema.
-        </p>
+         {originalFileName && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Editando metadados para: <strong>{originalFileName}</strong> (Upload em: {originalUploadDate})
+          </p>
+        )}
       </header>
 
       <form onSubmit={handleSubmit}>
         <Card className="shadow-lg mb-6">
           <CardHeader>
             <CardTitle>Informações do Documento</CardTitle>
+            <CardDescription>Atualize o título, tipo e observações do documento.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -164,25 +260,16 @@ export default function NovoDocumentoPage() {
               </div>
             </div>
              <div className="space-y-2">
-                <Label htmlFor="fileUpload">Arquivo <span className="text-destructive">*</span></Label>
-                <Input id="fileUpload" name="fileUpload" type="file" onChange={handleFileChange} required className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/>
-                {selectedFile && <p className="text-sm text-muted-foreground mt-1">Selecionado: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)</p>}
+              <Label htmlFor="observacoes">Observações</Label>
+              <Input id="observacoes" name="observacoes" value={formData.observacoes} onChange={handleInputChange} placeholder="Adicione observações relevantes..." />
             </div>
-             {isLoading && (
-                <div className="space-y-1">
-                    <Label>Progresso do Upload</Label>
-                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary animate-pulse" style={{ width: `50%`}}></div>
-                    </div>
-                </div>
-            )}
           </CardContent>
         </Card>
 
         <Card className="shadow-lg mb-6">
           <CardHeader>
-            <CardTitle className="flex items-center"><Link2 className="mr-2 h-5 w-5" /> Associar Documento a (Opcional)</CardTitle>
-            <CardDescription>Vincule este documento a uma entidade existente no sistema.</CardDescription>
+            <CardTitle className="flex items-center"><Link2 className="mr-2 h-5 w-5" /> Associar Documento a</CardTitle>
+            <CardDescription>Altere ou defina a entidade à qual este documento está vinculado.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
@@ -207,6 +294,7 @@ export default function NovoDocumentoPage() {
                   formData.tipoAssociacao === 'veiculo' ? 'Veículo' :
                   formData.tipoAssociacao === 'seguro' ? 'Seguro' : 'Entidade'
                 } <span className="text-destructive">*</span></Label>
+                 {/* Supabase: Options for these selects should be loaded dynamically from their respective tables. */}
                 <Select name="idAssociado" value={formData.idAssociado} onValueChange={(value) => handleSelectChange('idAssociado', value)} required={formData.tipoAssociacao !== 'nenhum'}>
                   <SelectTrigger id="idAssociado"><SelectValue placeholder="Selecione a entidade específica" /></SelectTrigger>
                   <SelectContent>
@@ -225,27 +313,29 @@ export default function NovoDocumentoPage() {
           <Button type="button" variant="outline" onClick={() => router.push('/admin/documentos')} disabled={isLoading}>
             <XCircle className="mr-2 h-5 w-5" /> Cancelar
           </Button>
-          <Button type="submit" disabled={isLoading || !selectedFile}>
-            <UploadCloud className="mr-2 h-5 w-5" /> {isLoading ? 'Enviando...' : 'Enviar Arquivo'}
+          <Button type="submit" disabled={isLoading || docFound === false}>
+            <Save className="mr-2 h-5 w-5" /> {isLoading ? 'Salvando...' : 'Salvar Alterações'}
           </Button>
         </CardFooter>
       </form>
     </div>
   );
 }
-    
+
 // Supabase Integration Notes:
-// - On submit:
-//   1. Upload selectedFile to Supabase Storage (e.g., to a 'documentos_bucket').
-//   2. On successful upload, get the file path/URL from Supabase Storage.
-//   3. Save document metadata to a Supabase database table (e.g., 'Arquivos').
-//      - Include: titulo, tipo_documento, observacoes.
-//      - From file: nome_arquivo_storage, caminho_storage, mime_type, tamanho_bytes, data_upload.
-//      - Association IDs: id_pessoa_fisica_associada, id_entidade_associada, id_veiculo_associada, id_seguro_associada.
-//        Only ONE of these should be populated based on formData.tipoAssociacao and formData.idAssociado. The others should be NULL.
-// - Fetch options for PessoasFisicas, Organizacoes, Veiculos, Seguros dynamically for the association selects.
-// - Handle errors for both Storage upload and database insertion.
-// - Consider implementing drag-and-drop functionality for a better UX.
-// - For progress bar, use a real progress value from Supabase storage upload events.
+// - On page load (useEffect with documentoId):
+//   - Fetch document metadata from public.Arquivos where id = documentoId.
+//   - This fetch should include id_pessoa_fisica_associada, id_entidade_associada, id_veiculo_associada, id_seguro_associada.
+//   - Pre-fill formData.titulo, formData.tipoDocumento, formData.observacoes.
+//   - Determine formData.tipoAssociacao based on which of the _associada fields is non-null.
+//   - Set formData.idAssociado to the value of that non-null _associada field.
+//   - Fetch options for PessoasFisicas, Organizacoes, Veiculos, Seguros dynamically for the association selects.
+// - On submit (handleSubmit):
+//   - Send a PUT/PATCH request to public.Arquivos for the current documentoId.
+//   - Update: titulo, tipo_documento, observacoes.
+//   - Association IDs: Based on formData.tipoAssociacao and formData.idAssociado, set the corresponding _associada field and NULLIFY the others.
+//     Example: if tipoAssociacao is 'pessoa_fisica', set id_pessoa_fisica_associada = formData.idAssociado, and set
+//              id_entidade_associada = NULL, id_veiculo_associada = NULL, id_seguro_associada = NULL.
+// - The actual file in Supabase Storage is NOT re-uploaded or changed on this screen. Only metadata and associations.
 
     
