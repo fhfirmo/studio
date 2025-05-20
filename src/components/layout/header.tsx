@@ -23,8 +23,8 @@ export function Header() {
   const isMobile = useIsMobile();
   const pathname = usePathname();
 
-  // Show nav items only if not on the homepage "/"
-  const showNavItems = pathname !== '/';
+  // Show nav items only if not on the homepage "/", login, or admin-auth pages
+  const showNavItems = pathname !== '/' && pathname !== '/login' && pathname !== '/admin-auth';
 
   useEffect(() => {
     setIsMounted(true);
@@ -35,8 +35,8 @@ export function Header() {
       <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
-            <div className="bg-primary p-1 rounded-md"> {/* Placeholder for logo with background */}
-              <div className="h-8 md:h-10 w-20 bg-muted animate-pulse rounded"></div> {/* Placeholder for logo itself */}
+            <div className="bg-primary p-1 rounded-md">
+              <div className="h-8 md:h-10 w-20 bg-muted animate-pulse rounded"></div>
             </div>
           </Link>
           {showNavItems && (
