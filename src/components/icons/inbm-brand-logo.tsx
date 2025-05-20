@@ -4,7 +4,7 @@ export function InbmBrandLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 180 100" xmlns="http://www.w3.org/2000/svg" {...props}>
       <style>{`
-        .inbm-brand-arc-path { fill: hsl(var(--primary)); }
+        .inbm-brand-arc-path { fill: #4CAF50; /* Green */ }
         .inbm-brand-text {
           font-family: var(--font-geist-sans, Arial, sans-serif);
           font-weight: bold;

@@ -5,7 +5,7 @@ import { InbmBrandLogo } from '@/components/icons/inbm-brand-logo';
 export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center flex-grow py-10 px-4 text-center">
-      <div className="mb-10">
+      <div className="mb-10 bg-primary p-6 sm:p-8 md:p-10 inline-block rounded-lg shadow-xl">
         <InbmBrandLogo className="h-20 sm:h-24 md:h-28 w-auto" />
       </div>
       
