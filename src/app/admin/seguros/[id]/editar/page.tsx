@@ -157,7 +157,7 @@ export default function EditarSeguroPage() {
               dataContratacao: data.dataContratacao && isValid(parseISO(data.dataContratacao)) ? parseISO(data.dataContratacao) : undefined,
               observacoes: data.observacoes || '',
               id_titular: data.id_titular || '',
-              id_veiculo: data.id_veiculo || '',
+              id_veiculo: data.id_veiculo || "--none--", // Use placeholder for null/empty
               coberturasSelecionadas: data.coberturasSelecionadas || [],
               assistenciasSelecionadas: data.assistenciasSelecionadas || [],
             });
@@ -233,7 +233,7 @@ export default function EditarSeguroPage() {
       dataContratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
       id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? formData.id_titular : null,
       id_titular_entidade: tipoTitular === 'organizacao' ? formData.id_titular : null,
-      id_veiculo: formData.id_veiculo || null,
+      id_veiculo: formData.id_veiculo === "--none--" ? null : formData.id_veiculo,
     };
     // @ts-ignore
     delete updatePayload.id_titular;
@@ -425,7 +425,7 @@ export default function EditarSeguroPage() {
                 <Select name="id_veiculo" value={formData.id_veiculo} onValueChange={(value) => handleSelectChange('id_veiculo', value)}>
                   <SelectTrigger id="id_veiculo"><Car className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione o veículo (se aplicável)" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum Veículo</SelectItem>
+                    <SelectItem value="--none--">Nenhum Veículo</SelectItem>
                     {placeholderVeiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.description}</SelectItem>)}
                   </SelectContent>
                 </Select>

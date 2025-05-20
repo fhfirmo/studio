@@ -132,7 +132,7 @@ export default function NovoSeguroPage() {
       dataContratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
       id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? formData.id_titular : null,
       id_titular_entidade: tipoTitular === 'organizacao' ? formData.id_titular : null,
-      id_veiculo: formData.id_veiculo || null, // Send null if not selected
+      id_veiculo: formData.id_veiculo === '--none--' ? null : (formData.id_veiculo || null),
       // coberturasSelecionadas and assistenciasSelecionadas will be handled separately for linking tables
     };
     // Remove id_titular from main payload as it's split
@@ -307,7 +307,7 @@ export default function NovoSeguroPage() {
                 <Select name="id_veiculo" value={formData.id_veiculo} onValueChange={(value) => handleSelectChange('id_veiculo', value)}>
                   <SelectTrigger id="id_veiculo"><Car className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione o veículo (se aplicável)" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum Veículo</SelectItem>
+                    <SelectItem value="--none--">Nenhum Veículo</SelectItem>
                     {placeholderVeiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.description}</SelectItem>)}
                   </SelectContent>
                 </Select>
