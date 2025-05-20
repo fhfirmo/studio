@@ -23,7 +23,6 @@ interface PessoaFisica {
   dataCadastro: string;
 }
 
-// Updated Placeholder data
 const initialPessoasFisicas: PessoaFisica[] = [
   { id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00", email: "joao@exemplo.com", telefone: "(11) 9876-5432", tipoRelacao: "Associado", organizacaoVinculada: "Cooperativa Alfa", dataCadastro: "2024-01-15" },
   { id: "pf_002", nomeCompleto: "Maria Oliveira Costa", cpf: "987.654.321-99", email: "maria@exemplo.com", telefone: "(21) 1234-5678", tipoRelacao: "Funcionário", organizacaoVinculada: "Empresa Gama", dataCadastro: "2024-02-20" },
@@ -74,7 +73,6 @@ export default function GerenciamentoPessoasFisicasPage() {
   //   fetchPessoasFisicas();
   // }, []);
 
-  // Placeholder for search logic
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
     console.log(`Searching for: ${searchTerm} (placeholder - Supabase query needed for 'PessoasFisicas' table, potentially joining with MembrosEntidade and Entidades)`);
@@ -182,9 +180,9 @@ export default function GerenciamentoPessoasFisicasPage() {
                   <TableHead>Nome Completo</TableHead>
                   <TableHead className="hidden md:table-cell">CPF</TableHead>
                   <TableHead className="hidden md:table-cell">E-mail</TableHead>
-                  <TableHead className="hidden lg:table-cell">Telefone</TableHead>
-                  <TableHead className="hidden lg:table-cell">Tipo Relação</TableHead>
-                  <TableHead className="hidden lg:table-cell">Organização Vinculada</TableHead>
+                  <TableHead className="hidden md:table-cell">Telefone</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo Relação</TableHead>
+                  <TableHead className="hidden md:table-cell">Organização Vinculada</TableHead>
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -196,9 +194,9 @@ export default function GerenciamentoPessoasFisicasPage() {
                       <TableCell>{pessoa.nomeCompleto}</TableCell>
                       <TableCell className="hidden md:table-cell">{pessoa.cpf}</TableCell>
                       <TableCell className="hidden md:table-cell">{pessoa.email}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{pessoa.telefone}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{pessoa.tipoRelacao}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{pessoa.organizacaoVinculada || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{pessoa.telefone}</TableCell>
+                      <TableCell className="hidden md:table-cell">{pessoa.tipoRelacao}</TableCell>
+                      <TableCell className="hidden md:table-cell">{pessoa.organizacaoVinculada || "N/A"}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes de ${pessoa.nomeCompleto}`}>
                            <Link href={`/cliente/${pessoa.id}`}>
@@ -275,6 +273,3 @@ export default function GerenciamentoPessoasFisicasPage() {
     </div>
   );
 }
-
-
-    
