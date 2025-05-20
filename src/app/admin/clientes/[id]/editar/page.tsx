@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { UserCog, Save, XCircle, HomeIcon, InfoIcon, AlertTriangle, Users, Briefcase, Link2 } from 'lucide-react';
+import { UserCog, Save, XCircle, HomeIcon, InfoIcon, AlertTriangle, Users, Briefcase, Link2, CalendarDays } from 'lucide-react';
 import { format, parseISO } from "date-fns";
 // import { useToast } from "@/hooks/use-toast";
 
@@ -32,6 +32,8 @@ const brazilianStates = [
 const placeholderMunicipios: Record<string, {value: string, label: string}[]> = {
   SP: [{ value: "sao_paulo", label: "São Paulo" }, { value: "campinas", label: "Campinas" }],
   RJ: [{ value: "rio_de_janeiro", label: "Rio de Janeiro" }, { value: "niteroi", label: "Niterói" }],
+  MG: [{ value: "belo_horizonte", label: "Belo Horizonte" }, { value: "uberlandia", label: "Uberlândia"}],
+  BA: [{ value: "salvador", label: "Salvador" }, { value: "feira_de_santana", label: "Feira de Santana"}],
 };
 
 const tiposRelacao = [
@@ -50,29 +52,53 @@ const organizacoesDisponiveis = [
 async function getPessoaFisicaById(id: string) {
   console.log(`Fetching PessoaFisica data for ID: ${id} (placeholder)`);
   await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // Simulating fetching data for a specific ID, including related data.
   if (id === "pf_001" || id === "cli_001" || id === "1" ) { 
     return {
-      id: id,
+      id: "pf_001", // Consistent ID
       nomeCompleto: `João da Silva Sauro`,
       cpf: `123.456.789-00`,
       rg: `12.345.678-9`,
-      dataNascimento: `1985-05-15`,
-      email: `joao.silva@example.com`,
-      telefone: `(11) 98888-7777`,
-      tipoRelacao: "associado", 
-      organizacaoVinculadaId: "org_001", 
+      dataNascimento: `1985-05-15`, // YYYY-MM-DD format
+      email: `joao@exemplo.com`,
+      telefone: `(11) 9876-5432`,
+      tipoRelacao: "associado", // Matches value in tiposRelacao
+      organizacaoVinculadaId: "org_001", // Matches value in organizacoesDisponiveis
       logradouro: 'Rua Exemplo das Couves',
       numero: '123',
       complemento: 'Apto 101',
       bairro: 'Bairro Modelo',
-      // cidade: 'Cidade Fictícia', // Municipio is used instead
-      municipio: 'sao_paulo', // Assuming SP is the state
-      estado: 'SP',
+      municipio: 'sao_paulo', 
+      estado: 'SP', // Matches value in brazilianStates
       cep: '01234-567',
-      observacoes: `Observações sobre João.`,
-      dataCadastro: '2024-01-10', 
+      observacoes: `Observações sobre João da Silva Sauro. Este é um cliente de longa data e muito participativo.`,
+      dataCadastro: '2024-01-15', // YYYY-MM-DD format
     };
   }
+  if (id === "pf_003") { // Example for Cliente Geral
+     return {
+      id: "pf_003",
+      nomeCompleto: "Carlos Pereira Lima",
+      cpf: "111.222.333-44",
+      rg: "33.444.555-6",
+      dataNascimento: "1990-10-20",
+      email: "carlos@exemplo.com",
+      telefone: "(31) 9988-7766",
+      tipoRelacao: "cliente_geral",
+      organizacaoVinculadaId: "", // Should be empty for cliente_geral
+      logradouro: 'Avenida Principal',
+      numero: '1500',
+      complemento: 'Loja B',
+      bairro: 'Centro',
+      municipio: 'belo_horizonte',
+      estado: 'MG',
+      cep: '30123-000',
+      observacoes: `Carlos é um cliente geral interessado em consultoria.`,
+      dataCadastro: '2024-03-10',
+    };
+  }
+  console.warn(`PessoaFisica with ID ${id} not found in mock data.`);
   return null; 
 }
 
@@ -116,11 +142,11 @@ export default function EditarPessoaFisicaPage() {
         .then(data => {
           if (data) {
             setFormData({
-              nomeCompleto: data.nomeCompleto,
+              nomeCompleto: data.nomeCompleto || '',
               cpf: data.cpf || '',
               rg: data.rg || '',
               dataNascimento: data.dataNascimento ? parseISO(data.dataNascimento) : undefined,
-              email: data.email,
+              email: data.email || '',
               telefone: data.telefone || '',
               tipoRelacao: data.tipoRelacao || '',
               organizacaoVinculadaId: data.organizacaoVinculadaId || '',
@@ -130,14 +156,22 @@ export default function EditarPessoaFisicaPage() {
               bairro: data.bairro || '',
               cep: data.cep || '',
               estado: data.estado || '',
-              municipio: data.municipio || '',
+              municipio: data.municipio || '', // Municipio will be set here
               observacoes: data.observacoes || '',
             });
+            // This ensures municipios are loaded based on the fetched estado
             if (data.estado) {
                 // @ts-ignore
                 setCurrentMunicipios(placeholderMunicipios[data.estado] || []);
             }
-            if (data.dataCadastro) setDataCadastroDisplay(format(parseISO(data.dataCadastro), "dd/MM/yyyy"));
+            if (data.dataCadastro) {
+              try {
+                setDataCadastroDisplay(format(parseISO(data.dataCadastro), "dd/MM/yyyy"));
+              } catch (e) {
+                console.error("Error formatting dataCadastro:", e);
+                setDataCadastroDisplay("Data inválida");
+              }
+            }
             setPessoaFisicaFound(true);
           } else {
             setPessoaFisicaFound(false);
@@ -157,10 +191,15 @@ export default function EditarPessoaFisicaPage() {
     if (formData.estado) {
       // @ts-ignore
       setCurrentMunicipios(placeholderMunicipios[formData.estado] || []);
+      // Do not reset municipio here if it was pre-filled and the state matches,
+      // only if the state changes due to user interaction (handled in handleSelectChange)
     } else {
       setCurrentMunicipios([]);
     }
-    if (formData.tipoRelacao === 'cliente_geral' && formData.organizacaoVinculadaId !== '') {
+
+    // Ensure organizacaoVinculadaId is cleared if tipoRelacao is 'cliente_geral'
+    // This should run after initial data load and also on subsequent changes to tipoRelacao
+    if (formData.tipoRelacao === 'cliente_geral' && formData.organizacaoVinculadaId) {
       setFormData(prev => ({ ...prev, organizacaoVinculadaId: '' }));
     }
   }, [formData.estado, formData.tipoRelacao, formData.organizacaoVinculadaId]);
@@ -174,6 +213,7 @@ export default function EditarPessoaFisicaPage() {
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (name === 'estado') { 
+        // When user actively changes state, reset municipio
         setFormData(prev => ({ ...prev, municipio: '' }));
     }
   };
@@ -186,13 +226,16 @@ export default function EditarPessoaFisicaPage() {
     event.preventDefault();
     setIsLoading(true);
 
+    // Basic Client-side validation placeholder
     if (!formData.nomeCompleto || !formData.cpf || !formData.email || !formData.tipoRelacao) {
       console.error("Validação: Nome, CPF, E-mail e Tipo de Relação são obrigatórios.");
+      // toast({ title: "Campos Obrigatórios", description: "Nome, CPF, E-mail e Tipo de Relação são obrigatórios.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
     if (isOrganizacaoRequired && !formData.organizacaoVinculadaId) {
       console.error("Validação: Organização Vinculada é obrigatória para este tipo de relação.");
+      // toast({ title: "Campo Obrigatório", description: "Organização Vinculada é obrigatória para este tipo de relação.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
@@ -200,11 +243,19 @@ export default function EditarPessoaFisicaPage() {
     const updatePayload = {
       ...formData,
       dataNascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
+      // id_endereco will be handled by backend logic (update or create new)
+      // id_organizacao, tipo_relacao are already in formData
     };
     console.log('Form data to be submitted for update (Pessoa Física):', updatePayload);
+    // Supabase:
+    // 1. Determine if address changed significantly to warrant new Endereco record or update existing.
+    // 2. Prepare PessoasFisicas payload (id_endereco, tipo_relacao, id_organizacao_vinculada etc.)
+    // 3. PATCH to /rest/v1/PessoasFisicas?id=eq.{pessoaFisicaId}
+    // 4. Handle MembrosEntidade linkage if organizacaoVinculadaId or tipoRelacao changed.
     
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
     console.log('Simulated pessoa física update finished');
+    // toast({ title: "Pessoa Física Atualizada!", description: "Os dados foram salvos com sucesso." });
     setIsLoading(false);
     router.push('/admin/clientes'); 
   };
@@ -291,7 +342,7 @@ export default function EditarPessoaFisicaPage() {
                             variant={"outline"}
                             className={`w-full justify-start text-left font-normal ${!formData.dataNascimento && "text-muted-foreground"}`}
                             >
-                            <Save className="mr-2 h-4 w-4" /> 
+                            <CalendarDays className="mr-2 h-4 w-4" /> 
                             {formData.dataNascimento ? format(formData.dataNascimento, "dd/MM/yyyy") : <span>Selecione a data</span>}
                             </Button>
                         </PopoverTrigger>
@@ -311,8 +362,9 @@ export default function EditarPessoaFisicaPage() {
                   <div className="space-y-2">
                     <Label htmlFor="email">E-mail <span className="text-destructive">*</span></Label>
                     <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} placeholder="email@exemplo.com" required 
-                    readOnly
-                    className={true ? "bg-muted/50 cursor-not-allowed" : ""} 
+                    readOnly // Email is often an identifier and not directly editable
+                    className="bg-muted/50 cursor-not-allowed" 
+                    title="O e-mail é usado como identificador e não pode ser alterado diretamente nesta tela."
                     />
                   </div>
                   <div className="space-y-2">
@@ -333,6 +385,7 @@ export default function EditarPessoaFisicaPage() {
               <CardContent className="space-y-6">
                  <div className="space-y-2">
                     <Label htmlFor="tipoRelacao">Tipo de Relação <span className="text-destructive">*</span></Label>
+                    {/* Supabase: Options for this select should be loaded from public.TiposRelacaoPessoa ou similar */}
                     <Select name="tipoRelacao" value={formData.tipoRelacao} onValueChange={(value) => handleSelectChange('tipoRelacao', value)} required>
                       <SelectTrigger id="tipoRelacao" aria-label="Selecionar tipo de relação">
                         <Link2 className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -348,6 +401,7 @@ export default function EditarPessoaFisicaPage() {
                   {isOrganizacaoRequired && (
                     <div className="space-y-2">
                         <Label htmlFor="organizacaoVinculadaId">Organização Vinculada <span className="text-destructive">*</span></Label>
+                        {/* Supabase: Options for this select should be loaded from public.Entidades */}
                         <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}>
                         <SelectTrigger id="organizacaoVinculadaId" aria-label="Selecionar organização vinculada">
                             <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -399,6 +453,7 @@ export default function EditarPessoaFisicaPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="estado">Estado</Label>
+                    {/* Supabase: Options for this select should be loaded from public.Estados */}
                     <Select name="estado" value={formData.estado} onValueChange={(value) => handleSelectChange('estado', value)}>
                       <SelectTrigger id="estado" aria-label="Selecionar estado">
                         <SelectValue placeholder="Selecione o estado" />
@@ -412,9 +467,10 @@ export default function EditarPessoaFisicaPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="municipio">Município</Label>
+                     {/* Supabase: Options for this select should be loaded from public.Municipios, filtered by formData.estado */}
                     <Select name="municipio" value={formData.municipio} onValueChange={(value) => handleSelectChange('municipio', value)} disabled={!formData.estado || currentMunicipios.length === 0}>
                       <SelectTrigger id="municipio" aria-label="Selecionar município">
-                        <SelectValue placeholder={formData.estado && currentMunicipios.length > 0 ? "Selecione o município" : "Selecione o estado primeiro"} />
+                        <SelectValue placeholder={formData.estado && currentMunicipios.length > 0 ? "Selecione o município" : (formData.estado ? "Carregando municípios..." : "Selecione o estado primeiro")} />
                       </SelectTrigger>
                       <SelectContent>
                         {currentMunicipios.map(municipio => (
@@ -461,3 +517,4 @@ export default function EditarPessoaFisicaPage() {
     </div>
   );
 }
+
