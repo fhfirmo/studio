@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added AlertDialogTrigger
 import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info, Link2, HomeIcon, Briefcase, FileText, CarIcon as Car, Download, Eye, GripVertical, ClipboardList, CheckSquare, PlusCircle } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from 'next/navigation'; // Import useParams and useRouter
@@ -100,8 +100,8 @@ const brazilianStates = [
 ];
 
 
-async function getPessoaFisicaById(pessoaFisicaId: string): Promise<PessoaFisica | null> {
-  console.log(`Fetching PessoaFisica details for ID: ${pessoaFisicaId} (placeholder)`);
+async function getPessoaFisicaById(id: string): Promise<PessoaFisica | null> {
+  console.log(`Fetching PessoaFisica details for ID: ${id} (placeholder)`);
   await new Promise(resolve => setTimeout(resolve, 300));
   
   const commonAddress = {
@@ -123,7 +123,7 @@ async function getPessoaFisicaById(pessoaFisicaId: string): Promise<PessoaFisica
     local_emissao_uf: "EX", observacoes_cnh: "Nenhuma observação."
   };
 
-  if (pessoaFisicaId === "pf_001" || pessoaFisicaId === "1" || pessoaFisicaId === "cli_001") {
+  if (id === "pf_001" || id === "1" || id === "cli_001") {
     return {
       id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00", rg: "12.345.678-9",
       dataNascimento: "1985-05-15", email: "joao.sauro@example.com", telefone: "(11) 98765-4321",
@@ -133,7 +133,7 @@ async function getPessoaFisicaById(pessoaFisicaId: string): Promise<PessoaFisica
       observacoes: "Cliente antigo e membro ativo da cooperativa.", status: "Ativo", cnh: sampleCnh,
     };
   }
-  if (pessoaFisicaId === "pf_003") {
+  if (id === "pf_003") {
      return {
       id: "pf_003", nomeCompleto: "Carlos Pereira Lima", cpf: "111.222.333-44", rg: "33.444.555-6",
       dataNascimento: "1990-10-20", email: "carlos.lima@example.com", telefone: "(31) 99887-7665",
@@ -142,9 +142,9 @@ async function getPessoaFisicaById(pessoaFisicaId: string): Promise<PessoaFisica
       documentos: [], veiculos: [], observacoes: "Interessado em seguros veiculares.", status: "Ativo", cnh: null,
     };
   }
-  const baseId = typeof pessoaFisicaId === 'string' ? pessoaFisicaId.slice(-1) : '0';
+  const baseId = typeof id === 'string' ? id.slice(-1) : '0';
   return {
-      id: pessoaFisicaId, nomeCompleto: `Pessoa Exemplo ${baseId}`, cpf: `000.000.000-0${baseId}`, rg: `00.000.000-${baseId}`,
+      id: id, nomeCompleto: `Pessoa Exemplo ${baseId}`, cpf: `000.000.000-0${baseId}`, rg: `00.000.000-${baseId}`,
       dataNascimento: `199${baseId}-01-01`, email: `pessoa${baseId}@example.com`, telefone: `(XX) XXXXX-XXX${baseId}`,
       dataCadastro: new Date().toISOString().split('T')[0], tipoRelacao: "Cliente Geral", organizacaoVinculada: null,
       endereco: commonAddress, documentos: [], veiculos: [], observacoes: "Nenhuma observação adicional.", status: "Pendente", cnh: null,
@@ -172,8 +172,8 @@ const initialCnhFormData: Omit<CNHData, 'id_cnh'> = {
 
 export default function PessoaFisicaDetailsPage() {
   // const { toast } = useToast();
-  const params = useParams();
-  const pessoaFisicaId = params.id as string;
+  const paramsHook = useParams(); // Renamed to avoid conflict with function params
+  const pessoaFisicaId = paramsHook.id as string;
 
   const [pessoaFisica, setPessoaFisica] = useState<PessoaFisica | null>(null);
   const [isLoading, setIsLoading] = useState(true);
