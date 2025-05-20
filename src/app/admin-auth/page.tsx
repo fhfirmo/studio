@@ -38,7 +38,7 @@ export default function AdminAuthPage() {
     //   // if (profileError || userProfile?.role !== 'admin') throw new Error("Access denied. Not an admin user.");
     //   console.log('Admin login successful:', data);
     //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel de administração..."});
-    //   // router.push('/admin/usuarios'); // Redirect to user management
+    //   router.push('/admin/dashboard'); 
     // } catch (error: any) {
     //   console.error('Admin login failed:', error.message);
     //   // toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
@@ -50,7 +50,7 @@ export default function AdminAuthPage() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated admin login finished');
     setIsLoading(false);
-    router.push('/admin/usuarios'); // Redirect to user management page
+    router.push('/admin/dashboard'); // Redirect to dashboard page
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);

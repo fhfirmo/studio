@@ -12,6 +12,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 // Main navigation items for general admin sections
 const mainAdminNavItems: { href: string; label: string }[] = [
+  { href: '/admin/dashboard', label: 'Dashboard' },
   { href: '/admin/clientes', label: 'Pessoas Físicas' },
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
@@ -47,17 +48,14 @@ export function Header() {
   if (!isLoginPage && !isHomePage) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
       itemsToDisplay = [userManagementNavItem, configuracoesNavItem];
-    } else if (pathname.startsWith('/admin/')) { // For other /admin/ pages not covered above
+    } else if (pathname.startsWith('/admin/')) {
       itemsToDisplay = mainAdminNavItems;
     }
   }
-  // For non-admin pages or specific admin login pages, itemsToDisplay remains empty by default.
-
 
   const showNavigation = itemsToDisplay.length > 0;
 
   if (!isMounted) {
-    // Simplified skeleton for header
     return (
       <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -66,15 +64,13 @@ export function Header() {
               <InbmBrandLogo className="h-8 md:h-10 w-auto" />
             </div>
           </Link>
-          {/* Skeleton for nav area if it's an admin page that should have nav */}
-          {(pathname.startsWith('/admin/') && pathname !== '/admin-auth') && (
+          {(pathname.startsWith('/admin/') && !isLoginPage) && (
             <>
               <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
               <nav className="hidden md:flex space-x-6 items-center">
-                {[...Array(3)].map((_, i) => ( // Show a few skeleton nav items
+                {[...Array(3)].map((_, i) => (
                   <li key={i} className="list-none">
                     <span className="text-sm font-medium text-transparent bg-muted rounded animate-pulse h-5 w-20 inline-block">
-                      {/* Placeholder */}
                     </span>
                   </li>
                 ))}

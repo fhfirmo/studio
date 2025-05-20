@@ -35,7 +35,7 @@ export default function LoginPage() {
     //   console.log('Login successful:', data);
     //   // Redirect to admin panel or show success message
     //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando..."});
-    //   // router.push('/admin/dashboard'); 
+    //   router.push('/admin/dashboard'); 
     // } catch (error: any) {
     //   console.error('Login failed:', error.message);
     //   // toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
