@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { UserPlus, Save, XCircle, HomeIcon, InfoIcon, Users, Briefcase, Link2 } from 'lucide-react'; // Added Link2, Briefcase
-import { format, parseISO } from "date-fns";
+import { UserPlus, Save, XCircle, HomeIcon, InfoIcon, Users, Briefcase, Link2 } from 'lucide-react';
+import { format } from "date-fns";
 // import { useToast } from "@/hooks/use-toast";
 
 const brazilianStates = [
@@ -29,7 +29,6 @@ const brazilianStates = [
   { value: "SP", label: "São Paulo" }, { value: "SE", label: "Sergipe" }, { value: "TO", label: "Tocantins" }
 ];
 
-// Placeholder for municipalities - In a real app, this would be dynamic based on selected state
 const placeholderMunicipios: Record<string, {value: string, label: string}[]> = {
   SP: [{ value: "sao_paulo", label: "São Paulo" }, { value: "campinas", label: "Campinas" }],
   RJ: [{ value: "rio_de_janeiro", label: "Rio de Janeiro" }, { value: "niteroi", label: "Niterói" }],
@@ -42,7 +41,6 @@ const tiposRelacao = [
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
-// Placeholder for organizations - In a real app, this would come from Supabase 'Entidades' table
 const organizacoesDisponiveis = [
   { value: "org_001", label: "Cooperativa Alfa" },
   { value: "org_002", label: "Associação Beta" },
@@ -65,7 +63,6 @@ export default function NovaPessoaFisicaPage() {
     telefone: '',
     tipoRelacao: '',
     organizacaoVinculadaId: '',
-    // Endereço
     logradouro: '',
     numero: '',
     complemento: '',
@@ -73,7 +70,6 @@ export default function NovaPessoaFisicaPage() {
     cep: '',
     estado: '',
     municipio: '',
-    // Outras
     observacoes: '',
   });
 
@@ -99,6 +95,9 @@ export default function NovaPessoaFisicaPage() {
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
+     if (name === 'estado') { 
+        setFormData(prev => ({ ...prev, municipio: '' }));
+    }
   };
   
   const handleDateChange = (name: string, date: Date | undefined) => {
@@ -109,15 +108,12 @@ export default function NovaPessoaFisicaPage() {
     event.preventDefault();
     setIsLoading(true);
 
-    // Client-side validation placeholder
     if (!formData.nomeCompleto || !formData.cpf || !formData.email || !formData.tipoRelacao) {
-      // toast({ title: "Campos Obrigatórios", description: "Nome, CPF, E-mail e Tipo de Relação são obrigatórios.", variant: "destructive" });
       console.error("Validação: Nome, CPF, E-mail e Tipo de Relação são obrigatórios.");
       setIsLoading(false);
       return;
     }
     if (isOrganizacaoRequired && !formData.organizacaoVinculadaId) {
-      // toast({ title: "Campo Obrigatório", description: "Organização Vinculada é obrigatória para este tipo de relação.", variant: "destructive" });
       console.error("Validação: Organização Vinculada é obrigatória para este tipo de relação.");
       setIsLoading(false);
       return;
@@ -126,28 +122,11 @@ export default function NovaPessoaFisicaPage() {
     const payload = {
       ...formData,
       dataNascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
-      // id_endereco will be handled by backend logic typically
-      // id_organizacao from organizacaoVinculadaId if applicable
     };
     console.log('Form data to be submitted (Pessoa Física):', payload);
 
-    // Placeholder for Supabase API call to create a new PessoaFisica
-    // - Create/update Endereco record, get endereco_id.
-    // - Insert into PessoasFisicas table, including endereco_id, tipo_relacao, and organizacao_id (if formData.organizacaoVinculadaId is set).
-    // try {
-    //   // ... Supabase logic here ...
-    //   // toast({ title: "Pessoa Física Cadastrada!", description: "Os dados foram salvos com sucesso." });
-    //   // router.push('/admin/clientes'); 
-    // } catch (error: any) {
-    //   // console.error('Failed to create pessoa física:', error.message);
-    //   // toast({ title: "Erro ao Cadastrar", description: error.message, variant: "destructive" });
-    // } finally {
-    //   setIsLoading(false);
-    // }
-
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated pessoa física creation finished');
-    // toast({ title: "Pessoa Física Cadastrada! (Simulado)", description: "Os dados foram salvos com sucesso." });
     setIsLoading(false);
     router.push('/admin/clientes'); 
   };
@@ -202,14 +181,12 @@ export default function NovaPessoaFisicaPage() {
                   <div className="space-y-2">
                     <Label htmlFor="cpf">CPF <span className="text-destructive">*</span></Label>
                     <Input id="cpf" name="cpf" value={formData.cpf} onChange={handleChange} placeholder="000.000.000-00" required />
-                    {/* Comment: Consider using a library like 'react-input-mask' for CPF formatting */}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="rg">RG</Label>
                     <Input id="rg" name="rg" value={formData.rg} onChange={handleChange} placeholder="00.000.000-0" />
-                     {/* Comment: Consider 'react-input-mask' for RG */}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="dataNascimento">Data de Nascimento</Label>
@@ -219,7 +196,7 @@ export default function NovaPessoaFisicaPage() {
                             variant={"outline"}
                             className={`w-full justify-start text-left font-normal ${!formData.dataNascimento && "text-muted-foreground"}`}
                             >
-                            <Save className="mr-2 h-4 w-4" /> {/* Using Save as CalendarIcon */}
+                            <Save className="mr-2 h-4 w-4" /> 
                             {formData.dataNascimento ? format(formData.dataNascimento, "dd/MM/yyyy") : <span>Selecione a data</span>}
                             </Button>
                         </PopoverTrigger>
@@ -258,7 +235,6 @@ export default function NovaPessoaFisicaPage() {
               <CardContent className="space-y-6">
                  <div className="space-y-2">
                     <Label htmlFor="tipoRelacao">Tipo de Relação <span className="text-destructive">*</span></Label>
-                    {/* Comment: Options for this select will be loaded dynamically from Supabase. */}
                     <Select name="tipoRelacao" value={formData.tipoRelacao} onValueChange={(value) => handleSelectChange('tipoRelacao', value)} required>
                       <SelectTrigger id="tipoRelacao" aria-label="Selecionar tipo de relação">
                         <Link2 className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -274,7 +250,6 @@ export default function NovaPessoaFisicaPage() {
                   {isOrganizacaoRequired && (
                     <div className="space-y-2">
                         <Label htmlFor="organizacaoVinculadaId">Organização Vinculada <span className="text-destructive">*</span></Label>
-                        {/* Comment: Options for this select will be loaded dynamically from Supabase 'Entidades' table. */}
                         <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}>
                         <SelectTrigger id="organizacaoVinculadaId" aria-label="Selecionar organização vinculada">
                             <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -321,13 +296,11 @@ export default function NovaPessoaFisicaPage() {
                   <div className="space-y-2">
                     <Label htmlFor="cep">CEP</Label>
                     <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} placeholder="00000-000" />
-                     {/* Comment: Consider 'react-input-mask' for CEP */}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="estado">Estado</Label>
-                    {/* Comment: Options for this select will be loaded dynamically from Supabase 'Estados' table. */}
                     <Select name="estado" value={formData.estado} onValueChange={(value) => handleSelectChange('estado', value)}>
                       <SelectTrigger id="estado" aria-label="Selecionar estado">
                         <SelectValue placeholder="Selecione o estado" />
@@ -341,7 +314,6 @@ export default function NovaPessoaFisicaPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="municipio">Município</Label>
-                    {/* Comment: Options for this select will be loaded dynamically from Supabase 'Municipios' table, filtered by selected state. */}
                     <Select name="municipio" value={formData.municipio} onValueChange={(value) => handleSelectChange('municipio', value)} disabled={!formData.estado || currentMunicipios.length === 0}>
                       <SelectTrigger id="municipio" aria-label="Selecionar município">
                         <SelectValue placeholder={formData.estado && currentMunicipios.length > 0 ? "Selecione o município" : "Selecione o estado primeiro"} />
@@ -388,22 +360,7 @@ export default function NovaPessoaFisicaPage() {
           </Button>
         </CardFooter>
       </form>
-      {/* 
-        Supabase Integration Notes:
-        - For selects 'Tipo de Relação', 'Organização Vinculada', 'Estado', 'Município': Fetch options from respective Supabase tables.
-        - 'Município' options should be filtered based on the selected 'Estado'.
-        - On submit:
-          - Perform client-side validation.
-          - If address fields are filled, create/update a record in 'public.Enderecos' and get its ID.
-          - Create a record in 'public.PessoasFisicas' with all relevant data, including:
-            - id_endereco (from the previous step)
-            - tipo_relacao
-            - id_organizacao (if 'organizacaoVinculadaId' is set)
-            - data_cadastro (likely auto-generated by Supabase - remove from form if so)
-      */}
     </div>
   );
 }
-    
-
     
