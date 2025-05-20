@@ -18,6 +18,7 @@ const mainAdminNavItems: { href: string; label: string }[] = [
   { href: '/admin/documentos', label: 'Documentos' },
   { href: '/admin/organizacoes', label: 'Organizações' },
   { href: '/admin/relatorios', label: 'Relatórios' },
+  { href: '/admin/configuracoes', label: 'Configurações' },
 ];
 
 // Specific navigation item for the user management section
@@ -36,14 +37,18 @@ export function Header() {
 
   // Determine which navigation items to display
   let itemsToDisplay: { href: string; label: string }[] = [];
+  const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
+  const isHomePage = pathname === '/';
 
-  if (pathname.startsWith('/admin/usuarios')) {
-    itemsToDisplay = [userManagementNavItem];
-  } else if (pathname.startsWith('/admin/') && pathname !== '/admin-auth') {
-    // For other /admin pages (but not /admin/auth itself)
-    itemsToDisplay = mainAdminNavItems;
+  if (!isLoginPage && !isHomePage) {
+    if (pathname.startsWith('/admin/usuarios')) {
+      itemsToDisplay = [userManagementNavItem];
+    } else if (pathname.startsWith('/admin/')) {
+      itemsToDisplay = mainAdminNavItems;
+    }
   }
-  // For non-admin pages like '/', '/login', '/admin-auth', '/contato', etc., itemsToDisplay remains empty.
+  // For non-admin pages like '/', '/login', '/admin-auth', '/contato', etc., itemsToDisplay remains empty by default.
+
 
   const showNavigation = itemsToDisplay.length > 0;
 
