@@ -225,7 +225,7 @@ export default function GerenciarAssistenciasPage() {
           <DialogHeader>
             <DialogTitle>{modalMode === 'create' ? 'Cadastrar Nova Assistência' : 'Editar Assistência'}</DialogTitle>
             <DialogDescription>
-              {modalMode === 'create' ? 'Preencha os dados da nova assistência.' : `Editando a assistência: ${currentAssistencia?.nome_assistencia}`}
+              {modalMode === 'create' ? 'Preencha os dados da nova assistência.' : `Editando a assistência: ${currentAssistencia?.nome_assistencia || ''}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveAssistencia} className="grid gap-4 py-4">
@@ -271,3 +271,5 @@ export default function GerenciarAssistenciasPage() {
     </div>
   );
 }
+
+    

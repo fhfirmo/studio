@@ -221,7 +221,7 @@ export default function GerenciarSeguradorasPage() {
           <DialogHeader>
             <DialogTitle>{modalMode === 'create' ? 'Cadastrar Nova Seguradora' : 'Editar Seguradora'}</DialogTitle>
             <DialogDescription>
-              {modalMode === 'create' ? 'Preencha o nome da nova seguradora.' : `Editando a seguradora: ${currentSeguradora?.nome_seguradora}`}
+              {modalMode === 'create' ? 'Preencha o nome da nova seguradora.' : `Editando a seguradora: ${currentSeguradora?.nome_seguradora || ''}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveSeguradora} className="grid gap-4 py-4">
@@ -263,3 +263,5 @@ export default function GerenciarSeguradorasPage() {
     </div>
   );
 }
+
+    

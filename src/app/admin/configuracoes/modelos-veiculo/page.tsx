@@ -229,7 +229,7 @@ export default function GerenciarModelosVeiculoPage() {
           <DialogHeader>
             <DialogTitle>{modalMode === 'create' ? 'Cadastrar Novo Modelo de Veículo' : 'Editar Modelo de Veículo'}</DialogTitle>
             <DialogDescription>
-              {modalMode === 'create' ? 'Preencha os dados do novo modelo.' : `Editando o modelo: ${currentModeloVeiculo?.marca} ${currentModeloVeiculo?.modelo} ${currentModeloVeiculo?.versao}`}
+              {modalMode === 'create' ? 'Preencha os dados do novo modelo.' : `Editando o modelo: ${currentModeloVeiculo?.marca || ''} ${currentModeloVeiculo?.modelo || ''} ${currentModeloVeiculo?.versao || ''}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveModeloVeiculo} className="grid gap-4 py-4">
@@ -279,3 +279,5 @@ export default function GerenciarModelosVeiculoPage() {
     </div>
   );
 }
+
+    

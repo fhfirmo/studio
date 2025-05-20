@@ -225,7 +225,7 @@ export default function GerenciarCoberturasPage() {
           <DialogHeader>
             <DialogTitle>{modalMode === 'create' ? 'Cadastrar Nova Cobertura' : 'Editar Cobertura'}</DialogTitle>
             <DialogDescription>
-              {modalMode === 'create' ? 'Preencha os dados da nova cobertura.' : `Editando a cobertura: ${currentCobertura?.nome_cobertura}`}
+              {modalMode === 'create' ? 'Preencha os dados da nova cobertura.' : `Editando a cobertura: ${currentCobertura?.nome_cobertura || ''}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveCobertura} className="grid gap-4 py-4">
@@ -271,3 +271,5 @@ export default function GerenciarCoberturasPage() {
     </div>
   );
 }
+
+    
