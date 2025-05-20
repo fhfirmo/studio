@@ -11,23 +11,26 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Car, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react";
 // import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
 
-// Placeholder data - In a real app, this would come from Supabase
-const initialVeiculos = [
-  { id: "vei_001", placa: "ABC-1234", modelo: "Fiat Uno", marca: "Fiat", ano: 2020, dataCadastro: "2024-01-10" },
-  { id: "vei_002", placa: "DEF-5678", modelo: "Volkswagen Gol", marca: "Volkswagen", ano: 2021, dataCadastro: "2024-02-15" },
-  { id: "vei_003", placa: "GHI-9012", modelo: "Chevrolet Onix", marca: "Chevrolet", ano: 2022, dataCadastro: "2024-03-20" },
-  { id: "vei_004", placa: "JKL-3456", modelo: "Hyundai HB20", marca: "Hyundai", ano: 2019, dataCadastro: "2024-04-05" },
-  { id: "vei_005", placa: "MNO-7890", modelo: "Ford Ka", marca: "Ford", ano: 2023, dataCadastro: "2024-05-25" },
-];
-
 interface Veiculo {
   id: string;
   placa: string;
   modelo: string;
   marca: string;
   ano: number;
-  dataCadastro: string; 
+  tipoEspecie: string;
+  combustivel: string;
+  nomeProprietario: string;
+  tipoProprietario: 'Pessoa Física' | 'Organização' | 'N/A';
 }
+
+const initialVeiculos: Veiculo[] = [
+  { id: "vei_001", placa: "ABC-1234", modelo: "Fiat Uno", marca: "Fiat", ano: 2020, tipoEspecie: "Passageiro", combustivel: "Flex", nomeProprietario: "João da Silva Sauro", tipoProprietario: "Pessoa Física" },
+  { id: "vei_002", placa: "DEF-5678", modelo: "Volkswagen Gol", marca: "Volkswagen", ano: 2021, tipoEspecie: "Passageiro", combustivel: "Gasolina", nomeProprietario: "Cooperativa Alfa", tipoProprietario: "Organização" },
+  { id: "vei_003", placa: "GHI-9012", modelo: "Chevrolet Onix", marca: "Chevrolet", ano: 2022, tipoEspecie: "Passageiro", combustivel: "Etanol", nomeProprietario: "Maria Oliveira Costa", tipoProprietario: "Pessoa Física" },
+  { id: "vei_004", placa: "JKL-3456", modelo: "Hyundai HB20", marca: "Hyundai", ano: 2019, tipoEspecie: "Passageiro", combustivel: "Flex", nomeProprietario: "Associação Beta", tipoProprietario: "Organização" },
+  { id: "vei_005", placa: "MNO-7890", modelo: "Ford Ka", marca: "Ford", ano: 2023, tipoEspecie: "Passageiro", combustivel: "Gasolina", nomeProprietario: "Carlos Pereira Lima", tipoProprietario: "Pessoa Física" },
+];
+
 
 export default function GerenciamentoVeiculosPage() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>(initialVeiculos);
@@ -39,20 +42,41 @@ export default function GerenciamentoVeiculosPage() {
   // In a real app, veiculos would be fetched from Supabase:
   // useEffect(() => {
   //   async function fetchVeiculos() {
-  //     // const { data, error } = await supabase.from('veiculos').select('*'); // Replace 'veiculos' with your table name
-  //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar veículos."}) */ }
-  //     // else { setVeiculos(data || []); }
+  //     // const { data, error } = await supabase
+  //     //  .from('Veiculos')
+  //     //  .select(`
+  //     //    id, placa, marca, ano, tipo_especie, combustivel,
+  //     //    ModelosVeiculo ( nome_modelo ), 
+  //     //    PessoasFisicas ( nome_completo ),
+  //     //    Entidades ( nome_fantasia ) 
+  //     //  `);
+  //     // if (error) { /* handle error */ }
+  //     // else { 
+  //     //   const formattedData = data.map(v => ({
+  //     //     id: v.id,
+  //     //     placa: v.placa,
+  //     //     modelo: v.ModelosVeiculo.nome_modelo, // Assuming 'ModelosVeiculo' is related table for model name
+  //     //     marca: v.marca,
+  //     //     ano: v.ano,
+  //     //     tipoEspecie: v.tipo_especie,
+  //     //     combustivel: v.combustivel,
+  //     //     nomeProprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome_fantasia || 'N/A',
+  //     //     tipoProprietario: v.id_proprietario_pessoa_fisica ? 'Pessoa Física' : (v.id_proprietario_entidade ? 'Organização' : 'N/A'),
+  //     //   }));
+  //     //   setVeiculos(formattedData || []); 
+  //     // }
   //   }
   //   fetchVeiculos();
   // }, []);
 
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
-    console.log(`Searching for vehicle: ${searchTerm} (placeholder - Supabase query needed for 'veiculos' table)`);
+    console.log(`Searching for vehicle: ${searchTerm} (placeholder - Supabase query needed for 'Veiculos' table, joining with PessoasFisicas/Entidades for owner name)`);
     // const filteredVeiculos = initialVeiculos.filter(veiculo => 
     //   veiculo.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
     //   veiculo.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   veiculo.marca.toLowerCase().includes(searchTerm.toLowerCase())
+    //   veiculo.marca.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    //   veiculo.nomeProprietario.toLowerCase().includes(searchTerm.toLowerCase())
     // );
     // setVeiculos(filteredVeiculos);
     // if (filteredVeiculos.length === 0) {
@@ -68,10 +92,10 @@ export default function GerenciamentoVeiculosPage() {
   const confirmDeleteVeiculo = async () => {
     if (!veiculoToDelete) return;
     
-    console.log(`Attempting to delete vehicle ID: ${veiculoToDelete.id}, Placa: ${veiculoToDelete.placa}`);
+    console.log(`Attempting to delete vehicle ID: ${veiculoToDelete.id}, Placa: ${veiculoToDelete.placa}, Modelo: ${veiculoToDelete.modelo}`);
     // Placeholder for Supabase API call to delete veiculo
     // try {
-    //   // const { error } = await supabase.from('veiculos').delete().eq('id', veiculoToDelete.id); // Replace 'veiculos'
+    //   // const { error } = await supabase.from('Veiculos').delete().eq('id', veiculoToDelete.id); 
     //   // if (error) throw error;
     //   setVeiculos(prevVeiculos => prevVeiculos.filter(v => v.id !== veiculoToDelete.id));
     //   // toast({ title: "Veículo Excluído!", description: `O veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo} foi excluído.` });
@@ -115,13 +139,13 @@ export default function GerenciamentoVeiculosPage() {
       <Card className="shadow-lg mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Veículos</CardTitle>
-          <CardDescription>Filtre veículos por placa, modelo ou marca.</CardDescription>
+          <CardDescription>Filtre veículos por placa, modelo, marca ou nome do proprietário.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Digite para pesquisar..."
+              placeholder="Pesquisar por Placa, Modelo, Marca ou Proprietário..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
@@ -149,7 +173,11 @@ export default function GerenciamentoVeiculosPage() {
                   <TableHead>Placa</TableHead>
                   <TableHead>Modelo</TableHead>
                   <TableHead className="hidden md:table-cell">Marca</TableHead>
-                  <TableHead className="hidden lg:table-cell">Ano</TableHead>
+                  <TableHead className="hidden md:table-cell">Ano</TableHead>
+                  <TableHead className="hidden lg:table-cell">Tipo/Espécie</TableHead>
+                  <TableHead className="hidden lg:table-cell">Combustível</TableHead>
+                  <TableHead className="hidden md:table-cell">Proprietário</TableHead>
+                  <TableHead className="hidden lg:table-cell">Tipo Proprietário</TableHead>
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -161,7 +189,11 @@ export default function GerenciamentoVeiculosPage() {
                       <TableCell className="font-semibold">{veiculo.placa}</TableCell>
                       <TableCell>{veiculo.modelo}</TableCell>
                       <TableCell className="hidden md:table-cell">{veiculo.marca}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{veiculo.ano}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.ano}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.tipoEspecie}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.combustivel}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.nomeProprietario}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.tipoProprietario}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa}`}>
                            <Link href={`/admin/veiculos/${veiculo.id}`}>
@@ -186,7 +218,7 @@ export default function GerenciamentoVeiculosPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center h-24 text-muted-foreground">
                       Nenhum veículo cadastrado no momento.
                     </TableCell>
                   </TableRow>
@@ -221,12 +253,18 @@ export default function GerenciamentoVeiculosPage() {
 
       {/*
         Supabase Integration Notes:
-        - Vehicle list will be fetched from a Supabase table (e.g., 'veiculos').
-        - Search functionality will query the Supabase 'veiculos' table by placa, modelo, or marca.
+        - Vehicle list will be fetched from 'public.Veiculos'.
+        - To display 'Modelo': Join with 'public.ModelosVeiculo' using 'id_modelo_veiculo' to get 'nome_modelo'.
+        - To display 'Nome Proprietário' and 'Tipo Proprietário':
+          - Conditionally JOIN with 'public.PessoasFisicas' on 'Veiculos.id_proprietario_pessoa_fisica' = 'PessoasFisicas.id'.
+          - Conditionally JOIN with 'public.Entidades' on 'Veiculos.id_proprietario_entidade' = 'Entidades.id'.
+          - Determine 'Tipo Proprietário' based on which FK is populated.
+        - 'Tipo/Espécie' and 'Combustível' come directly from 'public.Veiculos'.
+        - Search functionality will query 'public.Veiculos' and related tables for placa, modelo, marca, or owner's name.
         - "Cadastrar Novo Veículo" button links to '/admin/veiculos/novo'.
-        - "Detalhes" button links to '/admin/veiculos/[id]', passing the vehicle's ID. This page will fetch and display vehicle details from Supabase.
-        - "Editar" button links to '/admin/veiculos/[id]/editar', passing the vehicle's ID. This page will pre-fill a form with vehicle data for editing.
-        - "Excluir" button will trigger a Supabase API call (DELETE to 'veiculos' table) after confirmation.
+        - "Detalhes" button links to '/admin/veiculos/[id]'.
+        - "Editar" button links to '/admin/veiculos/[id]/editar'.
+        - "Excluir" button will trigger a Supabase API call (DELETE to 'public.Veiculos' table) after confirmation.
       */}
     </div>
   );
