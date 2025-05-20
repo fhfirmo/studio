@@ -18,18 +18,18 @@ interface PessoaFisica {
   cpf: string;
   email: string;
   telefone: string;
-  tipoRelacao: string; // e.g., Associado, Cooperado, Funcionário, Cliente Geral
-  organizacaoVinculada: string | null; // Name of the organization or null
+  tipoRelacao: string; 
+  organizacaoVinculada: string | null; 
   dataCadastro: string;
 }
 
-// Placeholder data - In a real app, this would come from Supabase from public.PessoasFisicas
+// Updated Placeholder data
 const initialPessoasFisicas: PessoaFisica[] = [
-  { id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00", email: "joao.silva@example.com", telefone: "(11) 98888-7777", tipoRelacao: "Associado", organizacaoVinculada: "Cooperativa Alfa", dataCadastro: "2024-02-15" },
-  { id: "pf_002", nomeCompleto: "Maria Oliveira Costa", cpf: "987.654.321-99", email: "maria.costa@example.net", telefone: "(22) 97777-6666", tipoRelacao: "Cliente Geral", organizacaoVinculada: null, dataCadastro: "2024-04-05" },
-  { id: "pf_003", nomeCompleto: "Carlos Pereira Lima", cpf: "111.222.333-44", email: "carlos.lima@example.com", telefone: "(33) 96666-5555", tipoRelacao: "Cooperado", organizacaoVinculada: "Federação Beta", dataCadastro: "2024-01-10" },
-  { id: "pf_004", nomeCompleto: "Ana Souza Almeida", cpf: "444.555.666-77", email: "ana.almeida@example.org", telefone: "(44) 95555-4444", tipoRelacao: "Funcionário", organizacaoVinculada: "INBM Matriz", dataCadastro: "2024-03-20" },
-  { id: "pf_005", nomeCompleto: "Pedro Martins Rocha", cpf: "777.888.999-00", email: "pedro.rocha@example.com", telefone: "(55) 94444-3333", tipoRelacao: "Cliente Geral", organizacaoVinculada: null, dataCadastro: "2024-05-25" },
+  { id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00", email: "joao@exemplo.com", telefone: "(11) 9876-5432", tipoRelacao: "Associado", organizacaoVinculada: "Cooperativa Alfa", dataCadastro: "2024-01-15" },
+  { id: "pf_002", nomeCompleto: "Maria Oliveira Costa", cpf: "987.654.321-99", email: "maria@exemplo.com", telefone: "(21) 1234-5678", tipoRelacao: "Funcionário", organizacaoVinculada: "Empresa Gama", dataCadastro: "2024-02-20" },
+  { id: "pf_003", nomeCompleto: "Carlos Pereira Lima", cpf: "111.222.333-44", email: "carlos@exemplo.com", telefone: "(31) 9988-7766", tipoRelacao: "Cliente Geral", organizacaoVinculada: null, dataCadastro: "2024-03-10" },
+  { id: "pf_004", nomeCompleto: "Ana Souza Almeida", cpf: "444.555.666-77", email: "ana@exemplo.com", telefone: "(41) 8765-4321", tipoRelacao: "Associado", organizacaoVinculada: "Associação Beta", dataCadastro: "2024-04-05" },
+  { id: "pf_005", nomeCompleto: "Pedro Martins Rocha", cpf: "777.888.999-00", email: "pedro@exemplo.com", telefone: "(51) 6543-2109", tipoRelacao: "Cooperado", organizacaoVinculada: "Cooperativa Alfa", dataCadastro: "2024-05-01" },
 ];
 
 
@@ -45,10 +45,15 @@ export default function GerenciamentoPessoasFisicasPage() {
   //   async function fetchPessoasFisicas() {
   //     // const { data, error } = await supabase.from('PessoasFisicas')
   //     // .select(`
-  //     //   *,
-  //     //   MembrosEntidade (
-  //     //     Entidades ( nome_fantasia ),
-  //     //     tipo_relacao 
+  //     //   id,
+  //     //   nome_completo,
+  //     //   cpf,
+  //     //   email_principal,
+  //     //   telefone_principal,
+  //     //   tipo_relacao, 
+  //     //   data_cadastro,
+  //     //   MembrosEntidade ( // Assuming a PessoasFisicas can be linked via MembrosEntidade
+  //     //     Entidades ( nome_fantasia ) // Fetching nome_fantasia from Entidades through MembrosEntidade
   //     //   )
   //     // `); 
   //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar pessoas físicas."}) */ }
@@ -59,8 +64,8 @@ export default function GerenciamentoPessoasFisicasPage() {
   //     //      cpf: pf.cpf,
   //     //      email: pf.email_principal,
   //     //      telefone: pf.telefone_principal,
-  //     //      tipoRelacao: pf.MembrosEntidade[0]?.tipo_relacao || 'Cliente Geral', // Adjust based on your data model
-  //     //      organizacaoVinculada: pf.MembrosEntidade[0]?.Entidades?.nome_fantasia || null, // Adjust
+  //     //      tipoRelacao: pf.tipo_relacao || 'Cliente Geral',
+  //     //      organizacaoVinculada: pf.MembrosEntidade[0]?.Entidades?.nome_fantasia || null,
   //     //      dataCadastro: pf.data_cadastro,
   //     //   }));
   //     //   setPessoasFisicas(formattedData || []); 
@@ -69,7 +74,7 @@ export default function GerenciamentoPessoasFisicasPage() {
   //   fetchPessoasFisicas();
   // }, []);
 
-  // Placeholder for search logic - will query Supabase in a real app
+  // Placeholder for search logic
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
     console.log(`Searching for: ${searchTerm} (placeholder - Supabase query needed for 'PessoasFisicas' table, potentially joining with MembrosEntidade and Entidades)`);
@@ -132,7 +137,7 @@ export default function GerenciamentoPessoasFisicasPage() {
           <div className="flex flex-col sm:flex-row gap-2">
             <ExportDataDialog dataTypeName="Pessoas Físicas" />
             <Button asChild>
-              <Link href="/admin/clientes/novo"> {/* Link to client creation, will be refactored to PF creation */}
+              <Link href="/admin/clientes/novo">
                 <UserPlus className="mr-2 h-5 w-5" /> Cadastrar Nova Pessoa Física
               </Link>
             </Button>
@@ -176,10 +181,10 @@ export default function GerenciamentoPessoasFisicasPage() {
                   <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
                   <TableHead>Nome Completo</TableHead>
                   <TableHead className="hidden md:table-cell">CPF</TableHead>
-                  <TableHead className="hidden lg:table-cell">E-mail</TableHead>
+                  <TableHead className="hidden md:table-cell">E-mail</TableHead>
                   <TableHead className="hidden lg:table-cell">Telefone</TableHead>
-                  <TableHead className="hidden xl:table-cell">Tipo Relação</TableHead>
-                  <TableHead className="hidden xl:table-cell">Organização Vinculada</TableHead>
+                  <TableHead className="hidden lg:table-cell">Tipo Relação</TableHead>
+                  <TableHead className="hidden lg:table-cell">Organização Vinculada</TableHead>
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -190,18 +195,18 @@ export default function GerenciamentoPessoasFisicasPage() {
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{pessoa.id}</TableCell>
                       <TableCell>{pessoa.nomeCompleto}</TableCell>
                       <TableCell className="hidden md:table-cell">{pessoa.cpf}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{pessoa.email}</TableCell>
+                      <TableCell className="hidden md:table-cell">{pessoa.email}</TableCell>
                       <TableCell className="hidden lg:table-cell">{pessoa.telefone}</TableCell>
-                      <TableCell className="hidden xl:table-cell">{pessoa.tipoRelacao}</TableCell>
-                      <TableCell className="hidden xl:table-cell">{pessoa.organizacaoVinculada || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{pessoa.tipoRelacao}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{pessoa.organizacaoVinculada || "N/A"}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes de ${pessoa.nomeCompleto}`}>
-                           <Link href={`/cliente/${pessoa.id}`}> {/* This link takes user to public client detail page */}
+                           <Link href={`/cliente/${pessoa.id}`}>
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" asChild aria-label={`Editar ${pessoa.nomeCompleto}`}>
-                          <Link href={`/admin/clientes/${pessoa.id}/editar`}> {/* Link to client edit, will be refactored */}
+                          <Link href={`/admin/clientes/${pessoa.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
                         </Button>
@@ -254,19 +259,22 @@ export default function GerenciamentoPessoasFisicasPage() {
       {/*
         Supabase Integration Notes:
         - Pessoa Física list will be fetched from public.PessoasFisicas.
-        - To display 'Organização Vinculada' and 'Tipo Relação', a JOIN or nested query with public.MembrosEntidade 
-          (which links PessoasFisicas.id_membro_entidade to MembrosEntidade.id) 
-          and then public.Entidades (via MembrosEntidade.entidade_principal_id or entidade_membro_id to Entidades.id_entidade)
-          will be needed to get Entidades.nome_fantasia. The MembrosEntidade table should also store the 'tipo_relacao'.
-          If a PessoaFisica is not in MembrosEntidade or if MembrosEntidade.id_entidade_principal is null, 
-          they might be a "Cliente Geral" or have no direct organization link.
+        - To display 'Organização Vinculada':
+          - If 'tipo_relacao' is 'Cliente Geral', display 'N/A'.
+          - Otherwise, the query will need to join with 'public.MembrosEntidade' on 'PessoasFisicas.id' = 'MembrosEntidade.id_pessoa_fisica' (or a similar linking field)
+            and then join 'public.MembrosEntidade' with 'public.Entidades' on 'MembrosEntidade.id_entidade_principal' (or 'MembrosEntidade.id_entidade_membro') = 'Entidades.id_entidade'
+            to get 'Entidades.nome_fantasia' (or a similar name field from 'Entidades').
+          - The 'tipo_relacao' field in 'PessoasFisicas' table itself should store the direct relationship type.
         - Search functionality will query the PessoasFisicas table and potentially related tables for organization name.
-        - "Cadastrar Nova Pessoa Física" button links to '/admin/clientes/novo' (this page will need refactoring).
-        - "Detalhes" button links to `/cliente/[id]`.
-        - "Editar" button links to '/admin/clientes/[id]/editar' (this page will need refactoring).
+        - "Cadastrar Nova Pessoa Física" button links to '/admin/clientes/novo'.
+        - "Detalhes" button links to `/cliente/[id]` (public-facing detail page).
+        - "Editar" button links to '/admin/clientes/[id]/editar'.
         - "Excluir" button will trigger a Supabase API call (DELETE request to 'PessoasFisicas' table).
         - Export functionality will call a Supabase endpoint/function to generate and download data.
       */}
     </div>
   );
 }
+
+
+    
