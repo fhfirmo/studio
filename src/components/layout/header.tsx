@@ -18,7 +18,6 @@ const mainAdminNavItems: { href: string; label: string }[] = [
   { href: '/admin/documentos', label: 'Documentos' },
   { href: '/admin/organizacoes', label: 'Organizações' },
   { href: '/admin/relatorios', label: 'Relatórios' },
-  // "Configurações" is removed from here and handled separately
 ];
 
 // Specific navigation item for the user management section
