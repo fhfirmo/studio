@@ -11,8 +11,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Save, XCircle, Home, Info } from 'lucide-react';
-// import { useToast } from "@/hooks/use-toast"; // Uncomment if toasts are needed
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { UserPlus, Save, XCircle, HomeIcon, InfoIcon, Users, Briefcase, Link2 } from 'lucide-react'; // Added Link2, Briefcase
+import { format, parseISO } from "date-fns";
+// import { useToast } from "@/hooks/use-toast";
 
 const brazilianStates = [
   { value: "AC", label: "Acre" }, { value: "AL", label: "Alagoas" }, { value: "AP", label: "Amapá" },
@@ -26,25 +29,68 @@ const brazilianStates = [
   { value: "SP", label: "São Paulo" }, { value: "SE", label: "Sergipe" }, { value: "TO", label: "Tocantins" }
 ];
 
-export default function NovoClientePage() {
+// Placeholder for municipalities - In a real app, this would be dynamic based on selected state
+const placeholderMunicipios: Record<string, {value: string, label: string}[]> = {
+  SP: [{ value: "sao_paulo", label: "São Paulo" }, { value: "campinas", label: "Campinas" }],
+  RJ: [{ value: "rio_de_janeiro", label: "Rio de Janeiro" }, { value: "niteroi", label: "Niterói" }],
+};
+
+const tiposRelacao = [
+  { value: "associado", label: "Associado" },
+  { value: "cooperado", label: "Cooperado" },
+  { value: "funcionario", label: "Funcionário" },
+  { value: "cliente_geral", label: "Cliente Geral" },
+];
+
+// Placeholder for organizations - In a real app, this would come from Supabase 'Entidades' table
+const organizacoesDisponiveis = [
+  { value: "org_001", label: "Cooperativa Alfa" },
+  { value: "org_002", label: "Associação Beta" },
+  { value: "org_003", label: "Empresa Gama" },
+];
+
+
+export default function NovaPessoaFisicaPage() {
   const router = useRouter();
-  // const { toast } = useToast(); // Uncomment for feedback messages
+  // const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [currentMunicipios, setCurrentMunicipios] = useState<{value: string, label: string}[]>([]);
 
   const [formData, setFormData] = useState({
     nomeCompleto: '',
+    cpf: '',
+    rg: '',
+    dataNascimento: undefined as Date | undefined,
     email: '',
     telefone: '',
-    dataCadastro: new Date().toISOString().split('T')[0],
-    rua: '',
+    tipoRelacao: '',
+    organizacaoVinculadaId: '',
+    // Endereço
+    logradouro: '',
     numero: '',
     complemento: '',
     bairro: '',
-    cidade: '',
-    estado: '',
     cep: '',
+    estado: '',
+    municipio: '',
+    // Outras
     observacoes: '',
   });
+
+  const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
+
+  useEffect(() => {
+    if (formData.estado) {
+      // @ts-ignore
+      setCurrentMunicipios(placeholderMunicipios[formData.estado] || []);
+    } else {
+      setCurrentMunicipios([]);
+    }
+    // If tipoRelacao changes to 'cliente_geral', clear organizacaoVinculadaId
+    if (formData.tipoRelacao === 'cliente_geral') {
+      setFormData(prev => ({ ...prev, organizacaoVinculadaId: '' }));
+    }
+  }, [formData.estado, formData.tipoRelacao]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -54,41 +100,56 @@ export default function NovoClientePage() {
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
+  
+  const handleDateChange = (name: string, date: Date | undefined) => {
+    setFormData(prev => ({...prev, [name]: date }));
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
 
     // Client-side validation placeholder
-    if (!formData.nomeCompleto || !formData.email) {
-      // toast({ title: "Campos Obrigatórios", description: "Nome completo e E-mail são obrigatórios.", variant: "destructive" });
-      console.error("Validação: Nome completo e E-mail são obrigatórios.");
+    if (!formData.nomeCompleto || !formData.cpf || !formData.email || !formData.tipoRelacao) {
+      // toast({ title: "Campos Obrigatórios", description: "Nome, CPF, E-mail e Tipo de Relação são obrigatórios.", variant: "destructive" });
+      console.error("Validação: Nome, CPF, E-mail e Tipo de Relação são obrigatórios.");
+      setIsLoading(false);
+      return;
+    }
+    if (isOrganizacaoRequired && !formData.organizacaoVinculadaId) {
+      // toast({ title: "Campo Obrigatório", description: "Organização Vinculada é obrigatória para este tipo de relação.", variant: "destructive" });
+      console.error("Validação: Organização Vinculada é obrigatória para este tipo de relação.");
       setIsLoading(false);
       return;
     }
     
-    console.log('Form data to be submitted:', formData);
+    const payload = {
+      ...formData,
+      dataNascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
+      // id_endereco will be handled by backend logic typically
+      // id_organizacao from organizacaoVinculadaId if applicable
+    };
+    console.log('Form data to be submitted (Pessoa Física):', payload);
 
-    // Placeholder for Supabase API call to create a new client
+    // Placeholder for Supabase API call to create a new PessoaFisica
+    // - Create/update Endereco record, get endereco_id.
+    // - Insert into PessoasFisicas table, including endereco_id, tipo_relacao, and organizacao_id (if formData.organizacaoVinculadaId is set).
     // try {
-    //   // const { data, error } = await supabase.from('clientes').insert([formData]).select();
-    //   // if (error) throw error;
-    //   // console.log('Client created successfully:', data);
-    //   // toast({ title: "Cliente Cadastrado!", description: "O novo cliente foi adicionado com sucesso." });
-    //   // router.push('/admin/dashboard'); // Or to client list page
+    //   // ... Supabase logic here ...
+    //   // toast({ title: "Pessoa Física Cadastrada!", description: "Os dados foram salvos com sucesso." });
+    //   // router.push('/admin/clientes'); 
     // } catch (error: any) {
-    //   // console.error('Failed to create client:', error.message);
+    //   // console.error('Failed to create pessoa física:', error.message);
     //   // toast({ title: "Erro ao Cadastrar", description: error.message, variant: "destructive" });
     // } finally {
     //   setIsLoading(false);
     // }
 
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated client creation finished');
-    // toast({ title: "Cliente Cadastrado! (Simulado)", description: "O novo cliente foi adicionado com sucesso." });
+    console.log('Simulated pessoa física creation finished');
+    // toast({ title: "Pessoa Física Cadastrada! (Simulado)", description: "Os dados foram salvos com sucesso." });
     setIsLoading(false);
-    router.push('/admin/dashboard'); 
+    router.push('/admin/clientes'); 
   };
 
   return (
@@ -96,90 +157,137 @@ export default function NovoClientePage() {
       <header className="mb-8 md:mb-12">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
-            <UserPlus className="mr-3 h-8 w-8" /> Cadastro de Novo Cliente
+            <UserPlus className="mr-3 h-8 w-8" /> Cadastro de Nova Pessoa Física
           </h1>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/dashboard">
-              <XCircle className="mr-2 h-4 w-4" /> Voltar ao Painel
+            <Link href="/admin/clientes">
+              <XCircle className="mr-2 h-4 w-4" /> Voltar para Lista
             </Link>
           </Button>
         </div>
         <p className="text-muted-foreground mt-1">
-          Preencha os dados abaixo para adicionar um novo cliente ao sistema.
+          Preencha os dados abaixo para adicionar uma nova pessoa física ao sistema.
         </p>
       </header>
 
       <form onSubmit={handleSubmit}>
-        <Tabs defaultValue="infoGerais" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 gap-2 mb-6">
-            <TabsTrigger value="infoGerais" className="flex items-center gap-2">
-              <UserPlus className="h-4 w-4" /> Informações Gerais
+        <Tabs defaultValue="infoPessoais" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+            <TabsTrigger value="infoPessoais" className="flex items-center gap-2">
+              <Users className="h-4 w-4" /> Informações Pessoais
+            </TabsTrigger>
+            <TabsTrigger value="vinculo" className="flex items-center gap-2">
+              <Link2 className="h-4 w-4" /> Vínculo e Relação
             </TabsTrigger>
             <TabsTrigger value="endereco" className="flex items-center gap-2">
-              <Home className="h-4 w-4" /> Endereço
+              <HomeIcon className="h-4 w-4" /> Endereço
             </TabsTrigger>
             <TabsTrigger value="outrasInfo" className="flex items-center gap-2">
-              <Info className="h-4 w-4" /> Outras Informações
+              <InfoIcon className="h-4 w-4" /> Outras Informações
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="infoGerais">
+          <TabsContent value="infoPessoais">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Dados Pessoais e Contato</CardTitle>
-                <CardDescription>Informações básicas para identificação e comunicação com o cliente.</CardDescription>
+                <CardTitle>Dados Pessoais</CardTitle>
+                <CardDescription>Informações básicas de identificação.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="nomeCompleto">Nome Completo <span className="text-destructive">*</span></Label>
-                    <Input
-                      id="nomeCompleto"
-                      name="nomeCompleto"
-                      value={formData.nomeCompleto}
-                      onChange={handleChange}
-                      placeholder="Nome completo do cliente"
-                      required
-                    />
-                     {/* Client-side validation message placeholder */}
+                    <Input id="nomeCompleto" name="nomeCompleto" value={formData.nomeCompleto} onChange={handleChange} required />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-mail <span className="text-destructive">*</span></Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      placeholder="email@exemplo.com"
-                      required
-                    />
-                    {/* Client-side validation message placeholder */}
+                    <Label htmlFor="cpf">CPF <span className="text-destructive">*</span></Label>
+                    <Input id="cpf" name="cpf" value={formData.cpf} onChange={handleChange} placeholder="000.000.000-00" required />
+                    {/* Comment: Consider using a library like 'react-input-mask' for CPF formatting */}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="telefone">Telefone</Label>
-                    <Input
-                      id="telefone"
-                      name="telefone"
-                      type="tel"
-                      value={formData.telefone}
-                      onChange={handleChange}
-                      placeholder="(XX) XXXXX-XXXX"
-                    />
+                    <Label htmlFor="rg">RG</Label>
+                    <Input id="rg" name="rg" value={formData.rg} onChange={handleChange} placeholder="00.000.000-0" />
+                     {/* Comment: Consider 'react-input-mask' for RG */}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="dataCadastro">Data de Cadastro</Label>
-                    <Input
-                      id="dataCadastro"
-                      name="dataCadastro"
-                      type="date"
-                      value={formData.dataCadastro}
-                      onChange={handleChange}
-                    />
+                    <Label htmlFor="dataNascimento">Data de Nascimento</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                            variant={"outline"}
+                            className={`w-full justify-start text-left font-normal ${!formData.dataNascimento && "text-muted-foreground"}`}
+                            >
+                            <Save className="mr-2 h-4 w-4" /> {/* Using Save as CalendarIcon */}
+                            {formData.dataNascimento ? format(formData.dataNascimento, "dd/MM/yyyy") : <span>Selecione a data</span>}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                            mode="single"
+                            selected={formData.dataNascimento}
+                            onSelect={(date) => handleDateChange('dataNascimento', date)}
+                            captionLayout="dropdown-buttons" fromYear={1900} toYear={new Date().getFullYear()}
+                            initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail <span className="text-destructive">*</span></Label>
+                    <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} placeholder="email@exemplo.com" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefone">Telefone</Label>
+                    <Input id="telefone" name="telefone" type="tel" value={formData.telefone} onChange={handleChange} placeholder="(XX) XXXXX-XXXX" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="vinculo">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle>Vínculo e Relação com Entidades</CardTitle>
+                <CardDescription>Defina o tipo de relação e a organização vinculada, se aplicável.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                 <div className="space-y-2">
+                    <Label htmlFor="tipoRelacao">Tipo de Relação <span className="text-destructive">*</span></Label>
+                    {/* Comment: Options for this select will be loaded dynamically from Supabase. */}
+                    <Select name="tipoRelacao" value={formData.tipoRelacao} onValueChange={(value) => handleSelectChange('tipoRelacao', value)} required>
+                      <SelectTrigger id="tipoRelacao" aria-label="Selecionar tipo de relação">
+                        <Link2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                        <SelectValue placeholder="Selecione o tipo de relação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposRelacao.map(tipo => (
+                          <SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {isOrganizacaoRequired && (
+                    <div className="space-y-2">
+                        <Label htmlFor="organizacaoVinculadaId">Organização Vinculada <span className="text-destructive">*</span></Label>
+                        {/* Comment: Options for this select will be loaded dynamically from Supabase 'Entidades' table. */}
+                        <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}>
+                        <SelectTrigger id="organizacaoVinculadaId" aria-label="Selecionar organização vinculada">
+                            <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <SelectValue placeholder="Selecione a organização" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {organizacoesDisponiveis.map(org => (
+                            <SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                    </div>
+                  )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -187,14 +295,14 @@ export default function NovoClientePage() {
           <TabsContent value="endereco">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Endereço do Cliente</CardTitle>
-                <CardDescription>Informações de localização do cliente.</CardDescription>
+                <CardTitle>Endereço</CardTitle>
+                <CardDescription>Informações de localização da pessoa física.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="rua">Rua</Label>
-                    <Input id="rua" name="rua" value={formData.rua} onChange={handleChange} placeholder="Nome da rua, avenida, etc." />
+                    <Label htmlFor="logradouro">Logradouro</Label>
+                    <Input id="logradouro" name="logradouro" value={formData.logradouro} onChange={handleChange} placeholder="Rua, Avenida, etc." />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="numero">Número</Label>
@@ -211,15 +319,17 @@ export default function NovoClientePage() {
                     <Input id="bairro" name="bairro" value={formData.bairro} onChange={handleChange} placeholder="Nome do bairro" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cidade">Cidade</Label>
-                    <Input id="cidade" name="cidade" value={formData.cidade} onChange={handleChange} placeholder="Nome da cidade" />
+                    <Label htmlFor="cep">CEP</Label>
+                    <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} placeholder="00000-000" />
+                     {/* Comment: Consider 'react-input-mask' for CEP */}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="estado">Estado</Label>
+                    {/* Comment: Options for this select will be loaded dynamically from Supabase 'Estados' table. */}
                     <Select name="estado" value={formData.estado} onValueChange={(value) => handleSelectChange('estado', value)}>
-                      <SelectTrigger id="estado">
+                      <SelectTrigger id="estado" aria-label="Selecionar estado">
                         <SelectValue placeholder="Selecione o estado" />
                       </SelectTrigger>
                       <SelectContent>
@@ -230,8 +340,18 @@ export default function NovoClientePage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cep">CEP</Label>
-                    <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} placeholder="00000-000" />
+                    <Label htmlFor="municipio">Município</Label>
+                    {/* Comment: Options for this select will be loaded dynamically from Supabase 'Municipios' table, filtered by selected state. */}
+                    <Select name="municipio" value={formData.municipio} onValueChange={(value) => handleSelectChange('municipio', value)} disabled={!formData.estado || currentMunicipios.length === 0}>
+                      <SelectTrigger id="municipio" aria-label="Selecionar município">
+                        <SelectValue placeholder={formData.estado && currentMunicipios.length > 0 ? "Selecione o município" : "Selecione o estado primeiro"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentMunicipios.map(municipio => (
+                          <SelectItem key={municipio.value} value={municipio.value}>{municipio.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </CardContent>
@@ -242,7 +362,7 @@ export default function NovoClientePage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle>Outras Informações</CardTitle>
-                <CardDescription>Observações e detalhes adicionais sobre o cliente.</CardDescription>
+                <CardDescription>Observações e detalhes adicionais.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Label htmlFor="observacoes">Observações</Label>
@@ -260,16 +380,30 @@ export default function NovoClientePage() {
         </Tabs>
 
         <CardFooter className="flex justify-end gap-4 mt-8 p-0">
-          <Button type="button" variant="outline" onClick={() => router.push('/admin/dashboard')} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={() => router.push('/admin/clientes')} disabled={isLoading}>
             <XCircle className="mr-2 h-5 w-5" /> Cancelar
           </Button>
           <Button type="submit" disabled={isLoading}>
-            <Save className="mr-2 h-5 w-5" /> {isLoading ? 'Cadastrando...' : 'Cadastrar Cliente'}
+            <Save className="mr-2 h-5 w-5" /> {isLoading ? 'Cadastrando...' : 'Cadastrar Pessoa Física'}
           </Button>
         </CardFooter>
       </form>
+      {/* 
+        Supabase Integration Notes:
+        - For selects 'Tipo de Relação', 'Organização Vinculada', 'Estado', 'Município': Fetch options from respective Supabase tables.
+        - 'Município' options should be filtered based on the selected 'Estado'.
+        - On submit:
+          - Perform client-side validation.
+          - If address fields are filled, create/update a record in 'public.Enderecos' and get its ID.
+          - Create a record in 'public.PessoasFisicas' with all relevant data, including:
+            - id_endereco (from the previous step)
+            - tipo_relacao
+            - id_organizacao (if 'organizacaoVinculadaId' is set)
+            - data_cadastro (likely auto-generated by Supabase - remove from form if so)
+      */}
     </div>
   );
 }
+    
 
     
