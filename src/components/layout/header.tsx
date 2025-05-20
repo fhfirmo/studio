@@ -3,9 +3,9 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation'; // Import usePathname
+import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
-import { InbmBrandLogo } from '@/components/icons/inbm-brand-logo'; // Changed to InbmBrandLogo
+import { InbmBrandLogo } from '@/components/icons/inbm-brand-logo';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -21,9 +21,10 @@ const navItems: { href: string; label: string }[] = [
 export function Header() {
   const [isMounted, setIsMounted] = useState(false);
   const isMobile = useIsMobile();
-  const pathname = usePathname(); // Get current pathname
+  const pathname = usePathname();
 
-  const showNavItems = pathname !== '/'; // Determine if nav items should be shown
+  // Show nav items only if not on the homepage "/"
+  const showNavItems = pathname !== '/';
 
   useEffect(() => {
     setIsMounted(true);
@@ -33,8 +34,10 @@ export function Header() {
     return (
       <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Home" target="_blank" rel="noopener noreferrer">
-            <InbmBrandLogo className="h-8 w-auto" />
+          <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
+            <div className="bg-primary p-1 rounded-md"> {/* Placeholder for logo with background */}
+              <div className="h-8 md:h-10 w-20 bg-muted animate-pulse rounded"></div> {/* Placeholder for logo itself */}
+            </div>
           </Link>
           {showNavItems && (
             <>
@@ -61,7 +64,9 @@ export function Header() {
     <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
-          <InbmBrandLogo className="h-8 md:h-10 w-auto text-primary" />
+          <div className="bg-primary p-1 rounded-md">
+            <InbmBrandLogo className="h-8 md:h-10 w-auto" />
+          </div>
         </Link>
 
         {isMobile && showNavItems && navItems.length > 0 ? (
@@ -75,7 +80,9 @@ export function Header() {
               <div className="flex flex-col h-full">
                 <div className="p-4 flex justify-between items-center border-b border-sidebar-border">
                    <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
-                     <InbmBrandLogo className="h-8 w-auto text-sidebar-primary" />
+                     <div className="bg-sidebar-primary p-1 rounded-md">
+                       <InbmBrandLogo className="h-8 w-auto" />
+                     </div>
                    </Link>
                   <SheetClose asChild>
                     <Button variant="ghost" size="icon" aria-label="Fechar menu">
