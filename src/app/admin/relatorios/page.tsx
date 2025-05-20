@@ -12,9 +12,10 @@ interface ReportCardProps {
   dataTypeName: string;
   icon: React.ElementType;
   buttonText: string;
+  exportableFields?: { id: string; label: string }[];
 }
 
-function ReportCard({ title, description, dataTypeName, icon: Icon, buttonText }: ReportCardProps) {
+function ReportCard({ title, description, dataTypeName, icon: Icon, buttonText, exportableFields }: ReportCardProps) {
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
       <CardHeader>
@@ -30,11 +31,7 @@ function ReportCard({ title, description, dataTypeName, icon: Icon, buttonText }
         {/* Additional content for the card can go here if needed in the future */}
       </CardContent>
       <CardFooter>
-        {/* The ExportDataDialog component wraps the trigger button.
-            The 'dataTypeName' prop configures the dialog for the specific data type.
-            The actual export logic (calling Supabase API, etc.) is handled within ExportDataDialog.
-        */}
-        <ExportDataDialog dataTypeName={dataTypeName}>
+        <ExportDataDialog dataTypeName={dataTypeName} exportableFields={exportableFields}>
           <Button className="w-full">
             <TrendingUp className="mr-2 h-4 w-4" /> {buttonText}
           </Button>
@@ -44,6 +41,18 @@ function ReportCard({ title, description, dataTypeName, icon: Icon, buttonText }
   );
 }
 
+const clientExportableFields = [
+  { id: "nomeCompleto", label: "Nome Completo" },
+  { id: "email", label: "E-mail" },
+  { id: "cpf", label: "CPF" },
+  { id: "telefone", label: "Telefone" },
+  { id: "dataCadastro", label: "Data de Cadastro" },
+  { id: "enderecoCompleto", label: "Endereço Completo" },
+];
+
+// Define fields for other types if needed, e.g.:
+// const vehicleExportableFields = [ ... ];
+
 export default function RelatoriosPage() {
   const reportCategories = [
     {
@@ -52,6 +61,7 @@ export default function RelatoriosPage() {
       dataTypeName: "Clientes",
       icon: Users,
       buttonText: "Gerar Relatório de Clientes",
+      exportableFields: clientExportableFields,
     },
     {
       title: "Relatórios de Veículos",
@@ -59,6 +69,7 @@ export default function RelatoriosPage() {
       dataTypeName: "Veículos",
       icon: Car,
       buttonText: "Gerar Relatório de Veículos",
+      // exportableFields: vehicleExportableFields, // Uncomment and define if needed
     },
     {
       title: "Relatórios de Seguros",
@@ -97,6 +108,7 @@ export default function RelatoriosPage() {
             dataTypeName={category.dataTypeName}
             icon={category.icon}
             buttonText={category.buttonText}
+            exportableFields={category.exportableFields}
           />
         ))}
       </div>
@@ -105,9 +117,9 @@ export default function RelatoriosPage() {
         The 'ExportDataDialog' component is responsible for handling the format selection
         and initiating the export process. When its "Exportar" button is clicked,
         it will (in a real implementation) make an API call to a Supabase endpoint
-        (e.g., an Edge Function). This endpoint will receive the 'dataTypeName' (e.g., "Clientes")
-        and the selected format, fetch the corresponding data from the database,
-        convert it, and then provide it for download.
+        (e.g., an Edge Function). This endpoint will receive the 'dataTypeName' (e.g., "Clientes"),
+        the selected format, and the list of selected fields, fetch the corresponding data 
+        from the database, convert it, and then provide it for download.
       */}
     </div>
   );
