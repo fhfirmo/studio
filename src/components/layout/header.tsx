@@ -4,12 +4,13 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, X, LogOut } from 'lucide-react';
+import { Menu, X, LogOut, UserCircle } from 'lucide-react'; // Added UserCircle
 import { InbmBrandLogo } from '@/components/icons/inbm-brand-logo';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { supabase } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 // Main navigation items for general admin sections
 const mainAdminNavItems: { href: string; label: string }[] = [
@@ -32,54 +33,97 @@ const configuracoesNavItem: { href: string; label: string } = {
   href: '/admin/configuracoes', label: 'Configurações'
 };
 
+interface UserProfile {
+  id: string;
+  full_name?: string;
+  role?: string;
+  // Add other profile fields as needed
+}
+
 export function Header() {
   const [isMounted, setIsMounted] = useState(false);
   const isMobile = useIsMobile();
   const pathname = usePathname();
-  const router = useRouter(); // For redirection after logout
-  // const [currentUser, setCurrentUser] = useState<User | null>(null); // Placeholder for Supabase user state
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
 
-    // Supabase Auth: onAuthStateChange listener
-    // This listener updates the UI or redirects based on authentication state.
-    // It should ideally be in a higher-level component or context provider for global access.
-    // For this example, we'll put a conceptual listener here.
-    if (supabase) {
-      /*
-      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-        console.log('Auth event:', event, session);
-        if (event === 'SIGNED_IN' && session?.user) {
-          console.log('Usuário logado:', session.user);
-          // setCurrentUser(session.user);
-          // Fetch user profile from your 'profiles' table if needed
-          // Example: if (pathname === '/login' || pathname === '/admin-auth') router.push('/admin/dashboard');
-        } else if (event === 'SIGNED_OUT') {
-          console.log('Usuário deslogado');
-          // setCurrentUser(null);
-          // Redirect to login page if not already on a public page
-          // Example: if (!['/login', '/admin-auth', '/'].includes(pathname)) router.push('/login');
-        }
-        // Handle other events like PASSWORD_RECOVERY, USER_UPDATED, etc.
-      });
-
-      // Call unsubscribe on component unmount
-      return () => {
-        authListener?.subscription.unsubscribe();
-      };
-      */
+    if (!supabase) {
+      console.warn("Supabase client not initialized in Header.");
+      return;
     }
-  }, [pathname, router]);
 
-  // Determine which navigation items to display
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setCurrentUser(session?.user ?? null);
+        if (session?.user) {
+          console.log('Usuário logado:', session.user);
+          // Buscar informações do perfil do usuário na tabela 'profiles'
+          // IMPORTANT: Ensure you have a 'profiles' table with RLS policies set up.
+          // The 'id' column in 'profiles' should be a FK to 'auth.users.id'.
+          const { data: profile, error } = await supabase
+            .from('profiles') // Assuming your table is named 'profiles'
+            .select('id, full_name, role') // Select the columns you need
+            .eq('id', session.user.id)
+            .single();
+
+          if (error) {
+            console.error('Erro ao buscar perfil do usuário:', error.message);
+            setUserProfile(null);
+            // Potentially sign out the user if profile is essential and not found
+            // await supabase.auth.signOut();
+          } else {
+            setUserProfile(profile as UserProfile);
+            console.log('Perfil do usuário carregado:', profile);
+            // Role-based redirection example (customize as needed)
+            // if (profile?.role !== 'admin_principal' && pathname.startsWith('/admin/usuarios')) {
+            //   router.push('/admin/dashboard'); // Redirect non-super-admins from user management
+            // }
+          }
+        } else {
+          console.log('Usuário deslogado ou sessão não encontrada.');
+          setUserProfile(null);
+          // If user is not logged in and tries to access a protected admin route, redirect to login
+          if (pathname.startsWith('/admin/') && pathname !== '/admin-auth' && pathname !== '/login') {
+             console.log('Redirecionando para login (sessão não encontrada em rota admin).');
+             router.push('/login');
+          }
+        }
+      }
+    );
+
+    // Check initial session
+    // (async () => {
+    //   const { data: { session } } = await supabase.auth.getSession();
+    //   setCurrentUser(session?.user ?? null);
+    //   if (session?.user && !userProfile) { // Fetch profile if session exists but profile not yet loaded
+    //      const { data: profile, error } = await supabase
+    //         .from('profiles')
+    //         .select('id, full_name, role')
+    //         .eq('id', session.user.id)
+    //         .single();
+    //      if (error) console.error('Erro ao buscar perfil inicial:', error.message);
+    //      else setUserProfile(profile as UserProfile);
+    //   }
+    // })();
+
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [pathname, router]); // Added router to dependency array
+
   let itemsToDisplay: { href: string; label: string }[] = [];
   const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
   const isHomePage = pathname === '/';
-  const isNonAdminPage = isLoginPage || isHomePage || pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/');
+  const isNonAdminPublicPage = pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/');
 
 
-  if (!isNonAdminPage) {
+  // Determine navigation items based on route and auth status
+  if (currentUser && !isLoginPage && !isHomePage && !isNonAdminPublicPage) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
       itemsToDisplay = [userManagementNavItem, configuracoesNavItem];
     } else if (pathname.startsWith('/admin/')) {
@@ -87,41 +131,27 @@ export function Header() {
     }
   }
   
-  // Add Logout button if user is on an admin page
-  const showLogoutButton = pathname.startsWith('/admin/') && !isLoginPage;
-
+  const showLogoutButton = !!currentUser && pathname.startsWith('/admin/') && !isLoginPage;
 
   const handleLogout = async () => {
     console.log('Attempting logout...');
     if (!supabase) {
       console.error("Supabase client not initialized.");
-      // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
       return;
     }
-    /*
-    // Actual Supabase logout logic:
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Erro ao deslogar:', error.message);
-        // toast({ title: "Erro ao Sair", description: error.message, variant: "destructive" });
-      } else {
-        console.log('Logout bem-sucedido.');
-        // toast({ title: "Logout Efetuado", description: "Você foi desconectado com sucesso." });
-        // The onAuthStateChange listener should handle redirection to the login page.
-        // Or, you can redirect manually here:
-        router.push('/login');
-      }
-    } catch (error: any) {
-      console.error('Logout failed unexpectedly:', error.message);
-      // toast({ title: "Erro ao Sair", description: "Ocorreu um erro inesperado.", variant: "destructive" });
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Erro ao deslogar:', error.message);
+      // toast({ title: "Erro ao Sair", description: error.message, variant: "destructive" });
+    } else {
+      console.log('Logout bem-sucedido.');
+      setUserProfile(null); // Clear user profile state
+      setCurrentUser(null); // Clear current user state
+      // The onAuthStateChange listener should handle redirection.
+      // Or, you can redirect manually here if needed after a short delay to ensure state updates.
+      router.push('/login');
     }
-    */
-    // Simulate logout for now
-    await new Promise(resolve => setTimeout(resolve, 500));
-    router.push('/login');
   };
-
 
   if (!isMounted) {
     return (
@@ -132,24 +162,20 @@ export function Header() {
               <InbmBrandLogo className="h-8 md:h-10 w-auto" />
             </div>
           </Link>
-          {(pathname.startsWith('/admin/') && !isLoginPage) && (
-            <>
-              <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div> {/* Mobile menu skeleton */}
-              <nav className="hidden md:flex space-x-4 items-center"> {/* Desktop nav skeleton */}
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="list-none h-5 w-20 bg-muted rounded animate-pulse"></div>
-                ))}
-                 <div className="h-8 w-20 bg-muted rounded animate-pulse"></div> {/* Logout button skeleton */}
-              </nav>
-            </>
-          )}
+           {/* Skeleton for nav items during SSR/initial mount */}
+          <div className="hidden md:flex space-x-4 items-center">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="list-none h-5 w-20 bg-muted rounded animate-pulse"></div>
+            ))}
+             <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
+          </div>
+          <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
         </div>
       </header>
     );
   }
   
-  const showNavigation = itemsToDisplay.length > 0 || showLogoutButton;
-
+  const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || userProfile;
 
   return (
     <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
@@ -160,7 +186,7 @@ export function Header() {
           </div>
         </Link>
 
-        {isMobile && showNavigation ? (
+        {isMobile && showNavigationArea ? (
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Abrir menu">
@@ -181,6 +207,17 @@ export function Header() {
                     </Button>
                   </SheetClose>
                 </div>
+                {currentUser && userProfile && (
+                  <div className="p-4 border-b border-sidebar-border">
+                    <div className="flex items-center gap-2">
+                      <UserCircle className="h-8 w-8 text-sidebar-primary" />
+                      <div>
+                        <p className="text-sm font-medium">{userProfile.full_name || currentUser.email}</p>
+                        <p className="text-xs text-sidebar-foreground/70">{userProfile.role || 'Usuário'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <nav className="flex-grow p-4">
                   <ul className="space-y-4">
                     {itemsToDisplay.map((item) => (
@@ -213,20 +250,31 @@ export function Header() {
             </SheetContent>
           </Sheet>
         ) : (
-          !isMobile && showNavigation && (
-            <nav className="flex items-center space-x-6">
-              <ul className="flex space-x-6 items-center">
-                {itemsToDisplay.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+          !isMobile && showNavigationArea && (
+            <nav className="flex items-center space-x-4">
+              {currentUser && userProfile && (
+                <div className="flex items-center gap-2 text-sm">
+                  <UserCircle className="h-5 w-5 text-primary" />
+                  <div>
+                    <span className="font-medium">{userProfile.full_name || currentUser.email}</span>
+                    {userProfile.role && <span className="text-muted-foreground text-xs ml-1">({userProfile.role})</span>}
+                  </div>
+                </div>
+              )}
+              {itemsToDisplay.length > 0 && (
+                <ul className="flex space-x-4 items-center">
+                  {itemsToDisplay.map((item) => (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {showLogoutButton && (
                 <Button onClick={handleLogout} variant="outline" size="sm">
                    <LogOut className="mr-2 h-4 w-4" /> Logout
