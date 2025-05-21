@@ -78,6 +78,8 @@ export default function NovoUsuarioPage() {
       return;
     }
 
+    let navigatedAway = false;
+
     try {
       console.log("NovoUsuarioPage: Attempting supabase.auth.signUp for email:", formData.email);
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -85,7 +87,6 @@ export default function NovoUsuarioPage() {
         password: formData.senha,
       });
       console.log("NovoUsuarioPage: supabase.auth.signUp completed. Error:", authError, "AuthData:", authData);
-
 
       if (authError) {
         console.error('NovoUsuarioPage: Erro no cadastro (Supabase Auth):', authError.message);
@@ -99,10 +100,9 @@ export default function NovoUsuarioPage() {
         console.log('NovoUsuarioPage: Usuário ID:', authData.user.id, ". Tentando salvar perfil na tabela 'profiles'.");
         const profilePayload = {
             id: authData.user.id, 
-            // email: formData.email, // Removed as it's in auth.users and causing schema error
             full_name: formData.nomeCompleto, 
             cpf: formData.cpf,
-            instituicao: formData.instituicao || null, 
+            institution: formData.instituicao || null, // Changed 'instituicao' to 'institution'
             role: formData.perfil,                 
           };
         console.log("NovoUsuarioPage: Payload para tabela 'profiles':", profilePayload);
@@ -120,14 +120,17 @@ export default function NovoUsuarioPage() {
         }
         console.log('NovoUsuarioPage: Perfil do usuário salvo com sucesso na tabela "profiles". Redirecionando...');
         toast({ title: "Usuário Cadastrado!", description: "Novo usuário adicionado com sucesso." });
+        navigatedAway = true;
         router.push('/admin/usuarios');
       } else if (authData.session === null && !authData.user) {
         console.warn('NovoUsuarioPage: Cadastro no Auth requer confirmação por e-mail. O usuário foi criado, mas a sessão não foi iniciada. Redirecionando para login.');
         toast({ title: "Cadastro Enviado", description: "Verifique seu e-mail para confirmar o cadastro e ativar sua conta.", duration: 5000 });
+        navigatedAway = true;
         router.push('/login'); 
       } else {
         console.warn('NovoUsuarioPage: auth.signUp sucesso, mas authData.user está nulo e sessão não é nula. Resposta:', authData, "Redirecionando...");
         toast({ title: "Cadastro Concluído", description: "Verifique o status do usuário." });
+        navigatedAway = true;
         router.push('/admin/usuarios');
       }
 
@@ -135,13 +138,10 @@ export default function NovoUsuarioPage() {
       console.error('NovoUsuarioPage: Falha inesperada ao cadastrar usuário:', error.message, error);
       toast({ title: "Erro ao Cadastrar Usuário", description: "Ocorreu um erro inesperado. Verifique o console.", variant: "destructive" });
     } finally {
-      console.log("NovoUsuarioPage: handleSubmit finally block. Current path:", router.asPath);
-      // Only set isLoading to false if we are still on this page (i.e., an error occurred before navigation).
-      if (router.asPath === '/admin/usuarios/novo') {
+      console.log("NovoUsuarioPage: handleSubmit finally block. Navigated away:", navigatedAway);
+      if (!navigatedAway) {
          console.log("NovoUsuarioPage: Still on /admin/usuarios/novo, setting isLoading to false.");
          setIsLoading(false);
-      } else {
-         console.log("NovoUsuarioPage: Navigated away from /admin/usuarios/novo, not changing isLoading in finally block.");
       }
     }
   };
