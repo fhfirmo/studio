@@ -14,9 +14,10 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
 const userProfiles = [
-  { value: "administrador", label: "Administrador" },
-  { value: "operador", label: "Operador" },
-  { value: "cliente", label: "Cliente" },
+  { value: "admin", label: "Administrador" },      // Changed value
+  { value: "operator", label: "Operador" },    // Changed value
+  { value: "client", label: "Cliente" },        // Changed value
+  // { value: "supervisor", label: "Supervisor" }, // Option if needed
 ];
 
 export default function NovoUsuarioPage() {
@@ -25,12 +26,13 @@ export default function NovoUsuarioPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  let navigatedAway = false;
 
   const [formData, setFormData] = useState({
     nomeCompleto: '',
     email: '',
     cpf: '',
-    instituicao: '',
+    institution: '', // Changed from instituicao to institution
     senha: '',
     confirmarSenha: '',
     perfil: '',
@@ -48,6 +50,7 @@ export default function NovoUsuarioPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
+    navigatedAway = false; 
     console.log("NovoUsuarioPage: handleSubmit initiated. isLoading: true. FormData:", formData);
 
     if (!formData.nomeCompleto || !formData.email || !formData.senha || !formData.confirmarSenha || !formData.perfil || !formData.cpf) {
@@ -78,8 +81,6 @@ export default function NovoUsuarioPage() {
       return;
     }
 
-    let navigatedAway = false;
-
     try {
       console.log("NovoUsuarioPage: Attempting supabase.auth.signUp for email:", formData.email);
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -102,7 +103,7 @@ export default function NovoUsuarioPage() {
             id: authData.user.id, 
             full_name: formData.nomeCompleto, 
             cpf: formData.cpf,
-            institution: formData.instituicao || null, // Changed 'instituicao' to 'institution'
+            institution: formData.institution || null,
             role: formData.perfil,                 
           };
         console.log("NovoUsuarioPage: Payload para tabela 'profiles':", profilePayload);
@@ -213,11 +214,11 @@ export default function NovoUsuarioPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="instituicao">Instituição</Label>
+                <Label htmlFor="institution">Instituição</Label>
                 <Input
-                  id="instituicao"
-                  name="instituicao"
-                  value={formData.instituicao}
+                  id="institution"
+                  name="institution"
+                  value={formData.institution}
                   onChange={handleChange}
                   placeholder="Nome da instituição (opcional)"
                 />
@@ -302,3 +303,5 @@ export default function NovoUsuarioPage() {
     </div>
   );
 }
+
+    

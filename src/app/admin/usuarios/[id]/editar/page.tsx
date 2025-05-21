@@ -11,28 +11,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserCog, Save, XCircle, Eye, EyeOff, AlertTriangle } from 'lucide-react';
-// import { useToast } from "@/hooks/use-toast"; // Uncomment if toasts are needed
+// import { useToast } from "@/hooks/use-toast"; 
 
 const userProfiles = [
-  { value: "administrador", label: "Administrador" },
-  { value: "operador", label: "Operador" },
-  { value: "cliente", label: "Cliente" },
+  { value: "admin", label: "Administrador" },      // Changed value
+  { value: "operator", label: "Operador" },    // Changed value
+  { value: "client", label: "Cliente" },        // Changed value
+  { value: "supervisor", label: "Supervisor" }, // Added supervisor option
 ];
 
 // Placeholder function to fetch user data
 async function getUserById(userId: string) {
   console.log(`Fetching user data for ID: ${userId} (placeholder)`);
-  // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 500));
-  // In a real app, fetch from Supabase
   if (userId === "usr_001") {
     return {
       id: "usr_001",
       nomeCompleto: "Administrador Principal",
       email: "admin@inbm.com.br",
       cpf: "111.111.111-11",
-      instituicao: "INBM Matriz",
-      perfil: "administrador",
+      institution: "INBM Matriz", // Changed from instituicao
+      perfil: "admin", // Changed from administrador
     };
   }
    if (userId === "usr_002") {
@@ -41,11 +40,10 @@ async function getUserById(userId: string) {
       nomeCompleto: "Consultor Firmo",
       email: "consultor.firmo@inbm.com.br",
       cpf: "222.222.222-22",
-      instituicao: "INBM Filial Sul",
-      perfil: "operador",
+      institution: "INBM Filial Sul", // Changed from instituicao
+      perfil: "operator", // Changed from operador
     };
   }
-  // Return a default or throw error if user not found
   return null;
 }
 
@@ -54,7 +52,7 @@ export default function EditarUsuarioPage() {
   const router = useRouter();
   const params = useParams();
   const userId = params.id as string;
-  // const { toast } = useToast(); // Uncomment for feedback messages
+  // const { toast } = useToast(); 
 
   const [isLoading, setIsLoading] = useState(false);
   const [userFound, setUserFound] = useState<boolean | null>(null);
@@ -64,9 +62,9 @@ export default function EditarUsuarioPage() {
 
   const [formData, setFormData] = useState({
     nomeCompleto: '',
-    email: '', // Email is often not directly editable for auth reasons
+    email: '', 
     cpf: '',
-    instituicao: '',
+    institution: '', // Changed from instituicao
     perfil: '',
     novaSenha: '',
     confirmarNovaSenha: '',
@@ -82,7 +80,7 @@ export default function EditarUsuarioPage() {
               nomeCompleto: userData.nomeCompleto,
               email: userData.email,
               cpf: userData.cpf,
-              instituicao: userData.instituicao || '',
+              institution: userData.institution || '', // Changed from instituicao
               perfil: userData.perfil,
               novaSenha: '',
               confirmarNovaSenha: '',
@@ -122,8 +120,7 @@ export default function EditarUsuarioPage() {
     event.preventDefault();
     setIsLoading(true);
 
-    // Client-side validation placeholder
-    if (!formData.nomeCompleto) { // Email typically not validated here if not editable
+    if (!formData.nomeCompleto) { 
       console.error("Validação: Nome completo é obrigatório.");
       // toast({ title: "Campo Obrigatório", description: "Nome completo é obrigatório.", variant: "destructive" });
       setIsLoading(false);
@@ -152,50 +149,24 @@ export default function EditarUsuarioPage() {
     }
 
     const updatePayload: any = {
-      nome_completo: formData.nomeCompleto,
+      full_name: formData.nomeCompleto, // Supabase expects full_name
       cpf: formData.cpf,
-      instituicao: formData.instituicao,
-      perfil: formData.perfil,
-      // email: formData.email, // Usually email is not updated directly, or handled by Supabase Auth update methods
+      institution: formData.institution, // Changed from instituicao
+      role: formData.perfil,
     };
 
-    console.log('Form data to be submitted for update:', updatePayload);
+    console.log('Form data to be submitted for update (profiles table):', updatePayload);
     if (changePassword) {
       console.log('New password to be set (separately via Supabase Auth):', formData.novaSenha);
     }
 
-    // Placeholder for Supabase API call
-    // 1. Update user profile in 'profiles' table (or similar)
-    // try {
-    //   const { data: profileData, error: profileError } = await supabase
-    //     .from('profiles') // Replace 'profiles'
-    //     .update(updatePayload)
-    //     .eq('user_id', userId) // Assuming 'user_id' or 'id' is the primary key linking to auth user
-    //     .select();
-    //   if (profileError) throw profileError;
-    //   console.log('User profile updated:', profileData);
+    // Supabase Integration Placeholder:
+    // 1. Update user profile in 'profiles' table:
+    //    await supabase.from('profiles').update(updatePayload).eq('id', userId);
+    // 2. If changePassword is true and formData.novaSenha is set, update password via Supabase Auth:
+    //    (This often requires an Edge Function for admin-initiated password changes)
+    //    await supabase.auth.updateUser({ password: formData.novaSenha }); // This works for the currently logged-in user
 
-    //   // 2. If changePassword is true, update password via Supabase Auth
-    //   if (changePassword && formData.novaSenha) {
-    //     // Note: Supabase.auth.updateUser() is typically used for logged-in user.
-    //     // For admin updating other user's password, you might need a server-side function (Edge Function)
-    //     // that uses the Supabase admin client. For this example, we'll assume a conceptual client-side possibility.
-    //     // const { error: passwordError } = await supabase.auth.updateUser({ password: formData.novaSenha });
-    //     // if (passwordError) throw passwordError;
-    //     // console.log('User password updated.');
-    //     // toast({ title: "Senha Alterada!", description: "A senha do usuário foi atualizada." });
-    //   }
-
-    //   // toast({ title: "Usuário Atualizado!", description: "Os dados do usuário foram salvos com sucesso." });
-    //   // router.push('/admin/usuarios');
-    // } catch (error: any) {
-    //   console.error('Failed to update user:', error.message);
-    //   // toast({ title: "Erro ao Atualizar", description: error.message, variant: "destructive" });
-    // } finally {
-    //   setIsLoading(false);
-    // }
-
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated user update finished');
     // toast({ title: "Usuário Atualizado! (Simulado)", description: "Os dados do usuário foram salvos com sucesso." });
@@ -269,7 +240,7 @@ export default function EditarUsuarioPage() {
                   name="email"
                   type="email"
                   value={formData.email}
-                  readOnly // Typically email is not directly editable as it's an identifier
+                  readOnly 
                   className="bg-muted/50 cursor-not-allowed"
                   title="O e-mail é usado como identificador e não pode ser alterado diretamente."
                 />
@@ -288,11 +259,11 @@ export default function EditarUsuarioPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="instituicao">Instituição</Label>
+                <Label htmlFor="institution">Instituição</Label>
                 <Input
-                  id="instituicao"
-                  name="instituicao"
-                  value={formData.instituicao}
+                  id="institution"
+                  name="institution" // Changed from instituicao
+                  value={formData.institution}
                   onChange={handleChange}
                   placeholder="Nome da instituição (opcional)"
                 />
@@ -318,7 +289,7 @@ export default function EditarUsuarioPage() {
                     <Checkbox
                         id="changePassword"
                         checked={changePassword}
-                        onCheckedChange={handleCheckboxChange}
+                        onCheckedChange={(checkedState) => handleCheckboxChange(checkedState as boolean)}
                     />
                     <Label htmlFor="changePassword" className="font-medium cursor-pointer">
                         Alterar Senha?
