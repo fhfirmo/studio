@@ -27,18 +27,20 @@ export default function AdminAuthPage() {
 
     // Placeholder for Supabase Auth logic for admin access.
     // This might involve checking for a specific admin role, user profile, or using a separate admin user table.
+    // For admin-specific auth, ensure you check for appropriate roles/claims after successful signInWithPassword.
+    // Supabase comments:
     // try {
     //   const { data, error } = await supabase.auth.signInWithPassword({
     //     email: email,
     //     password: password,
     //   });
     //   if (error) throw error;
-    //   // Potentially, check for an admin role here:
-    //   // const { data: userProfile, error: profileError } = await supabase.from('profiles').select('role').eq('user_id', data.user.id).single();
-    //   // if (profileError || userProfile?.role !== 'admin') throw new Error("Access denied. Not an admin user.");
+    //   // Add role/profile check here for admin access if using Supabase
+    //   // Example: const { data: userProfile } = await supabase.from('profiles').select('role').eq('user_id', data.user.id).single();
+    //   // if (userProfile?.role !== 'admin_principal') throw new Error("Acesso negado. Requer privilégios de administrador.");
     //   console.log('Admin login successful:', data);
-    //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel de administração..."});
-    //   router.push('/admin/dashboard'); 
+    //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando para a área administrativa..."});
+    //   router.push('/admin/usuarios'); 
     // } catch (error: any) {
     //   console.error('Admin login failed:', error.message);
     //   // toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
@@ -50,7 +52,7 @@ export default function AdminAuthPage() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated admin login finished');
     setIsLoading(false);
-    router.push('/admin/dashboard'); // Redirect to dashboard page
+    router.push('/admin/usuarios'); // Redirect to user management page
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
