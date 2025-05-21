@@ -31,9 +31,8 @@ const adminAreaNavItems: { href: string; label: string }[] = [
 
 interface UserProfile {
   id: string;
-  full_name?: string;
-  role?: string;
-  // Add other profile fields as needed
+  full_name?: string | null; // Allow null
+  role?: string | null;      // Allow null
 }
 
 export function Header() {
@@ -43,19 +42,20 @@ export function Header() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true); // To track initial auth state check
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
 
     if (!supabase) {
-      console.warn("Supabase client not initialized in Header.");
+      console.warn("Header: Supabase client not initialized.");
       setAuthLoading(false);
       return;
     }
+    console.log("Header: Supabase client initialized, setting up auth listener.");
 
-    // Function to fetch profile
     const fetchUserProfile = async (user: User) => {
+      console.log("Header: Attempting to fetch profile for user ID:", user.id);
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('id, full_name, role')
@@ -63,22 +63,34 @@ export function Header() {
         .single();
 
       if (error) {
-        console.error('Erro ao buscar perfil do usuário:', error.message);
-        setUserProfile(null);
-        // If profile is critical, you might sign out the user here
-        // await supabase.auth.signOut();
-      } else {
+        console.error('Header: Erro ao buscar perfil do usuário:', error.message);
+        setUserProfile(null); // Explicitly set to null on error
+      } else if (profile) {
         setUserProfile(profile as UserProfile);
-        console.log('Perfil do usuário carregado:', profile);
+        console.log('Header: Perfil do usuário carregado:', profile);
+      } else {
+        console.warn('Header: Perfil não encontrado para o usuário ID:', user.id);
+        setUserProfile(null); // User exists in auth, but no profile found
       }
     };
     
-    // Initial session check
     const checkInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setCurrentUser(session?.user ?? null);
+      console.log("Header: Verificando sessão inicial...");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("Header: Erro ao obter sessão inicial:", sessionError.message);
+        setAuthLoading(false);
+        return;
+      }
+
       if (session?.user) {
+        console.log("Header: Sessão inicial encontrada para:", session.user.email);
+        setCurrentUser(session.user);
         await fetchUserProfile(session.user);
+      } else {
+        console.log("Header: Nenhuma sessão inicial encontrada.");
+        setCurrentUser(null);
+        setUserProfile(null);
       }
       setAuthLoading(false);
     };
@@ -87,13 +99,14 @@ export function Header() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setAuthLoading(true); // Set loading true when auth state might change
+        console.log("Header: Evento onAuthStateChange recebido:", event);
+        setAuthLoading(true);
         setCurrentUser(session?.user ?? null);
         if (session?.user) {
-          console.log('Auth event:', event, 'Usuário:', session.user.email);
+          console.log('Header: Usuário atualizado via listener:', session.user.email);
           await fetchUserProfile(session.user);
         } else {
-          console.log('Auth event:', event, 'Sessão não encontrada ou usuário deslogado.');
+          console.log('Header: Usuário deslogado via listener ou sessão expirada.');
           setUserProfile(null);
         }
         setAuthLoading(false);
@@ -101,29 +114,30 @@ export function Header() {
     );
 
     return () => {
+      console.log("Header: Removendo listener de autenticação.");
       authListener?.subscription.unsubscribe();
     };
-  }, []); // Run only once on mount for initial check and listener setup
+  }, []); // Router removed from dependencies, it's stable
 
-  // Effect for handling redirection based on auth state
   useEffect(() => {
     if (authLoading) {
-      return; // Don't do anything while initial auth status is being determined
+      console.log("Header (Redirect Effect): Auth loading, aguardando...");
+      return; 
     }
+    console.log("Header (Redirect Effect): Auth carregado. CurrentUser:", currentUser ? currentUser.email : "null", "Pathname:", pathname);
 
     const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
     const isAdminRoute = pathname.startsWith('/admin/');
 
     if (!currentUser && isAdminRoute && !isLoginPage) {
-      console.log('Redirecionando para login: Usuário não autenticado em rota administrativa.');
+      console.log('Header (Redirect Effect): Redirecionando para login - Usuário não autenticado em rota administrativa.');
       router.push('/login');
     }
     // Optional: Redirect if logged in and on a login page
     // else if (currentUser && isLoginPage) {
-    //   console.log('Redirecionando para dashboard: Usuário autenticado em página de login.');
-    //   router.push('/admin/dashboard');
+    //   console.log('Header (Redirect Effect): Redirecionando para dashboard - Usuário autenticado em página de login.');
+    //   router.push('/admin/dashboard'); // or /admin/usuarios if that's the new default
     // }
-
   }, [authLoading, currentUser, pathname, router]);
 
 
@@ -131,7 +145,6 @@ export function Header() {
   const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
   const isHomePage = pathname === '/';
   const isNonAdminPublicPage = pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/');
-
 
   if (currentUser && !isLoginPage && !isHomePage && !isNonAdminPublicPage) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
@@ -145,22 +158,22 @@ export function Header() {
   const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || userProfile;
 
   const handleLogout = async () => {
-    console.log('Attempting logout...');
+    console.log('Header: Tentando deslogar...');
     if (!supabase) {
-      console.error("Supabase client not initialized for logout.");
+      console.error("Header: Cliente Supabase não inicializado para logout.");
       return;
     }
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error('Erro ao deslogar:', error.message);
+      console.error('Header: Erro ao deslogar:', error.message);
     } else {
-      console.log('Logout bem-sucedido.');
-      // States will be cleared by onAuthStateChange
-      router.push('/login'); // Explicit redirect after sign out
+      console.log('Header: Logout bem-sucedido. Redirecionando para /login.');
+      // States (currentUser, userProfile) will be cleared by onAuthStateChange
+      router.push('/login'); 
     }
   };
 
-  if (!isMounted || authLoading) { // Show skeleton while mounting or initial auth check is loading
+  if (!isMounted) { // Show skeleton only while mounting, not during authLoading
     return (
       <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -190,7 +203,11 @@ export function Header() {
           </div>
         </Link>
 
-        {isMobile && showNavigationArea ? (
+        {authLoading && !isMobile && ( // Show a simple loading indicator for desktop during auth checks
+            <div className="hidden md:flex text-sm text-muted-foreground">Verificando autenticação...</div>
+        )}
+
+        {!authLoading && isMobile && showNavigationArea ? (
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Abrir menu">
@@ -254,7 +271,7 @@ export function Header() {
             </SheetContent>
           </Sheet>
         ) : (
-          !isMobile && showNavigationArea && (
+          !authLoading && !isMobile && showNavigationArea && (
             <nav className="flex items-center space-x-4">
               {currentUser && (
                 <div className="flex items-center gap-2 text-sm">
@@ -286,6 +303,10 @@ export function Header() {
               )}
             </nav>
           )
+        )}
+        {/* Fallback for when no navigation is shown (e.g., login pages on desktop when not authLoading) */}
+        {!authLoading && !isMobile && !showNavigationArea && (
+          <div></div> // Empty div to maintain layout if needed
         )}
       </div>
     </header>
