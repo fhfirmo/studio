@@ -23,19 +23,16 @@ export default function AdminAuthPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setIsLoading(true);
+    setIsLoading(true); // Set loading true at the start
     console.log('AdminAuthPage: Admin login attempt with:', { email });
 
     if (!supabase) {
       console.error("AdminAuthPage: Supabase client not initialized. Check environment variables.");
       // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
-      setIsLoading(false);
+      setIsLoading(false); // Set loading false on this specific error
       return;
     }
 
-    // Actual Supabase admin login logic:
-    // This function attempts to sign in. Redirection and role verification
-    // should be handled by the onAuthStateChange listener in a global component (e.g., Header).
     console.log('AdminAuthPage: Attempting supabase.auth.signInWithPassword...');
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
@@ -45,25 +42,14 @@ export default function AdminAuthPage() {
     if (error) {
       console.error('AdminAuthPage: Erro no login administrativo:', error.message);
       // toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
-      setIsLoading(false); // Stop loading on error
+      setIsLoading(false); // Only set loading false if there's an auth error
       return;
     }
     
-    if (data.user) {
-      console.log('AdminAuthPage: Usuário autenticado via Supabase:', data.user.email);
-      // toast({ title: "Login bem-sucedido!", description: "Aguarde o redirecionamento..."});
-      // NO LONGER REDIRECTING FROM HERE. Rely on onAuthStateChange in Header.
-      // router.push('/admin/usuarios'); 
-    } else if (data.session) {
-        console.log('AdminAuthPage: Sessão obtida, usuário:', data.session.user.email);
-        // Also rely on onAuthStateChange
-    } else {
-      console.warn('AdminAuthPage: signInWithPassword sucesso, mas sem data.user ou data.session. Resposta:', data);
-      // toast({ title: "Login Concluído", description: "Verificando sessão..."});
-    }
-    // We keep isLoading true here intentionally if login seems successful,
-    // to allow the onAuthStateChange listener in Header to take over.
-    // If there was an error, isLoading is set to false above.
+    // If successful, DO NOT set isLoading to false here.
+    // Let the Header's onAuthStateChange and redirection logic handle unmounting this page.
+    console.log('AdminAuthPage: signInWithPassword Succeeded. User:', data.user?.email, 'Session:', !!data.session);
+    // No router.push here.
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
