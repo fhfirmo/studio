@@ -3,72 +3,67 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { InbmAdminLogo } from '@/components/icons/inbm-admin-logo'; // Using the admin panel specific logo
+import { InbmAdminLogo } from '@/components/icons/inbm-admin-logo';
 import { Eye, EyeOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase'; // Import Supabase client
-// import { useToast } from "@/hooks/use-toast"; // Uncomment if you want to use toasts for feedback
+import { supabase } from '@/lib/supabase';
+// import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter(); // Initialize router
-  // const { toast } = useToast(); // Uncomment if you want to use toasts for feedback
+  const router = useRouter();
+  // const { toast } = useToast();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
-    console.log('Login attempt with:', { email, password });
+    console.log('LoginPage: Login attempt with:', { email });
 
-    // Supabase Auth: signInWithPassword
-    // Ensure your .env.local file has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
     if (!supabase) {
-      console.error("Supabase client not initialized. Check environment variables.");
+      console.error("LoginPage: Supabase client not initialized. Check environment variables.");
       // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
-    /*
-    // Actual Supabase login logic:
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
+    console.log('LoginPage: Attempting supabase.auth.signInWithPassword...');
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
 
-      if (error) {
-        console.error('Erro no login:', error.message);
-        // toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('Usuário logado:', data.user);
-      // toast({ title: "Login bem-sucedido!", description: "Redirecionando..."});
-      // On successful login, Supabase automatically manages the session.
-      // The onAuthStateChange listener (if set up globally) will handle user state.
-      // You might redirect based on user role or to a protected page.
-      router.push('/admin/dashboard'); 
-    } catch (error: any) {
-      console.error('Login failed unexpectedly:', error.message);
-      // toast({ title: "Erro no Login", description: "Ocorreu um erro inesperado.", variant: "destructive" });
-    } finally {
+    if (error) {
+      console.error('LoginPage: Erro no login:', error.message);
+      // toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
       setIsLoading(false);
+      return;
     }
-    */
 
-    // Simulate API call for now
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated login finished');
-    setIsLoading(false);
-    router.push('/admin/dashboard'); // Redirect to dashboard
+    if (data.user) {
+        console.log('LoginPage: Usuário autenticado via Supabase:', data.user.email);
+        // toast({ title: "Login bem-sucedido!", description: "Aguarde o redirecionamento..."});
+        // NO LONGER REDIRECTING FROM HERE. Rely on onAuthStateChange in Header.
+        // router.push('/admin/dashboard'); 
+    } else if (data.session) {
+        console.log('LoginPage: Sessão obtida, usuário:', data.session.user.email);
+        // Also rely on onAuthStateChange
+    } else {
+        console.warn('LoginPage: signInWithPassword sucesso, mas sem data.user ou data.session. Resposta:', data);
+        // toast({ title: "Login Concluído", description: "Verificando sessão..."});
+    }
+    
+    // We keep isLoading true here intentionally if login seems successful,
+    // to allow the onAuthStateChange listener in Header to take over.
+    // If there was an error, isLoading is set to false above.
+    // If you want to reset isLoading after a short delay even on success here (e.g., if Header doesn't redirect quickly):
+    // setTimeout(() => setIsLoading(false), 2000); // Example delay
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
