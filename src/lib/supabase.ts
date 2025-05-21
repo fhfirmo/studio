@@ -2,29 +2,66 @@
 // src/lib/supabase.ts
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// It's crucial to use environment variables for your Supabase URL and Anon Key.
-// Do NOT hardcode them in your application.
-// For Next.js, prefix them with NEXT_PUBLIC_ if they need to be accessible on the client-side.
-// Create a .env.local file in your project root and add:
-// NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-// NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_public_key
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 let supabaseInstance: SupabaseClient | null = null;
 
 if (supabaseUrl && supabaseAnonKey) {
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  try {
+    // Check if the URL is a valid string before attempting to create the client
+    if (typeof supabaseUrl !== 'string' || supabaseUrl.trim() === '' || !supabaseUrl.startsWith('http')) {
+      console.error('Invalid Supabase URL:', supabaseUrl);
+      console.warn('Supabase client will not be initialized due to invalid URL.');
+    } else {
+      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    }
+  } catch (e) {
+    console.error("Error creating Supabase client instance:", e);
+    console.error("Supabase URL used during error:", supabaseUrl); // Log the URL to help debug
+    supabaseInstance = null; // Ensure it's null if creation fails
+  }
 } else {
-  // In a real app, you might want to throw an error or handle this more gracefully.
-  // For this prototyping phase, a console warning is sufficient.
   console.warn(
-    'Supabase URL or Anon Key is not defined. Supabase client will not be initialized. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your .env.local file.'
+    'Supabase URL or Anon Key is not defined. Supabase client will not be initialized. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your .env.local file and the server is restarted.'
   );
+  if (!supabaseUrl) {
+    console.warn("NEXT_PUBLIC_SUPABASE_URL is missing or empty. Value received:", supabaseUrl);
+  } else {
+    console.warn("NEXT_PUBLIC_SUPABASE_URL value:", supabaseUrl);
+  }
+  if (!supabaseAnonKey) {
+    console.warn("NEXT_PUBLIC_SUPABASE_ANON_KEY is missing or empty. Value received:", supabaseAnonKey);
+  } else {
+    // Be cautious logging the anon key, even parts of it, in shared environments.
+    // For local debugging, this might be acceptable:
+    // console.warn("NEXT_PUBLIC_SUPABASE_ANON_KEY is present. Length:", supabaseAnonKey.length);
+  }
 }
 
 export const supabase = supabaseInstance;
+
+// Comment on Row Level Security (RLS):
+// For secure data access after user authentication, Row Level Security (RLS)
+// must be enabled and configured for your Supabase tables.
+//
+// When a user is logged in, supabase.auth.getSession() or supabase.auth.getUser()
+// will provide access to the user's session, including:
+// - session.user.id (the user's unique ID)
+// - session.user.email
+// - session.user.role (if roles are assigned)
+//
+// These details, particularly user.id and user.role, can be used in your RLS policies
+// to control what data a specific user can read, insert, update, or delete.
+// For example, a policy might allow a user to only access records where a 'user_id'
+// column matches their session.user.id.
+//
+// Example RLS Policy (conceptual):
+// CREATE POLICY "Users can only access their own profiles."
+// ON profiles FOR SELECT
+// USING (auth.uid() = user_id);
+//
+// Ensure you thoroughly understand RLS and apply it to all sensitive tables.
 
 // Placeholder functions for data interaction (can be removed or expanded later)
 
@@ -53,27 +90,3 @@ export async function insertData(tableName: string, row: any): Promise<{ data: a
   const { data, error } = await supabase.from(tableName).insert([row]).select();
   return { data, error };
 }
-
-// ... (other placeholder functions like updateData, deleteData can be similarly updated or removed)
-
-// Comment on Row Level Security (RLS):
-// For secure data access after user authentication, Row Level Security (RLS)
-// must be enabled and configured for your Supabase tables.
-//
-// When a user is logged in, supabase.auth.getSession() or supabase.auth.getUser()
-// will provide access to the user's session, including:
-// - session.user.id (the user's unique ID)
-// - session.user.email
-// - session.user.role (if roles are assigned)
-//
-// These details, particularly user.id and user.role, can be used in your RLS policies
-// to control what data a specific user can read, insert, update, or delete.
-// For example, a policy might allow a user to only access records where a 'user_id'
-// column matches their session.user.id.
-//
-// Example RLS Policy (conceptual):
-// CREATE POLICY "Users can only access their own profiles."
-// ON profiles FOR SELECT
-// USING (auth.uid() = user_id);
-//
-// Ensure you thoroughly understand RLS and apply it to all sensitive tables.
