@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { InbmAdminLogo } from '@/components/icons/inbm-admin-logo';
 import { Eye, EyeOff } from 'lucide-react';
+import { supabase } from '@/lib/supabase'; // Import Supabase client
 // import { useToast } from "@/hooks/use-toast"; // Uncomment if toasts are needed
 
 export default function AdminAuthPage() {
@@ -25,28 +26,57 @@ export default function AdminAuthPage() {
     setIsLoading(true);
     console.log('Admin login attempt with:', { email, password });
 
-    // Placeholder for Supabase Auth logic for admin access.
-    // This might involve checking for a specific admin role, user profile, or using a separate admin user table.
-    // For admin-specific auth, ensure you check for appropriate roles/claims after successful signInWithPassword.
-    // Supabase comments:
-    // try {
-    //   const { data, error } = await supabase.auth.signInWithPassword({
-    //     email: email,
-    //     password: password,
-    //   });
-    //   if (error) throw error;
-    //   // Add role/profile check here for admin access if using Supabase
-    //   // Example: const { data: userProfile } = await supabase.from('profiles').select('role').eq('user_id', data.user.id).single();
-    //   // if (userProfile?.role !== 'admin_principal') throw new Error("Acesso negado. Requer privilégios de administrador.");
-    //   console.log('Admin login successful:', data);
-    //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando para a área administrativa..."});
-    //   router.push('/admin/usuarios'); 
-    // } catch (error: any) {
-    //   console.error('Admin login failed:', error.message);
-    //   // toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
-    // } finally {
-    //   setIsLoading(false);
-    // }
+    // Supabase Auth: signInWithPassword for Admin
+    // Ensure your .env.local file has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabase) {
+      console.error("Supabase client not initialized. Check environment variables.");
+      // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
+    /*
+    // Actual Supabase admin login logic:
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        console.error('Erro no login administrativo:', error.message);
+        // toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+
+      // IMPORTANT: After successful sign-in, you MUST verify if the user has admin privileges.
+      // This could be done by checking a custom claim, a role in a 'profiles' table, etc.
+      // Example:
+      // const { data: userProfile, error: profileError } = await supabase
+      //   .from('profiles') // Assuming a 'profiles' table with a 'role' column
+      //   .select('role')
+      //   .eq('user_id', data.user.id)
+      //   .single();
+      //
+      // if (profileError || !userProfile || userProfile.role !== 'admin_principal') { // Or your admin role name
+      //   await supabase.auth.signOut(); // Sign out if not an admin
+      //   console.error('Acesso negado. Requer privilégios de administrador.');
+      //   // toast({ title: "Acesso Negado", description: "Você não possui privilégios de administrador.", variant: "destructive" });
+      //   setIsLoading(false);
+      //   return;
+      // }
+
+      console.log('Login administrativo bem-sucedido:', data.user);
+      // toast({ title: "Login bem-sucedido!", description: "Redirecionando para a área administrativa..."});
+      router.push('/admin/usuarios'); 
+    } catch (error: any) {
+      console.error('Admin login failed unexpectedly:', error.message);
+      // toast({ title: "Erro no Login Administrativo", description: "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+    */
 
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { InbmAdminLogo } from '@/components/icons/inbm-admin-logo'; // Using the admin panel specific logo
 import { Eye, EyeOff } from 'lucide-react';
+import { supabase } from '@/lib/supabase'; // Import Supabase client
 // import { useToast } from "@/hooks/use-toast"; // Uncomment if you want to use toasts for feedback
 
 export default function LoginPage() {
@@ -25,25 +26,45 @@ export default function LoginPage() {
     setIsLoading(true);
     console.log('Login attempt with:', { email, password });
 
-    // Placeholder for Supabase Auth logic
-    // try {
-    //   const { data, error } = await supabase.auth.signInWithPassword({
-    //     email: email,
-    //     password: password,
-    //   });
-    //   if (error) throw error;
-    //   console.log('Login successful:', data);
-    //   // Redirect to admin panel or show success message
-    //   // toast({ title: "Login bem-sucedido!", description: "Redirecionando..."});
-    //   router.push('/admin/dashboard'); 
-    // } catch (error: any) {
-    //   console.error('Login failed:', error.message);
-    //   // toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
-    // } finally {
-    //   setIsLoading(false);
-    // }
+    // Supabase Auth: signInWithPassword
+    // Ensure your .env.local file has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabase) {
+      console.error("Supabase client not initialized. Check environment variables.");
+      // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
 
-    // Simulate API call
+    /*
+    // Actual Supabase login logic:
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        console.error('Erro no login:', error.message);
+        // toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('Usuário logado:', data.user);
+      // toast({ title: "Login bem-sucedido!", description: "Redirecionando..."});
+      // On successful login, Supabase automatically manages the session.
+      // The onAuthStateChange listener (if set up globally) will handle user state.
+      // You might redirect based on user role or to a protected page.
+      router.push('/admin/dashboard'); 
+    } catch (error: any) {
+      console.error('Login failed unexpectedly:', error.message);
+      // toast({ title: "Erro no Login", description: "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+    */
+
+    // Simulate API call for now
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated login finished');
     setIsLoading(false);

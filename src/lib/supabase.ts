@@ -1,12 +1,12 @@
 // src/lib/supabase.ts
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// This is a placeholder for Supabase client integration.
-// To use Supabase, you would typically install the @supabase/supabase-js package
-// and initialize the client with your Supabase URL and anon key.
-
-// Example (actual implementation would require environment variables):
-/*
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// It's crucial to use environment variables for your Supabase URL and Anon Key.
+// Do NOT hardcode them in your application.
+// For Next.js, prefix them with NEXT_PUBLIC_ if they need to be accessible on the client-side.
+// Create a .env.local file in your project root and add:
+// NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+// NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_public_key
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,32 +16,28 @@ let supabaseInstance: SupabaseClient | null = null;
 if (supabaseUrl && supabaseAnonKey) {
   supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
 } else {
+  // In a real app, you might want to throw an error or handle this more gracefully.
+  // For this prototyping phase, a console warning is sufficient.
   console.warn(
     'Supabase URL or Anon Key is not defined. Supabase client will not be initialized. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your .env.local file.'
   );
 }
 
 export const supabase = supabaseInstance;
-*/
+
+// Placeholder functions for data interaction (can be removed or expanded later)
 
 /**
  * Placeholder function to fetch data.
- * In a real application, this would interact with Supabase.
  * @param tableName The name of the table to fetch from.
  * @param columns Optional. Specific columns to select, defaults to '*'.
  * @returns A promise that resolves with the fetched data or an error.
  */
 export async function fetchData(tableName: string, columns: string = '*'): Promise<{ data: any[] | null; error: any | null }> {
-  console.log(`Fetching data from ${tableName} (columns: ${columns})... (placeholder)`);
-  // Example:
-  // if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
-  // const { data, error } = await supabase.from(tableName).select(columns);
-  // return { data, error };
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ data: [{ id: 1, name: `Sample Data 1 from ${tableName}` }, { id: 2, name: `Sample Data 2 from ${tableName}` }], error: null });
-    }, 500);
-  });
+  if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
+  console.log(`Fetching data from ${tableName} (columns: ${columns})... (using Supabase)`);
+  const { data, error } = await supabase.from(tableName).select(columns);
+  return { data, error };
 }
 
 /**
@@ -51,58 +47,32 @@ export async function fetchData(tableName: string, columns: string = '*'): Promi
  * @returns A promise that resolves with the inserted data or an error.
  */
 export async function insertData(tableName: string, row: any): Promise<{ data: any[] | null; error: any | null }> {
-  console.log(`Inserting data into ${tableName}:`, row, `(placeholder)`);
-  // Example:
-  // if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
-  // const { data, error } = await supabase.from(tableName).insert([row]).select();
-  // return { data, error };
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate returning the inserted data, often with an ID assigned by the DB
-      const insertedData = { ...row, id: Math.floor(Math.random() * 1000) };
-      resolve({ data: [insertedData], error: null });
-    }, 500);
-  });
+  if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
+  console.log(`Inserting data into ${tableName}:`, row, `(using Supabase)`);
+  const { data, error } = await supabase.from(tableName).insert([row]).select();
+  return { data, error };
 }
 
-/**
- * Placeholder function to update data.
- * @param tableName The name of the table to update.
- * @param id The ID of the row to update.
- * @param updates The data to update.
- * @returns A promise that resolves with the updated data or an error.
- */
-export async function updateData(tableName: string, id: string | number, updates: any): Promise<{ data: any[] | null; error: any | null }> {
-  console.log(`Updating data in ${tableName} (ID: ${id}):`, updates, `(placeholder)`);
-  // Example:
-  // if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
-  // const { data, error } = await supabase.from(tableName).update(updates).eq('id', id).select();
-  // return { data, error };
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ data: [{ id, ...updates }], error: null });
-    }, 500);
-  });
-}
+// ... (other placeholder functions like updateData, deleteData can be similarly updated or removed)
 
-/**
- * Placeholder function to delete data.
- * @param tableName The name of the table to delete from.
- * @param id The ID of the row to delete.
- * @returns A promise that resolves with an error if any.
- */
-export async function deleteData(tableName: string, id: string | number): Promise<{ error: any | null }> {
-  console.log(`Deleting data from ${tableName} (ID: ${id})... (placeholder)`);
-  // Example:
-  // if (!supabase) return { error: { message: "Supabase client not initialized." } };
-  // const { error } = await supabase.from(tableName).delete().eq('id', id);
-  // return { error };
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ error: null });
-    }, 500);
-  });
-}
-
-// You can add more specific functions based on your application's needs,
-// for example, fetching user profiles, specific project data, etc.
+// Comment on Row Level Security (RLS):
+// For secure data access after user authentication, Row Level Security (RLS)
+// must be enabled and configured for your Supabase tables.
+//
+// When a user is logged in, supabase.auth.getSession() or supabase.auth.getUser()
+// will provide access to the user's session, including:
+// - session.user.id (the user's unique ID)
+// - session.user.email
+// - session.user.role (if roles are assigned)
+//
+// These details, particularly user.id and user.role, can be used in your RLS policies
+// to control what data a specific user can read, insert, update, or delete.
+// For example, a policy might allow a user to only access records where a 'user_id'
+// column matches their session.user.id.
+//
+// Example RLS Policy (conceptual):
+// CREATE POLICY "Users can only access their own profiles."
+// ON profiles FOR SELECT
+// USING (auth.uid() = user_id);
+//
+// Ensure you thoroughly understand RLS and apply it to all sensitive tables.

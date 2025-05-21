@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserPlus, Save, XCircle, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '@/lib/supabase'; // Import Supabase client
 // import { useToast } from "@/hooks/use-toast"; // Uncomment if toasts are needed
 
 const userProfiles = [
@@ -71,43 +72,85 @@ export default function NovoUsuarioPage() {
         return;
     }
 
-    console.log('Form data to be submitted:', formData);
+    console.log('Form data to be submitted for new user:', formData);
 
-    // Placeholder for Supabase API call
-    // 1. Create user with Supabase Auth (email, password)
-    // try {
-    //   const { data: authData, error: authError } = await supabase.auth.signUp({
-    //     email: formData.email,
-    //     password: formData.senha,
-    //   });
-    //   if (authError) throw authError;
-    //   
-    //   // 2. If auth successful, save other user info (nomeCompleto, perfil, cpf, instituicao) to a 'profiles' table or similar,
-    //   //    associating it with the authData.user.id
-    //   const { data: profileData, error: profileError } = await supabase
-    //     .from('profiles') // Replace 'profiles' with your actual table name
-    //     .insert([{ 
-    //        user_id: authData.user.id, 
-    //        nome_completo: formData.nomeCompleto, 
-    //        email: formData.email, // Often good to store email in profiles table too
-    //        cpf: formData.cpf,
-    //        instituicao: formData.instituicao,
-    //        perfil: formData.perfil 
-    //     }])
-    //     .select();
-    //   if (profileError) throw profileError;
-    //
-    //   console.log('User created successfully:', authData, profileData);
-    //   // toast({ title: "Usuário Cadastrado!", description: "O novo usuário foi adicionado com sucesso." });
-    //   // router.push('/admin/usuarios');
-    // } catch (error: any) {
-    //   console.error('Failed to create user:', error.message);
-    //   // toast({ title: "Erro ao Cadastrar Usuário", description: error.message, variant: "destructive" });
-    // } finally {
-    //   setIsLoading(false);
-    // }
+    // Supabase Auth: signUp and then create a profile
+    // Ensure your .env.local file has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabase) {
+      console.error("Supabase client not initialized. Check environment variables.");
+      // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
 
-    // Simulate API call
+    /*
+    // Actual Supabase user creation logic:
+    try {
+      // 1. Create the user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.senha,
+        // You can add options here, like data for email templates
+        // options: {
+        //   data: {
+        //     nome_completo: formData.nomeCompleto,
+        //   }
+        // }
+      });
+
+      if (authError) {
+        console.error('Erro no cadastro (Auth):', authError.message);
+        // toast({ title: "Erro no Cadastro", description: authError.message, variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+
+      if (authData.user) {
+        console.log('Usuário criado no Auth:', authData.user);
+        // 2. If auth successful, save other user info to a 'profiles' table (or similar)
+        // This table should have a 'user_id' column that is a FK to auth.users.id
+        // and should likely be the primary key of your profiles table.
+        // RLS policies on this 'profiles' table would typically allow users to read their own profile
+        // and admins to manage all profiles.
+        const { error: profileError } = await supabase
+          .from('profiles') // Ensure 'profiles' is your table name for user metadata
+          .insert({
+            user_id: authData.user.id, // Link to the auth user
+            email: formData.email, // Often good to store email in profiles table too
+            nome_completo: formData.nomeCompleto,
+            cpf: formData.cpf,
+            instituicao: formData.instituicao,
+            perfil: formData.perfil, // This 'perfil' should match a role or type you manage
+            // Add any other fields you store in your profiles table
+          });
+
+        if (profileError) {
+          console.error('Erro ao salvar perfil do usuário:', profileError.message);
+          // Potentially, you might want to delete the auth user if profile creation fails
+          // to avoid orphaned auth users, or handle this more gracefully.
+          // toast({ title: "Erro ao Salvar Perfil", description: profileError.message, variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        console.log('Perfil do usuário salvo com sucesso.');
+        // toast({ title: "Usuário Cadastrado!", description: "Novo usuário adicionado. Verifique o e-mail para confirmação (se habilitado)." });
+        router.push('/admin/usuarios');
+      } else {
+        // This case might occur if email confirmation is required and the user object isn't returned immediately.
+        console.log('Cadastro iniciado, aguardando confirmação do usuário (se aplicável).');
+        // toast({ title: "Cadastro Iniciado", description: "Verifique seu e-mail para confirmar o cadastro (se habilitado)." });
+        router.push('/admin/usuarios'); // Or redirect to a page indicating to check email
+      }
+
+    } catch (error: any) {
+      console.error('Falha ao cadastrar usuário:', error.message);
+      // toast({ title: "Erro ao Cadastrar Usuário", description: "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+    */
+
+    // Simulate API call for now
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Simulated user creation finished');
     // toast({ title: "Usuário Cadastrado! (Simulado)", description: "O novo usuário foi adicionado com sucesso." });
@@ -177,10 +220,9 @@ export default function NovoUsuarioPage() {
                   name="cpf"
                   value={formData.cpf}
                   onChange={handleChange}
-                  placeholder="000.000.000-00" // Placeholder for CPF mask
+                  placeholder="000.000.000-00" 
                   required
                 />
-                {/* Comment: Consider using a library like 'react-input-mask' for CPF formatting */}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="instituicao">Instituição</Label>
@@ -218,7 +260,6 @@ export default function NovoUsuarioPage() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </Button>
                 </div>
-                {/* Comment: Add password strength indicator here */}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmarSenha">Confirmar Senha <span className="text-destructive">*</span></Label>
@@ -273,5 +314,3 @@ export default function NovoUsuarioPage() {
     </div>
   );
 }
-
-    
