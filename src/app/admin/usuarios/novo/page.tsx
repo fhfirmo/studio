@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserPlus, Save, XCircle, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase'; // Import Supabase client
-// import { useToast } from "@/hooks/use-toast"; // Uncomment if toasts are needed
+import { supabase } from '@/lib/supabase';
+// import { useToast } from "@/hooks/use-toast";
 
 const userProfiles = [
   { value: "administrador", label: "Administrador" },
@@ -21,7 +21,7 @@ const userProfiles = [
 
 export default function NovoUsuarioPage() {
   const router = useRouter();
-  // const { toast } = useToast(); // Uncomment for feedback messages
+  // const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -49,7 +49,6 @@ export default function NovoUsuarioPage() {
     event.preventDefault();
     setIsLoading(true);
 
-    // Client-side validation placeholder
     if (!formData.nomeCompleto || !formData.email || !formData.senha || !formData.confirmarSenha || !formData.perfil || !formData.cpf) {
       console.error("Validação: Todos os campos marcados com * são obrigatórios.");
       // toast({ title: "Campos Obrigatórios", description: "Por favor, preencha todos os campos marcados com *.", variant: "destructive" });
@@ -64,7 +63,6 @@ export default function NovoUsuarioPage() {
       return;
     }
 
-    // Placeholder for password strength validation (e.g., minimum length)
     if (formData.senha.length < 8) {
         console.error("Validação: A senha deve ter no mínimo 8 caracteres.");
         // toast({ title: "Senha Curta", description: "A senha deve ter no mínimo 8 caracteres.", variant: "destructive" });
@@ -72,10 +70,6 @@ export default function NovoUsuarioPage() {
         return;
     }
 
-    console.log('Form data to be submitted for new user:', formData);
-
-    // Supabase Auth: signUp and then create a profile
-    // Ensure your .env.local file has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
     if (!supabase) {
       console.error("Supabase client not initialized. Check environment variables.");
       // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
@@ -83,19 +77,11 @@ export default function NovoUsuarioPage() {
       return;
     }
 
-    /*
-    // Actual Supabase user creation logic:
     try {
       // 1. Create the user with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.senha,
-        // You can add options here, like data for email templates
-        // options: {
-        //   data: {
-        //     nome_completo: formData.nomeCompleto,
-        //   }
-        // }
       });
 
       if (authError) {
@@ -107,28 +93,24 @@ export default function NovoUsuarioPage() {
 
       if (authData.user) {
         console.log('Usuário criado no Auth:', authData.user);
-        // 2. If auth successful, save other user info to a 'profiles' table (or similar)
-        // This table should have a 'user_id' column that is a FK to auth.users.id
-        // and should likely be the primary key of your profiles table.
-        // RLS policies on this 'profiles' table would typically allow users to read their own profile
-        // and admins to manage all profiles.
+        // 2. If auth successful, save other user info to 'profiles' table
+        // Assumes 'profiles' table columns: id (FK to auth.users), email, full_name, cpf, instituicao, role
         const { error: profileError } = await supabase
-          .from('profiles') // Ensure 'profiles' is your table name for user metadata
+          .from('profiles')
           .insert({
-            user_id: authData.user.id, // Link to the auth user
-            email: formData.email, // Often good to store email in profiles table too
-            nome_completo: formData.nomeCompleto,
+            id: authData.user.id, // Link to the auth user
+            email: formData.email,
+            full_name: formData.nomeCompleto,
             cpf: formData.cpf,
-            instituicao: formData.instituicao,
-            perfil: formData.perfil, // This 'perfil' should match a role or type you manage
-            // Add any other fields you store in your profiles table
+            instituicao: formData.instituicao || null, // Ensure nullable fields are handled
+            role: formData.perfil,
           });
 
         if (profileError) {
           console.error('Erro ao salvar perfil do usuário:', profileError.message);
-          // Potentially, you might want to delete the auth user if profile creation fails
-          // to avoid orphaned auth users, or handle this more gracefully.
-          // toast({ title: "Erro ao Salvar Perfil", description: profileError.message, variant: "destructive" });
+          // IMPORTANT: In a production app, you might want to delete the authData.user
+          // if profile creation fails to avoid orphaned auth users. This requires admin privileges.
+          // toast({ title: "Erro ao Salvar Perfil", description: `Usuário criado na autenticação, mas falha ao salvar perfil: ${profileError.message}. Por favor, contate o suporte.`, variant: "destructive" });
           setIsLoading(false);
           return;
         }
@@ -136,26 +118,19 @@ export default function NovoUsuarioPage() {
         // toast({ title: "Usuário Cadastrado!", description: "Novo usuário adicionado. Verifique o e-mail para confirmação (se habilitado)." });
         router.push('/admin/usuarios');
       } else {
-        // This case might occur if email confirmation is required and the user object isn't returned immediately.
-        console.log('Cadastro iniciado, aguardando confirmação do usuário (se aplicável).');
-        // toast({ title: "Cadastro Iniciado", description: "Verifique seu e-mail para confirmar o cadastro (se habilitado)." });
-        router.push('/admin/usuarios'); // Or redirect to a page indicating to check email
+        // This case might occur if email confirmation is required and the user object isn't returned immediately,
+        // or if there's an unexpected issue with signUp not returning a user despite no error.
+        console.warn('Cadastro no Auth bem-sucedido, mas dados do usuário não retornados imediatamente. Verifique as configurações de confirmação de e-mail no Supabase.');
+        // toast({ title: "Cadastro Quase Concluído", description: "Verifique seu e-mail para confirmar o cadastro (se habilitado)." });
+        router.push('/admin/usuarios'); // Or redirect to login or a specific message page
       }
 
     } catch (error: any) {
-      console.error('Falha ao cadastrar usuário:', error.message);
+      console.error('Falha inesperada ao cadastrar usuário:', error.message);
       // toast({ title: "Erro ao Cadastrar Usuário", description: "Ocorreu um erro inesperado.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-    */
-
-    // Simulate API call for now
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated user creation finished');
-    // toast({ title: "Usuário Cadastrado! (Simulado)", description: "O novo usuário foi adicionado com sucesso." });
-    setIsLoading(false);
-    router.push('/admin/usuarios'); 
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
@@ -311,6 +286,26 @@ export default function NovoUsuarioPage() {
           </CardFooter>
         </Card>
       </form>
+      {/*
+        Supabase Integration:
+        - On submit:
+          1. Call supabase.auth.signUp({ email, password }) to create the user in Supabase Auth.
+          2. If signUp is successful and authData.user exists:
+             - Get the authData.user.id.
+             - Insert a new row into your public."profiles" table (or equivalent user metadata table).
+             - This row should include:
+               - id (which is authData.user.id)
+               - email (formData.email)
+               - full_name (formData.nomeCompleto)
+               - cpf (formData.cpf)
+               - instituicao (formData.instituicao)
+               - role (formData.perfil)
+          3. Handle errors from both signUp and the profile table insert.
+          4. Consider what happens if email confirmation is enabled in Supabase Auth settings.
+             The user will be created, but session might be null until confirmation.
+             The profile row should still be created.
+        - Ensure RLS policies on "profiles" table allow inserts for new users (e.g., policy check: auth.uid() = id).
+      */}
     </div>
   );
 }
