@@ -2,40 +2,35 @@
 // src/lib/supabase.ts
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrlFromEnv = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKeyFromEnv = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+console.log("[Supabase Client Init] Attempting to initialize Supabase client.");
+console.log("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_URL read from env:", supabaseUrlFromEnv);
+console.log("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_ANON_KEY read from env:", supabaseAnonKeyFromEnv);
 
 let supabaseInstance: SupabaseClient | null = null;
 
-if (supabaseUrl && supabaseAnonKey) {
+if (supabaseUrlFromEnv && typeof supabaseUrlFromEnv === 'string' && supabaseUrlFromEnv.startsWith('http') && supabaseAnonKeyFromEnv) {
   try {
-    // Check if the URL is a valid string before attempting to create the client
-    if (typeof supabaseUrl !== 'string' || supabaseUrl.trim() === '' || !supabaseUrl.startsWith('http')) {
-      console.error('Invalid Supabase URL:', supabaseUrl);
-      console.warn('Supabase client will not be initialized due to invalid URL.');
-    } else {
-      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
-    }
-  } catch (e) {
-    console.error("Error creating Supabase client instance:", e);
-    console.error("Supabase URL used during error:", supabaseUrl); // Log the URL to help debug
+    supabaseInstance = createClient(supabaseUrlFromEnv, supabaseAnonKeyFromEnv);
+    console.log("[Supabase Client Init] Supabase client initialized successfully.");
+  } catch (e: any) { // Added type assertion for error
+    console.error("[Supabase Client Init] Error creating Supabase client instance:", e.message);
+    console.error("[Supabase Client Init] Supabase URL used during error:", supabaseUrlFromEnv);
     supabaseInstance = null; // Ensure it's null if creation fails
   }
 } else {
   console.warn(
-    'Supabase URL or Anon Key is not defined. Supabase client will not be initialized. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your .env.local file and the server is restarted.'
+    '[Supabase Client Init] Supabase client will NOT be initialized due to missing or invalid environment variables.'
   );
-  if (!supabaseUrl) {
-    console.warn("NEXT_PUBLIC_SUPABASE_URL is missing or empty. Value received:", supabaseUrl);
-  } else {
-    console.warn("NEXT_PUBLIC_SUPABASE_URL value:", supabaseUrl);
+  if (!supabaseUrlFromEnv) {
+    console.warn("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_URL is missing or empty.");
+  } else if (typeof supabaseUrlFromEnv !== 'string' || !supabaseUrlFromEnv.startsWith('http')) {
+    console.warn("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_URL is invalid. Value received:", supabaseUrlFromEnv);
   }
-  if (!supabaseAnonKey) {
-    console.warn("NEXT_PUBLIC_SUPABASE_ANON_KEY is missing or empty. Value received:", supabaseAnonKey);
-  } else {
-    // Be cautious logging the anon key, even parts of it, in shared environments.
-    // For local debugging, this might be acceptable:
-    // console.warn("NEXT_PUBLIC_SUPABASE_ANON_KEY is present. Length:", supabaseAnonKey.length);
+  if (!supabaseAnonKeyFromEnv) {
+    console.warn("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_ANON_KEY is missing or empty.");
   }
 }
 
@@ -72,9 +67,15 @@ export const supabase = supabaseInstance;
  * @returns A promise that resolves with the fetched data or an error.
  */
 export async function fetchData(tableName: string, columns: string = '*'): Promise<{ data: any[] | null; error: any | null }> {
-  if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
-  console.log(`Fetching data from ${tableName} (columns: ${columns})... (using Supabase)`);
+  if (!supabase) {
+    console.error(`[Supabase fetchData] Attempted to fetch from ${tableName} but Supabase client not initialized.`);
+    return { data: null, error: { message: "Supabase client not initialized." } };
+  }
+  console.log(`[Supabase fetchData] Fetching data from ${tableName} (columns: ${columns})...`);
   const { data, error } = await supabase.from(tableName).select(columns);
+  if (error) {
+    console.error(`[Supabase fetchData] Error fetching from ${tableName}:`, error.message);
+  }
   return { data, error };
 }
 
@@ -85,8 +86,14 @@ export async function fetchData(tableName: string, columns: string = '*'): Promi
  * @returns A promise that resolves with the inserted data or an error.
  */
 export async function insertData(tableName: string, row: any): Promise<{ data: any[] | null; error: any | null }> {
-  if (!supabase) return { data: null, error: { message: "Supabase client not initialized." } };
-  console.log(`Inserting data into ${tableName}:`, row, `(using Supabase)`);
+  if (!supabase) {
+    console.error(`[Supabase insertData] Attempted to insert into ${tableName} but Supabase client not initialized.`);
+    return { data: null, error: { message: "Supabase client not initialized." } };
+  }
+  console.log(`[Supabase insertData] Inserting data into ${tableName}:`, row);
   const { data, error } = await supabase.from(tableName).insert([row]).select();
+   if (error) {
+    console.error(`[Supabase insertData] Error inserting into ${tableName}:`, error.message);
+  }
   return { data, error };
 }
