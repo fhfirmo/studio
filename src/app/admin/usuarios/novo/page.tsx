@@ -90,7 +90,6 @@ export default function NovoUsuarioPage() {
       if (authError) {
         console.error('NovoUsuarioPage: Erro no cadastro (Supabase Auth):', authError.message);
         toast({ title: "Erro no Cadastro (Auth)", description: authError.message, variant: "destructive" });
-        // No explicit setIsLoading(false) here, finally block will handle it if no navigation.
         return; 
       }
 
@@ -100,7 +99,7 @@ export default function NovoUsuarioPage() {
         console.log('NovoUsuarioPage: Usuário ID:', authData.user.id, ". Tentando salvar perfil na tabela 'profiles'.");
         const profilePayload = {
             id: authData.user.id, 
-            email: formData.email,
+            // email: formData.email, // Removed as it's in auth.users and causing schema error
             full_name: formData.nomeCompleto, 
             cpf: formData.cpf,
             instituicao: formData.instituicao || null, 
@@ -117,7 +116,6 @@ export default function NovoUsuarioPage() {
         if (profileError) {
           console.error('NovoUsuarioPage: Erro ao salvar perfil do usuário no DB:', profileError.message, "Detalhes:", profileError);
           toast({ title: "Erro ao Salvar Perfil", description: `Usuário autenticado, mas falha ao salvar perfil: ${profileError.message}. Verifique o console.`, variant: "destructive" });
-          // Consider deleting authData.user here if profile creation fails in a real app
           return; 
         }
         console.log('NovoUsuarioPage: Perfil do usuário salvo com sucesso na tabela "profiles". Redirecionando...');
@@ -136,7 +134,6 @@ export default function NovoUsuarioPage() {
     } catch (error: any) {
       console.error('NovoUsuarioPage: Falha inesperada ao cadastrar usuário:', error.message, error);
       toast({ title: "Erro ao Cadastrar Usuário", description: "Ocorreu um erro inesperado. Verifique o console.", variant: "destructive" });
-      // No explicit setIsLoading(false) here, finally block will handle it.
     } finally {
       console.log("NovoUsuarioPage: handleSubmit finally block. Current path:", router.asPath);
       // Only set isLoading to false if we are still on this page (i.e., an error occurred before navigation).
