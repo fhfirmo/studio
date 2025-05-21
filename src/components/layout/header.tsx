@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, X, LogOut, UserCircle } from 'lucide-react'; // Added UserCircle
+import { Menu, X, LogOut, UserCircle } from 'lucide-react';
 import { InbmBrandLogo } from '@/components/icons/inbm-brand-logo';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
@@ -23,15 +23,11 @@ const mainAdminNavItems: { href: string; label: string }[] = [
   { href: '/admin/relatorios', label: 'Relatórios' },
 ];
 
-// Specific navigation item for the user management section
-const userManagementNavItem: { href: string; label: string } = {
-  href: '/admin/usuarios', label: 'Usuários'
-};
-
-// Specific navigation item for the system configuration section
-const configuracoesNavItem: { href: string; label: string } = {
-  href: '/admin/configuracoes', label: 'Configurações'
-};
+// Specific navigation item for the user management and configurations section
+const adminAreaNavItems: { href: string; label: string }[] = [
+  { href: '/admin/usuarios', label: 'Usuários' },
+  { href: '/admin/configuracoes', label: 'Configurações' },
+];
 
 interface UserProfile {
   id: string;
@@ -47,74 +43,89 @@ export function Header() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true); // To track initial auth state check
 
   useEffect(() => {
     setIsMounted(true);
 
     if (!supabase) {
       console.warn("Supabase client not initialized in Header.");
+      setAuthLoading(false);
       return;
     }
 
+    // Function to fetch profile
+    const fetchUserProfile = async (user: User) => {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Erro ao buscar perfil do usuário:', error.message);
+        setUserProfile(null);
+        // If profile is critical, you might sign out the user here
+        // await supabase.auth.signOut();
+      } else {
+        setUserProfile(profile as UserProfile);
+        console.log('Perfil do usuário carregado:', profile);
+      }
+    };
+    
+    // Initial session check
+    const checkInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setCurrentUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchUserProfile(session.user);
+      }
+      setAuthLoading(false);
+    };
+
+    checkInitialSession();
+
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        setAuthLoading(true); // Set loading true when auth state might change
         setCurrentUser(session?.user ?? null);
         if (session?.user) {
-          console.log('Usuário logado:', session.user);
-          // Buscar informações do perfil do usuário na tabela 'profiles'
-          // IMPORTANT: Ensure you have a 'profiles' table with RLS policies set up.
-          // The 'id' column in 'profiles' should be a FK to 'auth.users.id'.
-          const { data: profile, error } = await supabase
-            .from('profiles') // Assuming your table is named 'profiles'
-            .select('id, full_name, role') // Select the columns you need
-            .eq('id', session.user.id)
-            .single();
-
-          if (error) {
-            console.error('Erro ao buscar perfil do usuário:', error.message);
-            setUserProfile(null);
-            // Potentially sign out the user if profile is essential and not found
-            // await supabase.auth.signOut();
-          } else {
-            setUserProfile(profile as UserProfile);
-            console.log('Perfil do usuário carregado:', profile);
-            // Role-based redirection example (customize as needed)
-            // if (profile?.role !== 'admin_principal' && pathname.startsWith('/admin/usuarios')) {
-            //   router.push('/admin/dashboard'); // Redirect non-super-admins from user management
-            // }
-          }
+          console.log('Auth event:', event, 'Usuário:', session.user.email);
+          await fetchUserProfile(session.user);
         } else {
-          console.log('Usuário deslogado ou sessão não encontrada.');
+          console.log('Auth event:', event, 'Sessão não encontrada ou usuário deslogado.');
           setUserProfile(null);
-          // If user is not logged in and tries to access a protected admin route, redirect to login
-          if (pathname.startsWith('/admin/') && pathname !== '/admin-auth' && pathname !== '/login') {
-             console.log('Redirecionando para login (sessão não encontrada em rota admin).');
-             router.push('/login');
-          }
         }
+        setAuthLoading(false);
       }
     );
-
-    // Check initial session
-    // (async () => {
-    //   const { data: { session } } = await supabase.auth.getSession();
-    //   setCurrentUser(session?.user ?? null);
-    //   if (session?.user && !userProfile) { // Fetch profile if session exists but profile not yet loaded
-    //      const { data: profile, error } = await supabase
-    //         .from('profiles')
-    //         .select('id, full_name, role')
-    //         .eq('id', session.user.id)
-    //         .single();
-    //      if (error) console.error('Erro ao buscar perfil inicial:', error.message);
-    //      else setUserProfile(profile as UserProfile);
-    //   }
-    // })();
-
 
     return () => {
       authListener?.subscription.unsubscribe();
     };
-  }, [pathname, router]); // Added router to dependency array
+  }, []); // Run only once on mount for initial check and listener setup
+
+  // Effect for handling redirection based on auth state
+  useEffect(() => {
+    if (authLoading) {
+      return; // Don't do anything while initial auth status is being determined
+    }
+
+    const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
+    const isAdminRoute = pathname.startsWith('/admin/');
+
+    if (!currentUser && isAdminRoute && !isLoginPage) {
+      console.log('Redirecionando para login: Usuário não autenticado em rota administrativa.');
+      router.push('/login');
+    }
+    // Optional: Redirect if logged in and on a login page
+    // else if (currentUser && isLoginPage) {
+    //   console.log('Redirecionando para dashboard: Usuário autenticado em página de login.');
+    //   router.push('/admin/dashboard');
+    // }
+
+  }, [authLoading, currentUser, pathname, router]);
+
 
   let itemsToDisplay: { href: string; label: string }[] = [];
   const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
@@ -122,38 +133,34 @@ export function Header() {
   const isNonAdminPublicPage = pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/');
 
 
-  // Determine navigation items based on route and auth status
   if (currentUser && !isLoginPage && !isHomePage && !isNonAdminPublicPage) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
-      itemsToDisplay = [userManagementNavItem, configuracoesNavItem];
+      itemsToDisplay = adminAreaNavItems;
     } else if (pathname.startsWith('/admin/')) {
       itemsToDisplay = mainAdminNavItems;
     }
   }
   
-  const showLogoutButton = !!currentUser && pathname.startsWith('/admin/') && !isLoginPage;
+  const showLogoutButton = !!currentUser && (pathname.startsWith('/admin/') || pathname.startsWith('/cliente/')) && !isLoginPage;
+  const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || userProfile;
 
   const handleLogout = async () => {
     console.log('Attempting logout...');
     if (!supabase) {
-      console.error("Supabase client not initialized.");
+      console.error("Supabase client not initialized for logout.");
       return;
     }
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Erro ao deslogar:', error.message);
-      // toast({ title: "Erro ao Sair", description: error.message, variant: "destructive" });
     } else {
       console.log('Logout bem-sucedido.');
-      setUserProfile(null); // Clear user profile state
-      setCurrentUser(null); // Clear current user state
-      // The onAuthStateChange listener should handle redirection.
-      // Or, you can redirect manually here if needed after a short delay to ensure state updates.
-      router.push('/login');
+      // States will be cleared by onAuthStateChange
+      router.push('/login'); // Explicit redirect after sign out
     }
   };
 
-  if (!isMounted) {
+  if (!isMounted || authLoading) { // Show skeleton while mounting or initial auth check is loading
     return (
       <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -162,7 +169,6 @@ export function Header() {
               <InbmBrandLogo className="h-8 md:h-10 w-auto" />
             </div>
           </Link>
-           {/* Skeleton for nav items during SSR/initial mount */}
           <div className="hidden md:flex space-x-4 items-center">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="list-none h-5 w-20 bg-muted rounded animate-pulse"></div>
@@ -175,8 +181,6 @@ export function Header() {
     );
   }
   
-  const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || userProfile;
-
   return (
     <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -207,13 +211,13 @@ export function Header() {
                     </Button>
                   </SheetClose>
                 </div>
-                {currentUser && userProfile && (
+                {currentUser && (
                   <div className="p-4 border-b border-sidebar-border">
                     <div className="flex items-center gap-2">
                       <UserCircle className="h-8 w-8 text-sidebar-primary" />
                       <div>
-                        <p className="text-sm font-medium">{userProfile.full_name || currentUser.email}</p>
-                        <p className="text-xs text-sidebar-foreground/70">{userProfile.role || 'Usuário'}</p>
+                        <p className="text-sm font-medium">{userProfile?.full_name || currentUser.email}</p>
+                        {userProfile?.role && <p className="text-xs text-sidebar-foreground/70">{userProfile.role}</p>}
                       </div>
                     </div>
                   </div>
@@ -252,12 +256,12 @@ export function Header() {
         ) : (
           !isMobile && showNavigationArea && (
             <nav className="flex items-center space-x-4">
-              {currentUser && userProfile && (
+              {currentUser && (
                 <div className="flex items-center gap-2 text-sm">
                   <UserCircle className="h-5 w-5 text-primary" />
                   <div>
-                    <span className="font-medium">{userProfile.full_name || currentUser.email}</span>
-                    {userProfile.role && <span className="text-muted-foreground text-xs ml-1">({userProfile.role})</span>}
+                    <span className="font-medium">{userProfile?.full_name || currentUser.email}</span>
+                    {userProfile?.role && <span className="text-muted-foreground text-xs ml-1">({userProfile.role})</span>}
                   </div>
                 </div>
               )}
