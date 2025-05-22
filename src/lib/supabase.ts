@@ -1,11 +1,10 @@
-
 // src/lib/supabase.ts
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+console.log("[Supabase Client Init] Attempting to initialize Supabase client.");
 const supabaseUrlFromEnv = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKeyFromEnv = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-console.log("[Supabase Client Init] Attempting to initialize Supabase client.");
 console.log("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_URL read from env:", supabaseUrlFromEnv);
 console.log("[Supabase Client Init] NEXT_PUBLIC_SUPABASE_ANON_KEY read from env:", supabaseAnonKeyFromEnv);
 
@@ -15,8 +14,8 @@ if (supabaseUrlFromEnv && typeof supabaseUrlFromEnv === 'string' && supabaseUrlF
   try {
     supabaseInstance = createClient(supabaseUrlFromEnv, supabaseAnonKeyFromEnv);
     console.log("[Supabase Client Init] Supabase client initialized successfully.");
-  } catch (e: any) { // Added type assertion for error
-    console.error("[Supabase Client Init] Error creating Supabase client instance:", e.message);
+  } catch (e: any) {
+    console.error("[Supabase Client Init] CRITICAL ERROR creating Supabase client instance:", e.message);
     console.error("[Supabase Client Init] Supabase URL used during error:", supabaseUrlFromEnv);
     supabaseInstance = null; // Ensure it's null if creation fails
   }
