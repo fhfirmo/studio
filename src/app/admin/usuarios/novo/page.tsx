@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Keep for direct use if needed
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserPlus, Save, XCircle, Eye, EyeOff } from 'lucide-react';
@@ -15,26 +14,27 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
+// Ensure these values match your public.profiles.role CHECK constraint
 const userProfiles = [
   { value: "admin", label: "Administrador" },
+  { value: "supervisor", label: "Supervisor" },
   { value: "operator", label: "Operador" },
   { value: "client", label: "Cliente" },
-  { value: "supervisor", label: "Supervisor" },
 ];
 
 const formSchema = z.object({
   nomeCompleto: z.string().min(3, { message: "Nome completo deve ter pelo menos 3 caracteres." }),
   email: z.string().email({ message: "Por favor, insira um e-mail válido." }),
-  cpf: z.string().min(11, { message: "CPF deve ter pelo menos 11 caracteres." }).max(14, { message: "CPF deve ter no máximo 14 caracteres."}), // Basic validation, consider regex for stricter format
+  cpf: z.string().min(11, { message: "CPF deve ter de 11 a 14 caracteres." }).max(14, { message: "CPF deve ter de 11 a 14 caracteres."}),
   institution: z.string().optional(),
   senha: z.string().min(8, { message: "A senha deve ter no mínimo 8 caracteres." }),
   confirmarSenha: z.string().min(8, { message: "A confirmação de senha deve ter no mínimo 8 caracteres." }),
   perfil: z.string({ required_error: "Selecione um perfil." }).min(1, {message: "Selecione um perfil."})
 }).refine(data => data.senha === data.confirmarSenha, {
   message: "As senhas não coincidem.",
-  path: ["confirmarSenha"], // Set error on confirmarSenha field
+  path: ["confirmarSenha"],
 });
 
 type UserFormValues = z.infer<typeof formSchema>;
@@ -77,23 +77,27 @@ export default function NovoUsuarioPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.senha,
+        // options: { data: { full_name: data.nomeCompleto, role: data.perfil } } // metadata can be added here but profile table is more robust
       });
       console.log("NovoUsuarioPage: supabase.auth.signUp completed. Error:", authError, "AuthData User:", authData?.user);
 
       if (authError) {
         console.error('NovoUsuarioPage: Erro no cadastro (Supabase Auth):', authError.message);
         toast({ title: "Erro no Cadastro (Auth)", description: authError.message, variant: "destructive" });
-        return; // Keep isLoading true, finally will handle it
+        return;
       }
 
       if (authData.user) {
-        console.log("NovoUsuarioPage: Usuário ID:", authData.user.id, ". Tentando salvar perfil...");
+        console.log("NovoUsuarioPage: Usuário criado no Auth. ID:", authData.user.id);
+        console.log("NovoUsuarioPage: Current logged-in admin UID (for RLS context check, if needed):", (await supabase.auth.getUser()).data.user?.id);
+        console.log("NovoUsuarioPage: Tentando salvar perfil para o novo usuário ID:", authData.user.id);
+
         const profilePayload = {
-          id: authData.user.id,
-          full_name: data.nomeCompleto,
-          cpf: data.cpf,
-          institution: data.institution || null,
-          role: data.perfil,
+            id: authData.user.id, // ID from the NEWLY created auth user
+            full_name: data.nomeCompleto,
+            cpf: data.cpf,
+            institution: data.institution || null, // Matches DB column name
+            role: data.perfil, // e.g., 'admin', 'operator', 'client'
         };
         console.log("NovoUsuarioPage: Payload para tabela 'profiles':", profilePayload);
 
@@ -105,29 +109,28 @@ export default function NovoUsuarioPage() {
 
         if (profileError) {
           console.error('NovoUsuarioPage: Erro ao salvar perfil do usuário no DB:', profileError.message, "Detalhes:", profileError);
-          toast({ title: "Erro ao Salvar Perfil", description: `Usuário autenticado, mas falha ao salvar perfil: ${profileError.message}. Verifique o console.`, variant: "destructive" });
-          // Consider deleting authData.user here if profile creation fails in a real app via an Edge Function
-          return; // Keep isLoading true, finally will handle it
+          toast({ title: "Erro ao Salvar Perfil", description: `Usuário autenticado, mas falha ao salvar perfil: ${profileError.message}. Verifique o console. IMPORTANTE: Verifique as RLS policies da tabela 'profiles' para INSERT. Um admin (auth.uid()) precisa ter permissão para inserir um perfil para um novo ID (payload.id).`, variant: "destructive", duration: 10000 });
+          return; 
         }
         console.log('NovoUsuarioPage: Perfil do usuário salvo com sucesso na tabela "profiles".');
         toast({ title: "Usuário Cadastrado!", description: "Novo usuário adicionado com sucesso. Se a confirmação de e-mail estiver ativa, peça para o usuário verificar seu e-mail." });
         navigatedAway = true;
         router.push('/admin/usuarios');
 
-      } else if (!authData.user && !authData.session) {
-        // This case usually means email confirmation is required.
-        console.warn('NovoUsuarioPage: Cadastro no Auth requer confirmação por e-mail. O usuário foi criado, mas a sessão não foi iniciada.');
-        toast({ title: "Cadastro Enviado", description: "Verifique o e-mail do novo usuário para confirmar o cadastro e ativar a conta.", duration: 7000 });
+      } else if (!authData.user && !authData.session && authData.user === null) { 
+        // This case usually means email confirmation is required by Supabase Auth settings
+        // The user is created in auth.users but is in an unconfirmed state.
+        // You might still want to create a profile entry, or handle it after confirmation.
+        // For simplicity, we'll assume profile creation is attempted. If an ID is available (even if user is null due to unconfirmed state, some Supabase versions might provide it in response to signUp)
+        // However, usually authData.user will be populated if signUp itself didn't error out.
+        // The most common scenario for `authData.user` being null but no error from `signUp` is email confirmation.
+        console.warn('NovoUsuarioPage: Cadastro no Auth requer confirmação por e-mail ou signUp não retornou um usuário. O usuário foi criado no Auth, mas a sessão não foi iniciada.');
+        toast({ title: "Cadastro Enviado", description: "Verifique o e-mail do novo usuário para confirmar o cadastro, se a confirmação estiver habilitada.", duration: 7000 });
         navigatedAway = true;
-        // Decide if profile should be inserted here or if you wait for email confirmation.
-        // For simplicity, if signUp doesn't return a user, we might not have an ID to insert into profiles yet,
-        // or the user record in auth.users might be in an unconfirmed state.
-        // Depending on your Supabase settings, this might require a different flow (e.g. user confirms email, then profile gets fully created).
         router.push('/admin/usuarios'); 
       } else {
-        console.warn('NovoUsuarioPage: auth.signUp sucesso, mas authData.user está nulo e sessão não é nula (ou vice-versa). Resposta:', authData);
-        toast({ title: "Cadastro Concluído com Observação", description: "Verifique o status do usuário na lista e o console para detalhes." });
-        // Not redirecting here to allow admin to check status or logs
+        console.warn('NovoUsuarioPage: auth.signUp sucesso, mas authData.user está nulo e/ou sessão inesperada. Resposta:', authData);
+        toast({ title: "Cadastro Concluído com Observação", description: "Verifique o status do usuário na lista e o console para detalhes. Pode ser necessária confirmação de e-mail." });
       }
 
     } catch (error: any) {
@@ -321,3 +324,20 @@ export default function NovoUsuarioPage() {
     </div>
   );
 }
+
+/*
+Supabase Integration Notes:
+- Ensure RLS policy on `public.profiles` allows an admin to insert a profile for a new user.
+  Example RLS policy for INSERT on `profiles` for an admin:
+  CREATE POLICY "Admins can insert new user profiles"
+  ON public.profiles
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+      (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+  );
+  (Adjust 'admin' if your admin role is named differently in your `profiles` table).
+- Ensure the `profiles` table schema matches the `profilePayload` (id, full_name, cpf, institution, role).
+- The `id` in `profiles` MUST be a foreign key to `auth.users.id`.
+*/
+
