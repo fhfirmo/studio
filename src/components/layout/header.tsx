@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/lib/supabase';
-import type { User as SupabaseUser } from '@supabase/supabase-js'; // Renamed to avoid conflict
+import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const mainAdminNavItems: { href: string; label: string }[] = [
   { href: '/admin/dashboard', label: 'Dashboard' },
@@ -42,6 +43,7 @@ export function Header() {
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export function Header() {
 
     const fetchUserProfile = async (user: SupabaseUser) => {
       console.log("Header: Attempting to fetch profile for user ID:", user.id);
+      setAuthLoading(true); // Set loading true before fetch
       try {
         const { data: profile, error } = await supabase
           .from('profiles')
@@ -64,10 +67,8 @@ export function Header() {
           .single();
 
         if (error) {
-          console.error('Header: Erro ao buscar perfil do usuário:', error.message);
+          console.error('Header: Erro ao buscar perfil do usuário:', error.message, error);
           setUserProfile(null);
-          // Optionally toast error if it's unexpected, but often this is normal if profile setup is pending
-          // toast({ title: "Erro de Perfil", description: "Não foi possível carregar os dados do perfil.", variant: "destructive"});
         } else if (profile) {
           setUserProfile(profile as UserProfile);
           console.log('Header: Perfil do usuário carregado:', profile);
@@ -78,39 +79,43 @@ export function Header() {
       } catch (e: any) {
         console.error('Header: Exceção ao buscar perfil:', e.message);
         setUserProfile(null);
+      } finally {
+        // setAuthLoading(false); // AuthLoading should be set false by the calling function (handleAuthStateChange)
       }
     };
 
-    const handleAuthStateChange = async (event: string, session: import('@supabase/supabase-js').Session | null) => {
+    const handleAuthStateChange = async (event: string, session: Session | null) => {
       console.log("Header: Evento onAuthStateChange recebido:", event, "Session user:", session?.user?.email);
       setAuthLoading(true);
       setCurrentUser(session?.user ?? null);
 
       if (session?.user) {
-        console.log('Header: Usuário atualizado via listener:', session.user.email);
         await fetchUserProfile(session.user);
       } else {
-        console.log('Header: Usuário deslogado via listener ou sessão expirada.');
         setUserProfile(null);
+        console.log('Header: Usuário deslogado via listener ou sessão expirada.');
       }
-      setAuthLoading(false); // Set loading false after all async operations in the handler are done
+      setAuthLoading(false);
     };
     
     const checkInitialSession = async () => {
       console.log("Header: Verificando sessão inicial...");
       setAuthLoading(true);
+      if (!supabase) { // Double check supabase client
+        console.warn("Header (checkInitialSession): Supabase client not available.");
+        setAuthLoading(false);
+        return;
+      }
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
         console.error("Header: Erro ao obter sessão inicial:", sessionError.message);
-        // No need to call handleAuthStateChange, just set states directly
         setCurrentUser(null);
         setUserProfile(null);
         setAuthLoading(false);
         return;
       }
-      // Manually trigger the logic similar to onAuthStateChange for the initial session
-      await handleAuthStateChange(session ? 'INITIAL_SESSION' : 'NO_INITIAL_SESSION', session);
+      await handleAuthStateChange(session ? 'INITIAL_SESSION_CHECK' : 'NO_INITIAL_SESSION_CHECK', session);
     };
 
     checkInitialSession();
@@ -121,49 +126,43 @@ export function Header() {
       console.log("Header: Removendo listener de autenticação.");
       authListener?.subscription.unsubscribe();
     };
-  }, []); // Removed router from dependencies as it caused re-runs; router is stable.
+  }, []);
+
 
   useEffect(() => {
     if (authLoading) {
       console.log("Header (Redirect Effect): Auth loading, aguardando...");
-      return;
+      return; 
     }
     console.log("Header (Redirect Effect): Auth carregado. CurrentUser:", currentUser ? currentUser.email : "null", "UserProfile Role:", userProfile?.role, "Pathname:", pathname);
 
     const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
     const isAdminRoute = pathname.startsWith('/admin/');
-    const isHomePage = pathname === '/';
 
-    if (currentUser && userProfile) { // User is logged in AND profile is loaded
-      if (isLoginPage) {
-        console.log(`Header (Redirect Effect): Usuário autenticado (${userProfile.role}) em página de login. Redirecionando...`);
-        if (userProfile.role === 'admin' || userProfile.role === 'supervisor' || userProfile.role === 'operator') {
-          router.push('/admin/dashboard');
-        } else if (userProfile.role === 'client') {
-          // TODO: Create /cliente/dashboard or similar client-specific landing page
-          toast({ title: "Acesso Cliente", description: "Área do cliente em desenvolvimento. Redirecionando para Home."});
-          router.push('/'); 
-        } else {
-          // Default redirect for users with profiles but no specific role match
-          toast({ title: "Perfil Desconhecido", description: "Redirecionando para a página inicial."});
-          router.push('/');
-        }
-        return;
-      }
-      // Add specific role-based access control for admin routes if needed here
-      // Example: if (isAdminRoute && !(userProfile.role === 'admin' || userProfile.role === 'supervisor' || userProfile.role === 'operator')) {
-      //   console.log(`Header (Redirect Effect): Usuário ${userProfile.role} não autorizado para ${pathname}. Redirecionando...`);
-      //   toast({ title: "Acesso Negado", description: "Você não tem permissão para acessar esta área.", variant: "destructive"});
-      //   router.push('/'); // Or a specific 'unauthorized' page
-      //   return;
-      // }
-
-    } else if (!currentUser && isAdminRoute && !isLoginPage) { // User is NOT logged in but trying to access a protected admin route
-      console.log('Header (Redirect Effect): Usuário não autenticado em rota administrativa. Redirecionando para /login.');
+    if (!currentUser && isAdminRoute && !isLoginPage) {
+      console.log('Header (Redirect Effect): Redirecionando para login - Usuário não autenticado em rota administrativa. Pathname:', pathname);
       router.push('/login');
       return;
     }
-    console.log("Header (Redirect Effect): Nenhuma condição de redirecionamento atendida.");
+    
+    if (currentUser && isLoginPage) {
+      console.log('Header (Redirect Effect): Usuário autenticado em página de login. Pathname:', pathname);
+      if (userProfile?.role === 'admin' || userProfile?.role === 'supervisor' || userProfile?.role === 'operator') {
+        console.log('Header (Redirect Effect): Redirecionando admin/supervisor/operator de página de login para /admin/dashboard.');
+        router.push('/admin/dashboard');
+      } else if (userProfile?.role === 'client') {
+        console.log('Header (Redirect Effect): Redirecionando client de página de login para /.');
+        toast({ title: "Acesso Cliente", description: "Área do cliente em desenvolvimento. Redirecionando para Home."});
+        router.push('/'); 
+      } else {
+        console.log('Header (Redirect Effect): Redirecionando usuário com perfil desconhecido/nulo de página de login para /.');
+        // This case can happen if profile is still loading or role is not set
+        // For safety, redirect to home or a generic dashboard if user is authenticated but role isn't clear for admin areas
+        router.push('/');
+      }
+      return;
+    }
+    console.log("Header (Redirect Effect): Nenhuma condição de redirecionamento principal atendida.");
 
   }, [authLoading, currentUser, userProfile, pathname, router, toast]);
 
@@ -171,7 +170,7 @@ export function Header() {
   let itemsToDisplay: { href: string; label: string }[] = [];
   const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
   const isHomePage = pathname === '/';
-  const isNonAdminPublicPage = pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/'); // Assuming /cliente/[id] is public
+  const isNonAdminPublicPage = pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/');
 
   if (currentUser && !isLoginPage && !isHomePage && !isNonAdminPublicPage) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
@@ -181,26 +180,32 @@ export function Header() {
     }
   }
 
-  const showLogoutButton = !!currentUser && !isLoginPage; // Show logout if user is logged in and not on a login page
+  const showLogoutButton = !!currentUser && !isLoginPage;
   const showUserInfo = !!currentUser && !isLoginPage;
   const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || showUserInfo;
 
-  const handleLogout = async () => {
-    console.log('Header: Tentando deslogar...');
+  const handleLogout = () => {
+    console.log('Header: Botão Logout clicado. Exibindo modal de confirmação.');
+    setShowLogoutConfirm(true); // Only show the confirmation dialog
+  };
+
+  const confirmLogout = async () => {
+    console.log('Header: Confirmando logout...');
+    setShowLogoutConfirm(false);
     if (!supabase) {
-      console.error("Header: Cliente Supabase não inicializado para logout.");
+      console.error("Header (confirmLogout): Cliente Supabase não inicializado.");
       toast({ title: "Erro", description: "Falha ao tentar deslogar.", variant: "destructive"});
       return;
     }
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error('Header: Erro ao deslogar:', error.message);
+      console.error('Header (confirmLogout): Erro ao deslogar:', error.message);
       toast({ title: "Erro ao Sair", description: error.message, variant: "destructive"});
     } else {
-      console.log('Header: Logout bem-sucedido.');
+      console.log('Header (confirmLogout): Logout bem-sucedido. Redirecionando para /');
       toast({ title: "Logout Efetuado", description: "Você foi desconectado."});
-      // onAuthStateChange will handle clearing currentUser and userProfile and redirecting
-      router.push('/'); // Explicitly redirect to homepage after logout
+      // onAuthStateChange will handle clearing currentUser and userProfile
+      router.push('/'); 
     }
   };
 
@@ -214,10 +219,10 @@ export function Header() {
             </div>
           </Link>
           <div className="hidden md:flex space-x-4 items-center">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="list-none h-5 w-20 bg-muted rounded animate-pulse"></div>
-            ))}
-             <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
+            <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
+            <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
+            <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
+            <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
           </div>
           <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
         </div>
@@ -226,119 +231,139 @@ export function Header() {
   }
 
   return (
-    <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
-          <div className="bg-primary p-1 rounded-md">
-            <InbmBrandLogo className="h-8 md:h-10 w-auto" />
-          </div>
-        </Link>
+    <>
+      <header className="bg-background/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
+            <div className="bg-primary p-1 rounded-md">
+              <InbmBrandLogo className="h-8 md:h-10 w-auto" />
+            </div>
+          </Link>
 
-        {authLoading && !isMobile && !isLoginPage && !isHomePage && !isNonAdminPublicPage && (
-            <div className="hidden md:flex text-sm text-muted-foreground">Verificando autenticação...</div>
-        )}
+          {authLoading && !isMobile && !isLoginPage && !isHomePage && !isNonAdminPublicPage && (
+              <div className="hidden md:flex text-sm text-muted-foreground">Verificando autenticação...</div>
+          )}
 
-        {!authLoading && isMobile && showNavigationArea ? (
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Abrir menu">
-                <Menu className="h-6 w-6" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[280px] bg-sidebar p-0 text-sidebar-foreground">
-              <div className="flex flex-col h-full">
-                <div className="p-4 flex justify-between items-center border-b border-sidebar-border">
-                   <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
-                     <div className="bg-sidebar-primary p-1 rounded-md">
-                       <InbmBrandLogo className="h-8 w-auto" />
-                     </div>
-                   </Link>
-                  <SheetClose asChild>
-                    <Button variant="ghost" size="icon" aria-label="Fechar menu">
-                      <X className="h-6 w-6" />
-                    </Button>
-                  </SheetClose>
-                </div>
-                {showUserInfo && (
-                  <div className="p-4 border-b border-sidebar-border">
-                    <div className="flex items-center gap-2">
-                      <UserCircle className="h-8 w-8 text-sidebar-primary" />
-                      <div>
-                        <p className="text-sm font-medium">{userProfile?.full_name || currentUser?.email}</p>
-                        {userProfile?.role && <p className="text-xs text-sidebar-foreground/70">{userProfile.role}</p>}
+          {!authLoading && isMobile && showNavigationArea ? (
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Abrir menu">
+                  <Menu className="h-6 w-6" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[280px] bg-sidebar p-0 text-sidebar-foreground">
+                <div className="flex flex-col h-full">
+                  <div className="p-4 flex justify-between items-center border-b border-sidebar-border">
+                    <Link href="https://firmoconsultoria.com.br/inbm/" aria-label="INBM Site" target="_blank" rel="noopener noreferrer">
+                      <div className="bg-sidebar-primary p-1 rounded-md">
+                        <InbmBrandLogo className="h-8 w-auto" />
                       </div>
+                    </Link>
+                    <SheetClose asChild>
+                      <Button variant="ghost" size="icon" aria-label="Fechar menu">
+                        <X className="h-6 w-6" />
+                      </Button>
+                    </SheetClose>
+                  </div>
+                  {showUserInfo && (
+                    <div className="p-4 border-b border-sidebar-border">
+                      <div className="flex items-center gap-2">
+                        <UserCircle className="h-8 w-8 text-sidebar-primary" />
+                        <div>
+                          <p className="text-sm font-medium">{userProfile?.full_name || currentUser?.email}</p>
+                          {userProfile?.role && <p className="text-xs text-sidebar-foreground/70">{userProfile.role}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <nav className="flex-grow p-4">
+                    <ul className="space-y-4">
+                      {itemsToDisplay.map((item) => (
+                        <li key={item.href}>
+                          <SheetClose asChild>
+                            <Link
+                              href={item.href}
+                              className="text-lg font-medium text-sidebar-foreground hover:text-sidebar-accent transition-colors block py-2 rounded-md hover:bg-sidebar-accent/10 px-2"
+                            >
+                              {item.label}
+                            </Link>
+                          </SheetClose>
+                        </li>
+                      ))}
+                      {showLogoutButton && (
+                        <li>
+                          <SheetClose asChild>
+                              <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-lg font-medium text-sidebar-foreground hover:text-sidebar-accent hover:bg-sidebar-accent/10 px-2 py-2">
+                                  <LogOut className="mr-2 h-5 w-5" /> Logout
+                              </Button>
+                          </SheetClose>
+                        </li>
+                      )}
+                    </ul>
+                  </nav>
+                  <div className="p-4 border-t border-sidebar-border mt-auto">
+                    <p className="text-xs text-sidebar-foreground/70 text-center">INBM &copy; {new Date().getFullYear()}</p>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          ) : (
+            !authLoading && !isMobile && showNavigationArea && (
+              <nav className="flex items-center space-x-4">
+                {showUserInfo && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <UserCircle className="h-5 w-5 text-primary" />
+                    <div>
+                      <span className="font-medium">{userProfile?.full_name || currentUser?.email}</span>
+                      {userProfile?.role && <span className="text-muted-foreground text-xs ml-1">({userProfile.role})</span>}
                     </div>
                   </div>
                 )}
-                <nav className="flex-grow p-4">
-                  <ul className="space-y-4">
+                {itemsToDisplay.length > 0 && (
+                  <ul className="flex space-x-4 items-center">
                     {itemsToDisplay.map((item) => (
                       <li key={item.href}>
-                        <SheetClose asChild>
-                          <Link
-                            href={item.href}
-                            className="text-lg font-medium text-sidebar-foreground hover:text-sidebar-accent transition-colors block py-2 rounded-md hover:bg-sidebar-accent/10 px-2"
-                          >
-                            {item.label}
-                          </Link>
-                        </SheetClose>
+                        <Link
+                          href={item.href}
+                          className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                        >
+                          {item.label}
+                        </Link>
                       </li>
                     ))}
-                    {showLogoutButton && (
-                       <li>
-                        <SheetClose asChild>
-                            <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-lg font-medium text-sidebar-foreground hover:text-sidebar-accent hover:bg-sidebar-accent/10 px-2 py-2">
-                                <LogOut className="mr-2 h-5 w-5" /> Logout
-                            </Button>
-                        </SheetClose>
-                       </li>
-                    )}
                   </ul>
-                </nav>
-                <div className="p-4 border-t border-sidebar-border mt-auto">
-                  <p className="text-xs text-sidebar-foreground/70 text-center">INBM &copy; {new Date().getFullYear()}</p>
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-        ) : (
-          !authLoading && !isMobile && showNavigationArea && (
-            <nav className="flex items-center space-x-4">
-              {showUserInfo && (
-                <div className="flex items-center gap-2 text-sm">
-                  <UserCircle className="h-5 w-5 text-primary" />
-                  <div>
-                    <span className="font-medium">{userProfile?.full_name || currentUser?.email}</span>
-                    {userProfile?.role && <span className="text-muted-foreground text-xs ml-1">({userProfile.role})</span>}
-                  </div>
-                </div>
-              )}
-              {itemsToDisplay.length > 0 && (
-                <ul className="flex space-x-4 items-center">
-                  {itemsToDisplay.map((item) => (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-                      >
-                        {item.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {showLogoutButton && (
-                <Button onClick={handleLogout} variant="outline" size="sm">
-                   <LogOut className="mr-2 h-4 w-4" /> Logout
-                </Button>
-              )}
-            </nav>
-          )
-        )}
-        {!authLoading && !isMobile && !showNavigationArea && (
-          <div></div> 
-        )}
-      </div>
-    </header>
+                )}
+                {showLogoutButton && (
+                  <Button onClick={handleLogout} variant="outline" size="sm">
+                    <LogOut className="mr-2 h-4 w-4" /> Logout
+                  </Button>
+                )}
+              </nav>
+            )
+          )}
+          {!authLoading && !isMobile && !showNavigationArea && (
+            <div></div> 
+          )}
+        </div>
+      </header>
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Olá, {userProfile?.full_name || currentUser?.email || "usuário"}, tem certeza que deseja sair da aplicação?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowLogoutConfirm(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmLogout} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              Confirmar Saída
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
