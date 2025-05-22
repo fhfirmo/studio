@@ -14,10 +14,10 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
 const userProfiles = [
-  { value: "admin", label: "Administrador" },      // Changed value
-  { value: "operator", label: "Operador" },    // Changed value
-  { value: "client", label: "Cliente" },        // Changed value
-  // { value: "supervisor", label: "Supervisor" }, // Option if needed
+  { value: "admin", label: "Administrador" },
+  { value: "operator", label: "Operador" },
+  { value: "client", label: "Cliente" },
+  // { value: "supervisor", label: "Supervisor" }, // Add if this role is in your DB CHECK constraint
 ];
 
 export default function NovoUsuarioPage() {
@@ -32,7 +32,7 @@ export default function NovoUsuarioPage() {
     nomeCompleto: '',
     email: '',
     cpf: '',
-    institution: '', // Changed from instituicao to institution
+    institution: '',
     senha: '',
     confirmarSenha: '',
     perfil: '',
@@ -50,7 +50,7 @@ export default function NovoUsuarioPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
-    navigatedAway = false; 
+    navigatedAway = false;
     console.log("NovoUsuarioPage: handleSubmit initiated. isLoading: true. FormData:", formData);
 
     if (!formData.nomeCompleto || !formData.email || !formData.senha || !formData.confirmarSenha || !formData.perfil || !formData.cpf) {
@@ -86,51 +86,58 @@ export default function NovoUsuarioPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.senha,
+        // options: { data: { full_name: formData.nomeCompleto } } // You can pass some metadata here if Supabase Auth settings allow
       });
-      console.log("NovoUsuarioPage: supabase.auth.signUp completed. Error:", authError, "AuthData:", authData);
+      console.log("NovoUsuarioPage: supabase.auth.signUp completed. Error:", authError, "AuthData User:", authData?.user, "AuthData Session:", authData?.session);
 
       if (authError) {
         console.error('NovoUsuarioPage: Erro no cadastro (Supabase Auth):', authError.message);
         toast({ title: "Erro no Cadastro (Auth)", description: authError.message, variant: "destructive" });
-        return; 
+        setIsLoading(false); // Ensure loading is false on auth error
+        return;
       }
 
-      console.log('NovoUsuarioPage: Usuário criado/autenticado no Supabase Auth:', authData);
-
+      // Check if user object exists. It might be null if email confirmation is required and not yet done.
       if (authData.user) {
-        console.log('NovoUsuarioPage: Usuário ID:', authData.user.id, ". Tentando salvar perfil na tabela 'profiles'.");
+        console.log('NovoUsuarioPage: Usuário Auth criado. ID:', authData.user.id, ". Tentando salvar perfil na tabela 'profiles'.");
         const profilePayload = {
-            id: authData.user.id, 
-            full_name: formData.nomeCompleto, 
-            cpf: formData.cpf,
-            institution: formData.institution || null,
-            role: formData.perfil,                 
-          };
+          id: authData.user.id,
+          full_name: formData.nomeCompleto,
+          cpf: formData.cpf,
+          institution: formData.institution || null, // Use 'institution' to match DB
+          role: formData.perfil,
+        };
         console.log("NovoUsuarioPage: Payload para tabela 'profiles':", profilePayload);
 
         console.log("NovoUsuarioPage: Attempting supabase.from('profiles').insert()");
         const { error: profileError } = await supabase
-          .from('profiles') 
+          .from('profiles')
           .insert(profilePayload);
         console.log("NovoUsuarioPage: supabase.from('profiles').insert() completed. Error:", profileError);
 
         if (profileError) {
           console.error('NovoUsuarioPage: Erro ao salvar perfil do usuário no DB:', profileError.message, "Detalhes:", profileError);
           toast({ title: "Erro ao Salvar Perfil", description: `Usuário autenticado, mas falha ao salvar perfil: ${profileError.message}. Verifique o console.`, variant: "destructive" });
-          return; 
+          // Consider deleting authData.user here if profile creation is critical and fails, to avoid orphaned auth users.
+          // This requires admin privileges: await supabase.auth.admin.deleteUser(authData.user.id) - typically done in an Edge Function.
+          setIsLoading(false); // Ensure loading is false on profile error
+          return;
         }
-        console.log('NovoUsuarioPage: Perfil do usuário salvo com sucesso na tabela "profiles". Redirecionando...');
-        toast({ title: "Usuário Cadastrado!", description: "Novo usuário adicionado com sucesso." });
+        console.log('NovoUsuarioPage: Perfil do usuário salvo com sucesso na tabela "profiles".');
+        toast({ title: "Usuário Cadastrado!", description: "Novo usuário adicionado com sucesso. Se a confirmação de e-mail estiver ativa, peça para o usuário verificar seu e-mail." });
         navigatedAway = true;
         router.push('/admin/usuarios');
-      } else if (authData.session === null && !authData.user) {
-        console.warn('NovoUsuarioPage: Cadastro no Auth requer confirmação por e-mail. O usuário foi criado, mas a sessão não foi iniciada. Redirecionando para login.');
-        toast({ title: "Cadastro Enviado", description: "Verifique seu e-mail para confirmar o cadastro e ativar sua conta.", duration: 5000 });
+
+      } else if (!authData.user && !authData.session) {
+        // This case usually means email confirmation is required.
+        console.warn('NovoUsuarioPage: Cadastro no Auth requer confirmação por e-mail. O usuário foi criado, mas a sessão não foi iniciada.');
+        toast({ title: "Cadastro Enviado", description: "Verifique o e-mail do novo usuário para confirmar o cadastro e ativar a conta.", duration: 7000 });
         navigatedAway = true;
-        router.push('/login'); 
+        router.push('/admin/usuarios'); // Redirect to user list, admin can see the pending user.
       } else {
-        console.warn('NovoUsuarioPage: auth.signUp sucesso, mas authData.user está nulo e sessão não é nula. Resposta:', authData, "Redirecionando...");
-        toast({ title: "Cadastro Concluído", description: "Verifique o status do usuário." });
+        // Fallback / Unexpected scenario
+        console.warn('NovoUsuarioPage: auth.signUp sucesso, mas authData.user está nulo e sessão não é nula (ou vice-versa). Resposta:', authData);
+        toast({ title: "Cadastro Concluído", description: "Verifique o status do usuário na lista." });
         navigatedAway = true;
         router.push('/admin/usuarios');
       }
@@ -141,8 +148,8 @@ export default function NovoUsuarioPage() {
     } finally {
       console.log("NovoUsuarioPage: handleSubmit finally block. Navigated away:", navigatedAway);
       if (!navigatedAway) {
-         console.log("NovoUsuarioPage: Still on /admin/usuarios/novo, setting isLoading to false.");
-         setIsLoading(false);
+        console.log("NovoUsuarioPage: Still on /admin/usuarios/novo, setting isLoading to false.");
+        setIsLoading(false);
       }
     }
   };
@@ -185,6 +192,7 @@ export default function NovoUsuarioPage() {
                   onChange={handleChange}
                   placeholder="Nome completo do usuário"
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -197,6 +205,7 @@ export default function NovoUsuarioPage() {
                   onChange={handleChange}
                   placeholder="email@exemplo.com"
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -209,8 +218,9 @@ export default function NovoUsuarioPage() {
                   name="cpf"
                   value={formData.cpf}
                   onChange={handleChange}
-                  placeholder="000.000.000-00" 
+                  placeholder="000.000.000-00"
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -221,10 +231,11 @@ export default function NovoUsuarioPage() {
                   value={formData.institution}
                   onChange={handleChange}
                   placeholder="Nome da instituição (opcional)"
+                  disabled={isLoading}
                 />
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="senha">Senha <span className="text-destructive">*</span></Label>
@@ -237,6 +248,7 @@ export default function NovoUsuarioPage() {
                     onChange={handleChange}
                     placeholder="Mínimo 8 caracteres"
                     required
+                    disabled={isLoading}
                   />
                   <Button
                     type="button"
@@ -245,6 +257,7 @@ export default function NovoUsuarioPage() {
                     className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-primary"
                     onClick={toggleShowPassword}
                     aria-label={showPassword ? "Esconder senha" : "Mostrar senha"}
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </Button>
@@ -261,6 +274,7 @@ export default function NovoUsuarioPage() {
                     onChange={handleChange}
                     placeholder="Repita a senha"
                     required
+                    disabled={isLoading}
                   />
                    <Button
                     type="button"
@@ -269,6 +283,7 @@ export default function NovoUsuarioPage() {
                     className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-primary"
                     onClick={toggleShowConfirmPassword}
                     aria-label={showConfirmPassword ? "Esconder senha" : "Mostrar senha"}
+                    disabled={isLoading}
                   >
                     {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </Button>
@@ -278,7 +293,7 @@ export default function NovoUsuarioPage() {
 
             <div className="space-y-2">
               <Label htmlFor="perfil">Perfil/Nível de Acesso <span className="text-destructive">*</span></Label>
-              <Select name="perfil" value={formData.perfil} onValueChange={(value) => handleSelectChange('perfil', value)} required>
+              <Select name="perfil" value={formData.perfil} onValueChange={(value) => handleSelectChange('perfil', value)} required disabled={isLoading}>
                 <SelectTrigger id="perfil">
                   <SelectValue placeholder="Selecione o perfil do usuário" />
                 </SelectTrigger>
@@ -303,5 +318,3 @@ export default function NovoUsuarioPage() {
     </div>
   );
 }
-
-    

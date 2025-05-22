@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { InbmAdminLogo } from '@/components/icons/inbm-admin-logo';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-// import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,7 +19,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  // const { toast } = useToast();
+  const { toast } = useToast();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,7 +28,7 @@ export default function LoginPage() {
 
     if (!supabase) {
       console.error("LoginPage: Supabase client not initialized. Check environment variables.");
-      // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
+      toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
@@ -41,29 +41,17 @@ export default function LoginPage() {
 
     if (error) {
       console.error('LoginPage: Erro no login:', error.message);
-      // toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
+      toast({ title: "Erro no Login", description: error.message, variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
-    if (data.user) {
-        console.log('LoginPage: Usuário autenticado via Supabase:', data.user.email);
-        // toast({ title: "Login bem-sucedido!", description: "Aguarde o redirecionamento..."});
-        // NO LONGER REDIRECTING FROM HERE. Rely on onAuthStateChange in Header.
-        // router.push('/admin/dashboard'); 
-    } else if (data.session) {
-        console.log('LoginPage: Sessão obtida, usuário:', data.session.user.email);
-        // Also rely on onAuthStateChange
-    } else {
-        console.warn('LoginPage: signInWithPassword sucesso, mas sem data.user ou data.session. Resposta:', data);
-        // toast({ title: "Login Concluído", description: "Verificando sessão..."});
-    }
-    
-    // We keep isLoading true here intentionally if login seems successful,
-    // to allow the onAuthStateChange listener in Header to take over.
-    // If there was an error, isLoading is set to false above.
-    // If you want to reset isLoading after a short delay even on success here (e.g., if Header doesn't redirect quickly):
-    // setTimeout(() => setIsLoading(false), 2000); // Example delay
+    // On successful login, the onAuthStateChange listener in Header will handle redirection.
+    // We don't set isLoading to false here to avoid a flash of the login form if redirection is quick.
+    // The component will unmount upon redirection.
+    console.log('LoginPage: signInWithPassword Succeeded. User:', data.user?.email, 'Session:', !!data.session);
+    toast({ title: "Login bem-sucedido!", description: "Redirecionando..."});
+    // No router.push() here; Header component handles redirection based on auth state.
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
@@ -96,6 +84,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="text-base"
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -109,6 +98,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   className="text-base pr-10"
+                  disabled={isLoading}
                 />
                 <Button
                   type="button"
@@ -117,6 +107,7 @@ export default function LoginPage() {
                   className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-primary"
                   onClick={toggleShowPassword}
                   aria-label={showPassword ? "Esconder senha" : "Mostrar senha"}
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
@@ -133,14 +124,17 @@ export default function LoginPage() {
               Esqueceu sua senha?
             </Button>
           </Link>
-          <p className="text-sm text-muted-foreground">
-            Não tem uma conta?{' '}
-            <Link href="/cadastro" passHref>
-              <span className="font-medium text-primary hover:underline cursor-pointer">
-                Cadastre-se
-              </span>
-            </Link>
-          </p>
+          {/* 
+            TODO: A página de cadastro público pode ser reativada ou removida se o cadastro for apenas via admin.
+            <p className="text-sm text-muted-foreground">
+              Não tem uma conta?{' '}
+              <Link href="/cadastro" passHref>
+                <span className="font-medium text-primary hover:underline cursor-pointer">
+                  Cadastre-se
+                </span>
+              </Link>
+            </p>
+          */}
         </CardFooter>
       </Card>
     </div>

@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { InbmAdminLogo } from '@/components/icons/inbm-admin-logo';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-// import { useToast } from "@/hooks/use-toast"; 
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminAuthPage() {
   const [email, setEmail] = useState('');
@@ -19,17 +19,17 @@ export default function AdminAuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  // const { toast } = useToast();
+  const { toast } = useToast();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setIsLoading(true); // Set loading true at the start
+    setIsLoading(true);
     console.log('AdminAuthPage: Admin login attempt with:', { email });
 
     if (!supabase) {
       console.error("AdminAuthPage: Supabase client not initialized. Check environment variables.");
-      // toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
-      setIsLoading(false); // Set loading false on this specific error
+      toast({ title: "Erro de Configuração", description: "Não foi possível conectar ao serviço de autenticação.", variant: "destructive" });
+      setIsLoading(false);
       return;
     }
 
@@ -41,15 +41,15 @@ export default function AdminAuthPage() {
 
     if (error) {
       console.error('AdminAuthPage: Erro no login administrativo:', error.message);
-      // toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
-      setIsLoading(false); // Only set loading false if there's an auth error
+      toast({ title: "Erro no Login Administrativo", description: error.message, variant: "destructive" });
+      setIsLoading(false);
       return;
     }
     
-    // If successful, DO NOT set isLoading to false here.
-    // Let the Header's onAuthStateChange and redirection logic handle unmounting this page.
+    // On successful login, the onAuthStateChange listener in Header will handle redirection.
     console.log('AdminAuthPage: signInWithPassword Succeeded. User:', data.user?.email, 'Session:', !!data.session);
-    // No router.push here.
+    toast({ title: "Login Administrativo bem-sucedido!", description: "Redirecionando..."});
+    // No router.push() here; Header component handles redirection based on auth state.
   };
 
   const toggleShowPassword = () => setShowPassword(!showPassword);
@@ -82,6 +82,7 @@ export default function AdminAuthPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="text-base"
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -95,6 +96,7 @@ export default function AdminAuthPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   className="text-base pr-10"
+                  disabled={isLoading}
                 />
                 <Button
                   type="button"
@@ -103,6 +105,7 @@ export default function AdminAuthPage() {
                   className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-primary"
                   onClick={toggleShowPassword}
                   aria-label={showPassword ? "Esconder senha" : "Mostrar senha"}
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
