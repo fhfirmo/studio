@@ -17,15 +17,16 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 const mainAdminNavItems: { href: string; label: string }[] = [
   { href: '/admin/dashboard', label: 'Dashboard' },
   { href: '/admin/clientes', label: 'Pessoas Físicas' },
+  { href: '/admin/organizacoes', label: 'Organizações' },
   { href: '/admin/veiculos', label: 'Veículos' },
   { href: '/admin/seguros', label: 'Seguros' },
   { href: '/admin/documentos', label: 'Documentos' },
-  { href: '/admin/organizacoes', label: 'Organizações' },
   { href: '/admin/relatorios', label: 'Relatórios' },
 ];
 
 const userManagementNavItem = { href: '/admin/usuarios', label: 'Usuários' };
 const configurationsNavItem = { href: '/admin/configuracoes', label: 'Configurações' };
+
 
 interface UserProfile {
   id: string;
@@ -35,7 +36,7 @@ interface UserProfile {
 
 export function Header() {
   const [isMounted, setIsMounted] = useState(false);
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(); // isMobile will be false on server and true/false on client after hydration
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -132,17 +133,30 @@ export function Header() {
 
     const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
     const isAdminRoute = pathname.startsWith('/admin/');
+    const isPublicPage = pathname === '/' || pathname === '/quem-somos' || pathname === '/servicos' || pathname === '/contato';
     const allowedAdminRoles = ['admin', 'supervisor', 'operator'];
 
     if (!currentUser && isAdminRoute && !isLoginPage) {
-      console.log('Header (Redirect Effect): Redirecionando para /login - Usuário não autenticado em rota administrativa.', pathname);
+      console.log('Header (Redirect Effect): Redirecionando para /login - Usuário não autenticado em rota administrativa:', pathname);
       router.push('/login');
       return;
     }
     
     if (currentUser && isLoginPage) {
-      console.log('Header (Redirect Effect): Usuário autenticado em página de login. Redirecionando para /.', pathname);
-      router.push('/');
+      console.log('Header (Redirect Effect): Usuário autenticado em página de login. Pathname:', pathname);
+      if (pathname.startsWith('/admin-auth') && userProfile && allowedAdminRoles.includes(userProfile.role || '')) {
+         console.log('Header (Redirect Effect): Redirecionando de /admin-auth para /admin/usuarios');
+         router.push('/admin/usuarios');
+      } else if (userProfile && userProfile.role === 'client') {
+        console.log('Header (Redirect Effect): Cliente redirecionando da página de login para /');
+        router.push('/');
+      } else if (userProfile && allowedAdminRoles.includes(userProfile.role || '')) {
+        console.log('Header (Redirect Effect): Admin/Supervisor/Operator redirecionando da página de login para /admin/dashboard');
+        router.push('/admin/dashboard');
+      } else {
+        console.log('Header (Redirect Effect): Usuário logado na página de login sem role definido ou não admin/client, redirecionando para /');
+        router.push('/');
+      }
       return;
     }
 
@@ -165,22 +179,22 @@ export function Header() {
 
 
   let itemsToDisplay: { href: string; label: string }[] = [];
-  const isPublicLogin = pathname === '/login';
-  const isAdminLogin = pathname === '/admin-auth';
+  const isPublicLogin = pathname === '/login' || pathname === '/admin-auth';
   const isHomepage = pathname === '/';
-  const isConfigOrUserPage = pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes');
+  const isPublicContentPage = pathname === '/quem-somos' || pathname === '/servicos' || pathname === '/contato';
 
-  if (currentUser && !isPublicLogin && !isAdminLogin && !isHomepage) {
-    if (isConfigOrUserPage) {
+  const showNavForAdmin = currentUser && !isPublicLogin && !isHomepage && !isPublicContentPage && (userProfile?.role === 'admin' || userProfile?.role === 'supervisor' || userProfile?.role === 'operator');
+
+  if (showNavForAdmin) {
+    if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
       itemsToDisplay = [userManagementNavItem, configurationsNavItem];
     } else if (pathname.startsWith('/admin/')) {
       itemsToDisplay = mainAdminNavItems;
     }
   }
 
-
-  const showLogoutButton = !!currentUser && !isPublicLogin && !isAdminLogin && !isHomepage;
-  const showUserInfo = !!currentUser && !isPublicLogin && !isAdminLogin && !isHomepage;
+  const showLogoutButton = !!currentUser && !isPublicLogin && !isHomepage && !isPublicContentPage;
+  const showUserInfo = !!currentUser && !isPublicLogin && !isHomepage && !isPublicContentPage;
   const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || showUserInfo;
 
   const handleLogout = () => {
@@ -203,7 +217,8 @@ export function Header() {
     } else {
       console.log('Header (confirmLogout): Logout bem-sucedido. Redirecionando para /');
       toast({ title: "Logout Efetuado", description: "Você foi desconectado."});
-      // onAuthStateChange will handle clearing currentUser and userProfile
+      setCurrentUser(null); // Explicitly clear states
+      setUserProfile(null);
       router.push('/'); 
     }
   };
@@ -217,10 +232,8 @@ export function Header() {
               <InbmBrandLogo className="h-8 md:h-10 w-auto" />
             </div>
           </Link>
-          <div className="hidden md:flex space-x-4 items-center">
-            <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
-          </div>
-          <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
+          {/* Simplified skeleton to avoid conditional rendering differences */}
+          <div className="h-8 w-20 bg-muted rounded animate-pulse"></div> 
         </div>
       </header>
     );
@@ -236,7 +249,7 @@ export function Header() {
             </div>
           </Link>
 
-          {authLoading && !isMobile && !isPublicLogin && !isAdminLogin && !isHomepage && (
+          {authLoading && !isMobile && !isPublicLogin && !isHomepage && !isPublicContentPage && (
               <div className="hidden md:flex text-sm text-muted-foreground">Verificando autenticação...</div>
           )}
 
