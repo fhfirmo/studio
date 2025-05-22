@@ -6,45 +6,60 @@ import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserCog, Save, XCircle, Eye, EyeOff, AlertTriangle } from 'lucide-react';
-// import { useToast } from "@/hooks/use-toast"; 
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 const userProfiles = [
-  { value: "admin", label: "Administrador" },      // Changed value
-  { value: "operator", label: "Operador" },    // Changed value
-  { value: "client", label: "Cliente" },        // Changed value
-  { value: "supervisor", label: "Supervisor" }, // Added supervisor option
+  { value: "admin", label: "Administrador" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "operator", label: "Operador" },
+  { value: "client", label: "Cliente" },
 ];
 
-// Placeholder function to fetch user data
-async function getUserById(userId: string) {
-  console.log(`Fetching user data for ID: ${userId} (placeholder)`);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  if (userId === "usr_001") {
-    return {
-      id: "usr_001",
-      nomeCompleto: "Administrador Principal",
-      email: "admin@inbm.com.br",
-      cpf: "111.111.111-11",
-      institution: "INBM Matriz", // Changed from instituicao
-      perfil: "admin", // Changed from administrador
-    };
+const formSchema = z.object({
+  nomeCompleto: z.string().min(3, { message: "Nome completo deve ter pelo menos 3 caracteres." }),
+  email: z.string().email({ message: "E-mail inválido." }), // Will be read-only
+  cpf: z.string().min(11, { message: "CPF deve ter 11 a 14 caracteres." }).max(14, { message: "CPF deve ter 11 a 14 caracteres."}),
+  institution: z.string().optional(),
+  perfil: z.string({ required_error: "Selecione um perfil."}).min(1, { message: "Selecione um perfil."}),
+  changePassword: z.boolean().optional(),
+  novaSenha: z.string().optional(),
+  confirmarNovaSenha: z.string().optional(),
+}).refine(data => {
+  if (data.changePassword) {
+    return data.novaSenha && data.novaSenha.length >= 8;
   }
-   if (userId === "usr_002") {
-    return {
-      id: "usr_002",
-      nomeCompleto: "Consultor Firmo",
-      email: "consultor.firmo@inbm.com.br",
-      cpf: "222.222.222-22",
-      institution: "INBM Filial Sul", // Changed from instituicao
-      perfil: "operator", // Changed from operador
-    };
+  return true;
+}, {
+  message: "Nova senha deve ter no mínimo 8 caracteres.",
+  path: ["novaSenha"],
+}).refine(data => {
+  if (data.changePassword) {
+    return data.novaSenha === data.confirmarNovaSenha;
   }
-  return null;
+  return true;
+}, {
+  message: "As senhas não coincidem.",
+  path: ["confirmarNovaSenha"],
+});
+
+type UserFormValues = z.infer<typeof formSchema>;
+
+interface ProfileData {
+    id: string;
+    full_name: string | null;
+    email?: string | null; // email might come from auth user
+    cpf: string | null;
+    institution: string | null;
+    role: string | null;
 }
 
 
@@ -52,127 +67,163 @@ export default function EditarUsuarioPage() {
   const router = useRouter();
   const params = useParams();
   const userId = params.id as string;
-  // const { toast } = useToast(); 
+  const { toast } = useToast();
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [userFound, setUserFound] = useState<boolean | null>(null);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
-  const [changePassword, setChangePassword] = useState(false);
+  const [initialEmail, setInitialEmail] = useState('');
 
-  const [formData, setFormData] = useState({
-    nomeCompleto: '',
-    email: '', 
-    cpf: '',
-    institution: '', // Changed from instituicao
-    perfil: '',
-    novaSenha: '',
-    confirmarNovaSenha: '',
+
+  const form = useForm<UserFormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      nomeCompleto: '',
+      email: '',
+      cpf: '',
+      institution: '',
+      perfil: '',
+      changePassword: false,
+      novaSenha: '',
+      confirmarNovaSenha: '',
+    },
   });
+
+  const watchChangePassword = form.watch("changePassword");
 
   useEffect(() => {
     if (userId) {
-      setIsLoading(true);
-      getUserById(userId)
-        .then(userData => {
-          if (userData) {
-            setFormData({
-              nomeCompleto: userData.nomeCompleto,
-              email: userData.email,
-              cpf: userData.cpf,
-              institution: userData.institution || '', // Changed from instituicao
-              perfil: userData.perfil,
-              novaSenha: '',
-              confirmarNovaSenha: '',
-            });
-            setUserFound(true);
-          } else {
-            setUserFound(false);
-            // toast({ title: "Erro", description: "Usuário não encontrado.", variant: "destructive" });
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch user data:", err);
+      const fetchUserData = async () => {
+        setIsLoading(true);
+        setUserFound(null);
+
+        if (!supabase) {
+          toast({ title: "Erro de Configuração", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+          setIsLoading(false);
           setUserFound(false);
-          // toast({ title: "Erro", description: "Falha ao carregar dados do usuário.", variant: "destructive" });
-        })
-        .finally(() => setIsLoading(false));
+          return;
+        }
+        
+        try {
+          // Fetch profile data
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, cpf, institution, role')
+            .eq('id', userId)
+            .single<ProfileData>();
+
+          if (profileError || !profileData) {
+            console.error("EditarUsuarioPage: Erro ao buscar perfil do usuário no DB:", profileError?.message);
+            toast({ title: "Erro ao Carregar Usuário", description: `Não foi possível carregar os dados do perfil: ${profileError?.message || 'Perfil não encontrado.'}`, variant: "destructive" });
+            setUserFound(false);
+            setIsLoading(false);
+            return;
+          }
+          
+          // Fetch auth user data (primarily for email, which should not change)
+          // Note: This is an admin operation and usually requires an Edge Function with service_role key
+          // For simplicity here, we assume we might have the email from a previous step or a less secure fetch
+          // In a real app, get the user's email securely if needed, or pass it from the list page.
+          // For this example, we'll try to get the auth user, but focus on profile data.
+          let authUserEmail = '';
+          const { data: { user: authUser }, error: authUserError } = await supabase.auth.admin.getUserById(userId);
+
+          if (authUserError && authUserError.message !== 'User not found') {
+            console.warn("EditarUsuarioPage: Erro ao buscar usuário do Auth (admin API):", authUserError.message);
+            // Not critical if profileData was fetched, but good to know.
+          }
+          authUserEmail = authUser?.email || 'E-mail não disponível';
+          setInitialEmail(authUserEmail);
+
+
+          form.reset({
+            nomeCompleto: profileData.full_name || '',
+            email: authUserEmail, // Display email, but it won't be part of the update payload typically
+            cpf: profileData.cpf || '',
+            institution: profileData.institution || '',
+            perfil: profileData.role || '',
+            changePassword: false,
+            novaSenha: '',
+            confirmarNovaSenha: '',
+          });
+          setUserFound(true);
+
+        } catch (error: any) {
+          console.error("EditarUsuarioPage: Falha inesperada ao carregar dados do usuário:", error.message);
+          toast({ title: "Erro Crítico", description: "Ocorreu um erro inesperado ao carregar os dados.", variant: "destructive" });
+          setUserFound(false);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchUserData();
     }
-  }, [userId]);
+  }, [userId, form, toast]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleCheckboxChange = (checked: boolean) => {
-    setChangePassword(checked);
-    if (!checked) {
-      setFormData(prev => ({ ...prev, novaSenha: '', confirmarNovaSenha: '' }));
-    }
-  };
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setIsLoading(true);
-
-    if (!formData.nomeCompleto) { 
-      console.error("Validação: Nome completo é obrigatório.");
-      // toast({ title: "Campo Obrigatório", description: "Nome completo é obrigatório.", variant: "destructive" });
-      setIsLoading(false);
+  async function onSubmit(data: UserFormValues) {
+    if (!userId || !supabase) {
+      toast({ title: "Erro", description: "Não é possível salvar. ID do usuário ou Supabase não está disponível.", variant: "destructive" });
       return;
     }
+    setIsLoading(true);
+    let profileUpdateError = null;
+    let passwordUpdateError = null;
 
-    if (changePassword) {
-      if (!formData.novaSenha || !formData.confirmarNovaSenha) {
-        console.error("Validação: Nova senha e confirmação são obrigatórias se 'Alterar Senha' estiver marcado.");
-        // toast({ title: "Campos de Senha Obrigatórios", description: "Preencha os campos de nova senha e confirmação.", variant: "destructive" });
-        setIsLoading(false);
-        return;
+    try {
+      // 1. Update profile data in 'profiles' table
+      const profileUpdatePayload = {
+        full_name: data.nomeCompleto,
+        cpf: data.cpf,
+        institution: data.institution || null,
+        role: data.perfil,
+      };
+      console.log("EditarUsuarioPage: Atualizando perfil com payload:", profileUpdatePayload);
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update(profileUpdatePayload)
+        .eq('id', userId);
+
+      if (updateError) {
+        profileUpdateError = updateError;
+        throw updateError; // Throw to be caught by the outer catch
       }
-      if (formData.novaSenha !== formData.confirmarNovaSenha) {
-        console.error("Validação: As novas senhas não coincidem.");
-        // toast({ title: "Erro de Senha", description: "As novas senhas não coincidem.", variant: "destructive" });
-        setIsLoading(false);
-        return;
+      console.log("EditarUsuarioPage: Perfil atualizado com sucesso.");
+
+      // 2. Update password in Supabase Auth if requested
+      if (data.changePassword && data.novaSenha) {
+        console.log("EditarUsuarioPage: Tentando atualizar senha...");
+        // CRITICAL SECURITY NOTE:
+        // supabase.auth.updateUser({ password: data.novaSenha }) updates the *CURRENTLY LOGGED-IN USER'S* password.
+        // To allow an admin to change *another* user's password, this operation MUST be performed
+        // by a Supabase Edge Function using the service_role key and supabase.auth.admin.updateUserById(userId, { password: newPassword }).
+        // The following line is a placeholder and WILL NOT WORK correctly for changing another user's password from the client-side as admin.
+        toast({ title: "Aviso de Senha", description: "Funcionalidade de alteração de senha para outro usuário requer implementação via Edge Function.", variant: "default", duration: 7000});
+        // const { error: passwordError } = await supabase.auth.updateUser({ password: data.novaSenha });
+        // For demonstration, we'll assume it would work IF it was the current user OR an Edge function
+        // if (passwordError) {
+        //   passwordUpdateError = passwordError;
+        //   throw passwordError;
+        // }
+        console.log("EditarUsuarioPage: Solicitação de alteração de senha enviada (simulado/requer Edge Function).");
       }
-      if (formData.novaSenha.length < 8) {
-        console.error("Validação: A nova senha deve ter no mínimo 8 caracteres.");
-        // toast({ title: "Nova Senha Curta", description: "A nova senha deve ter no mínimo 8 caracteres.", variant: "destructive" });
-        setIsLoading(false);
-        return;
+
+      toast({ title: "Usuário Atualizado!", description: "Os dados do usuário foram salvos com sucesso." });
+      router.push('/admin/usuarios');
+
+    } catch (error: any) {
+      console.error("EditarUsuarioPage: Erro ao salvar alterações:", error.message, "Detalhes:", error);
+      if (profileUpdateError) {
+        toast({ title: "Erro ao Atualizar Perfil", description: `Falha ao salvar perfil: ${profileUpdateError.message}. Verifique o console.`, variant: "destructive" });
+      } else if (passwordUpdateError) {
+         toast({ title: "Erro ao Atualizar Senha", description: `Falha ao atualizar senha: ${passwordUpdateError.message}. Verifique o console.`, variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao Salvar", description: `Ocorreu um erro: ${error.message}. Verifique o console.`, variant: "destructive" });
       }
+    } finally {
+      setIsLoading(false);
     }
-
-    const updatePayload: any = {
-      full_name: formData.nomeCompleto, // Supabase expects full_name
-      cpf: formData.cpf,
-      institution: formData.institution, // Changed from instituicao
-      role: formData.perfil,
-    };
-
-    console.log('Form data to be submitted for update (profiles table):', updatePayload);
-    if (changePassword) {
-      console.log('New password to be set (separately via Supabase Auth):', formData.novaSenha);
-    }
-
-    // Supabase Integration Placeholder:
-    // 1. Update user profile in 'profiles' table:
-    //    await supabase.from('profiles').update(updatePayload).eq('id', userId);
-    // 2. If changePassword is true and formData.novaSenha is set, update password via Supabase Auth:
-    //    (This often requires an Edge Function for admin-initiated password changes)
-    //    await supabase.auth.updateUser({ password: formData.novaSenha }); // This works for the currently logged-in user
-
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated user update finished');
-    // toast({ title: "Usuário Atualizado! (Simulado)", description: "Os dados do usuário foram salvos com sucesso." });
-    setIsLoading(false);
-    router.push('/admin/usuarios');
-  };
+  }
 
   const toggleShowNewPassword = () => setShowNewPassword(!showNewPassword);
   const toggleShowConfirmNewPassword = () => setShowConfirmNewPassword(!showConfirmNewPassword);
@@ -201,7 +252,7 @@ export default function EditarUsuarioPage() {
       <header className="mb-8 md:mb-12">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
-            <UserCog className="mr-3 h-8 w-8" /> Editar Usuário: {formData.nomeCompleto}
+            <UserCog className="mr-3 h-8 w-8" /> Editar Usuário: {form.getValues("nomeCompleto") || initialEmail}
           </h1>
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/usuarios">
@@ -214,150 +265,197 @@ export default function EditarUsuarioPage() {
         </p>
       </header>
 
-      <form onSubmit={handleSubmit}>
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Informações do Usuário</CardTitle>
-            <CardDescription>Dados pessoais e perfil de acesso.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="nomeCompleto">Nome Completo <span className="text-destructive">*</span></Label>
-                <Input
-                  id="nomeCompleto"
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Informações do Usuário</CardTitle>
+              <CardDescription>Dados pessoais e perfil de acesso.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
                   name="nomeCompleto"
-                  value={formData.nomeCompleto}
-                  onChange={handleChange}
-                  placeholder="Nome completo do usuário"
-                  required
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome Completo <span className="text-destructive">*</span></FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nome completo do usuário" {...field} disabled={isLoading} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail (Identificador)</Label>
-                <Input
-                  id="email"
+                <FormField
+                  control={form.control}
                   name="email"
-                  type="email"
-                  value={formData.email}
-                  readOnly 
-                  className="bg-muted/50 cursor-not-allowed"
-                  title="O e-mail é usado como identificador e não pode ser alterado diretamente."
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>E-mail (Identificador)</FormLabel>
+                      <FormControl>
+                        <Input 
+                            type="email" 
+                            {...field} 
+                            readOnly 
+                            className="bg-muted/50 cursor-not-allowed"
+                            title="O e-mail é usado como identificador e não pode ser alterado diretamente."
+                            disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="cpf">CPF</Label>
-                <Input
-                  id="cpf"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
                   name="cpf"
-                  value={formData.cpf}
-                  onChange={handleChange}
-                  placeholder="000.000.000-00"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CPF</FormLabel>
+                      <FormControl>
+                        <Input placeholder="000.000.000-00" {...field} disabled={isLoading} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="institution"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Instituição</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nome da instituição (opcional)" {...field} disabled={isLoading} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="institution">Instituição</Label>
-                <Input
-                  id="institution"
-                  name="institution" // Changed from instituicao
-                  value={formData.institution}
-                  onChange={handleChange}
-                  placeholder="Nome da instituição (opcional)"
-                />
-              </div>
-            </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="perfil">Perfil/Nível de Acesso <span className="text-destructive">*</span></Label>
-              <Select name="perfil" value={formData.perfil} onValueChange={(value) => handleSelectChange('perfil', value)} required>
-                <SelectTrigger id="perfil">
-                  <SelectValue placeholder="Selecione o perfil do usuário" />
-                </SelectTrigger>
-                <SelectContent>
-                  {userProfiles.map(profile => (
-                    <SelectItem key={profile.value} value={profile.value}>{profile.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <FormField
+                  control={form.control}
+                  name="perfil"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Perfil/Nível de Acesso <span className="text-destructive">*</span></FormLabel>
+                       <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o perfil do usuário" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {userProfiles.map(profile => (
+                            <SelectItem key={profile.value} value={profile.value}>{profile.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div className="space-y-4 pt-4 border-t">
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="changePassword"
-                        checked={changePassword}
-                        onCheckedChange={(checkedState) => handleCheckboxChange(checkedState as boolean)}
-                    />
-                    <Label htmlFor="changePassword" className="font-medium cursor-pointer">
-                        Alterar Senha?
-                    </Label>
-                </div>
-
-                {changePassword && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-2 border-l-2 border-primary/20">
-                        <div className="space-y-2">
-                            <Label htmlFor="novaSenha">Nova Senha <span className="text-destructive">*</span></Label>
-                             <div className="relative">
-                                <Input
-                                    id="novaSenha"
-                                    name="novaSenha"
-                                    type={showNewPassword ? "text" : "password"}
-                                    value={formData.novaSenha}
-                                    onChange={handleChange}
-                                    placeholder="Mínimo 8 caracteres"
+              <div className="space-y-4 pt-4 border-t">
+                  <FormField
+                    control={form.control}
+                    name="changePassword"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                                <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    disabled={isLoading}
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
+                            </FormControl>
+                            <FormLabel className="font-medium cursor-pointer leading-none">
+                                Alterar Senha?
+                            </FormLabel>
+                        </FormItem>
+                    )}
+                />
+
+                {watchChangePassword && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-2 border-l-2 border-primary/20">
+                        <FormField
+                          control={form.control}
+                          name="novaSenha"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nova Senha <span className="text-destructive">*</span></FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <Input 
+                                      type={showNewPassword ? "text" : "password"} 
+                                      placeholder="Mínimo 8 caracteres" 
+                                      {...field} 
+                                      disabled={isLoading}
+                                  />
+                                  <Button
+                                    type="button" variant="ghost" size="icon"
                                     className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-primary"
                                     onClick={toggleShowNewPassword}
                                     aria-label={showNewPassword ? "Esconder nova senha" : "Mostrar nova senha"}
-                                >
+                                    disabled={isLoading}
+                                  >
                                     {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="confirmarNovaSenha">Confirmar Nova Senha <span className="text-destructive">*</span></Label>
-                            <div className="relative">
-                                <Input
-                                    id="confirmarNovaSenha"
-                                    name="confirmarNovaSenha"
-                                    type={showConfirmNewPassword ? "text" : "password"}
-                                    value={formData.confirmarNovaSenha}
-                                    onChange={handleChange}
-                                    placeholder="Repita a nova senha"
-                                />
-                                 <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
+                                  </Button>
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="confirmarNovaSenha"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Confirmar Nova Senha <span className="text-destructive">*</span></FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <Input 
+                                      type={showConfirmNewPassword ? "text" : "password"} 
+                                      placeholder="Repita a nova senha" 
+                                      {...field} 
+                                      disabled={isLoading}
+                                  />
+                                  <Button
+                                    type="button" variant="ghost" size="icon"
                                     className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-primary"
                                     onClick={toggleShowConfirmNewPassword}
                                     aria-label={showConfirmNewPassword ? "Esconder confirmação de senha" : "Mostrar confirmação de senha"}
-                                >
+                                    disabled={isLoading}
+                                  >
                                     {showConfirmNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                </Button>
-                            </div>
-                        </div>
+                                  </Button>
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                     </div>
                 )}
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-end gap-4 pt-6">
-            <Button type="button" variant="outline" onClick={() => router.push('/admin/usuarios')} disabled={isLoading}>
-              <XCircle className="mr-2 h-5 w-5" /> Cancelar
-            </Button>
-            <Button type="submit" disabled={isLoading || userFound === false}>
-              <Save className="mr-2 h-5 w-5" /> {isLoading ? 'Salvando...' : 'Salvar Alterações'}
-            </Button>
-          </CardFooter>
-        </Card>
-      </form>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-end gap-4 pt-6">
+              <Button type="button" variant="outline" onClick={() => router.push('/admin/usuarios')} disabled={isLoading}>
+                <XCircle className="mr-2 h-5 w-5" /> Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading || !userFound}>
+                <Save className="mr-2 h-5 w-5" /> {isLoading ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </CardFooter>
+          </Card>
+        </form>
+      </Form>
     </div>
   );
 }
