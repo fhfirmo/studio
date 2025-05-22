@@ -42,7 +42,7 @@ export function Header() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true); // Initialize as true
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { toast } = useToast();
 
@@ -56,9 +56,9 @@ export function Header() {
       return;
     }
 
-    const fetchUserProfile = async (user: SupabaseUser) => {
+    const fetchUserProfile = async (user: SupabaseUser | null): Promise<UserProfile | null> => {
+      if (!user) return null;
       console.log("Header: Attempting to fetch profile for user ID:", user.id);
-      setAuthLoading(true); // Set loading true before fetch
       try {
         const { data: profile, error } = await supabase
           .from('profiles')
@@ -67,41 +67,35 @@ export function Header() {
           .single();
 
         if (error) {
-          console.error('Header: Erro ao buscar perfil do usuário:', error.message, error);
-          setUserProfile(null);
-        } else if (profile) {
-          setUserProfile(profile as UserProfile);
-          console.log('Header: Perfil do usuário carregado:', profile);
-        } else {
-          console.warn('Header: Perfil não encontrado para o usuário ID:', user.id);
-          setUserProfile(null);
+          console.error('Header: Erro ao buscar perfil do usuário:', error.message);
+          return null;
         }
+        if (profile) {
+          console.log('Header: Perfil do usuário carregado:', profile);
+          return profile as UserProfile;
+        }
+        console.warn('Header: Perfil não encontrado para o usuário ID:', user.id);
+        return null;
       } catch (e: any) {
         console.error('Header: Exceção ao buscar perfil:', e.message);
-        setUserProfile(null);
-      } finally {
-        // setAuthLoading(false); // AuthLoading should be set false by the calling function (handleAuthStateChange)
+        return null;
       }
     };
-
+    
     const handleAuthStateChange = async (event: string, session: Session | null) => {
       console.log("Header: Evento onAuthStateChange recebido:", event, "Session user:", session?.user?.email);
       setAuthLoading(true);
-      setCurrentUser(session?.user ?? null);
-
-      if (session?.user) {
-        await fetchUserProfile(session.user);
-      } else {
-        setUserProfile(null);
-        console.log('Header: Usuário deslogado via listener ou sessão expirada.');
-      }
-      setAuthLoading(false);
+      const user = session?.user ?? null;
+      setCurrentUser(user);
+      const profile = await fetchUserProfile(user);
+      setUserProfile(profile);
+      setAuthLoading(false); 
     };
     
     const checkInitialSession = async () => {
       console.log("Header: Verificando sessão inicial...");
       setAuthLoading(true);
-      if (!supabase) { // Double check supabase client
+      if (!supabase) {
         console.warn("Header (checkInitialSession): Supabase client not available.");
         setAuthLoading(false);
         return;
@@ -110,12 +104,10 @@ export function Header() {
       
       if (sessionError) {
         console.error("Header: Erro ao obter sessão inicial:", sessionError.message);
-        setCurrentUser(null);
-        setUserProfile(null);
-        setAuthLoading(false);
-        return;
       }
-      await handleAuthStateChange(session ? 'INITIAL_SESSION_CHECK' : 'NO_INITIAL_SESSION_CHECK', session);
+      // Call handleAuthStateChange to process the session (or lack thereof) and fetch profile
+      await handleAuthStateChange(session ? 'INITIAL_SESSION_CHECK_SUCCESS' : 'INITIAL_SESSION_CHECK_NO_SESSION', session);
+      // setAuthLoading(false) is handled within handleAuthStateChange
     };
 
     checkInitialSession();
@@ -126,7 +118,7 @@ export function Header() {
       console.log("Header: Removendo listener de autenticação.");
       authListener?.subscription.unsubscribe();
     };
-  }, []);
+  }, []); // Empty dependency array, runs once on mount
 
 
   useEffect(() => {
@@ -139,29 +131,27 @@ export function Header() {
     const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
     const isAdminRoute = pathname.startsWith('/admin/');
 
+    if (currentUser && isLoginPage) {
+      console.log('Header (Redirect Effect): Usuário autenticado em página de login. Redirecionando para / (main page).');
+      router.push('/');
+      return; 
+    }
+    
     if (!currentUser && isAdminRoute && !isLoginPage) {
-      console.log('Header (Redirect Effect): Redirecionando para login - Usuário não autenticado em rota administrativa. Pathname:', pathname);
+      console.log('Header (Redirect Effect): Usuário não autenticado em rota administrativa. Redirecionando para /login.');
       router.push('/login');
       return;
     }
+
+    // Optional: Further role-based redirection logic if needed for specific admin sub-pages
+    // For example, if a 'client' role tries to access '/admin/usuarios':
+    // if (currentUser && userProfile && userProfile.role === 'client' && pathname.startsWith('/admin/usuarios')) {
+    //   console.log('Header (Redirect Effect): Usuário "client" tentando acessar /admin/usuarios. Redirecionando para /.');
+    //   toast({ title: "Acesso Negado", description: "Você não tem permissão para acessar esta área.", variant: "destructive" });
+    //   router.push('/');
+    //   return;
+    // }
     
-    if (currentUser && isLoginPage) {
-      console.log('Header (Redirect Effect): Usuário autenticado em página de login. Pathname:', pathname);
-      if (userProfile?.role === 'admin' || userProfile?.role === 'supervisor' || userProfile?.role === 'operator') {
-        console.log('Header (Redirect Effect): Redirecionando admin/supervisor/operator de página de login para /admin/dashboard.');
-        router.push('/admin/dashboard');
-      } else if (userProfile?.role === 'client') {
-        console.log('Header (Redirect Effect): Redirecionando client de página de login para /.');
-        toast({ title: "Acesso Cliente", description: "Área do cliente em desenvolvimento. Redirecionando para Home."});
-        router.push('/'); 
-      } else {
-        console.log('Header (Redirect Effect): Redirecionando usuário com perfil desconhecido/nulo de página de login para /.');
-        // This case can happen if profile is still loading or role is not set
-        // For safety, redirect to home or a generic dashboard if user is authenticated but role isn't clear for admin areas
-        router.push('/');
-      }
-      return;
-    }
     console.log("Header (Redirect Effect): Nenhuma condição de redirecionamento principal atendida.");
 
   }, [authLoading, currentUser, userProfile, pathname, router, toast]);
@@ -170,9 +160,9 @@ export function Header() {
   let itemsToDisplay: { href: string; label: string }[] = [];
   const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
   const isHomePage = pathname === '/';
-  const isNonAdminPublicPage = pathname === '/contato' || pathname === '/servicos' || pathname === '/quem-somos' || pathname.startsWith('/cliente/');
-
-  if (currentUser && !isLoginPage && !isHomePage && !isNonAdminPublicPage) {
+  
+  // Determine which nav items to show based on route and user role (if needed in future)
+  if (currentUser && !isLoginPage && !isHomePage) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
       itemsToDisplay = adminAreaSpecialNavItems;
     } else if (pathname.startsWith('/admin/')) {
@@ -180,13 +170,14 @@ export function Header() {
     }
   }
 
+
   const showLogoutButton = !!currentUser && !isLoginPage;
   const showUserInfo = !!currentUser && !isLoginPage;
   const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || showUserInfo;
 
   const handleLogout = () => {
     console.log('Header: Botão Logout clicado. Exibindo modal de confirmação.');
-    setShowLogoutConfirm(true); // Only show the confirmation dialog
+    setShowLogoutConfirm(true);
   };
 
   const confirmLogout = async () => {
@@ -220,9 +211,6 @@ export function Header() {
           </Link>
           <div className="hidden md:flex space-x-4 items-center">
             <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
-            <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
-            <div className="h-5 w-20 bg-muted rounded animate-pulse"></div>
-            <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
           </div>
           <div className="h-8 w-8 bg-muted rounded-md animate-pulse md:hidden"></div>
         </div>
@@ -240,7 +228,7 @@ export function Header() {
             </div>
           </Link>
 
-          {authLoading && !isMobile && !isLoginPage && !isHomePage && !isNonAdminPublicPage && (
+          {authLoading && !isMobile && !isLoginPage && !isHomePage && (
               <div className="hidden md:flex text-sm text-muted-foreground">Verificando autenticação...</div>
           )}
 
@@ -347,7 +335,6 @@ export function Header() {
         </div>
       </header>
 
-      {/* Logout Confirmation Dialog */}
       <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
