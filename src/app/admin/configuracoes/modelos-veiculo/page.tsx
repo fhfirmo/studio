@@ -1,8 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, type FormEvent } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
 import {
@@ -28,29 +26,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, Settings, CarIcon } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast";
+import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, CarIcon } from "lucide-react";
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
 interface ModeloVeiculo {
-  id: string;
+  id: number; // Corresponds to id_modelo
   marca: string;
   modelo: string;
-  versao: string;
+  versao: string | null;
 }
 
-const initialModelosVeiculo: ModeloVeiculo[] = [
-  { id: "mod_001", marca: "Fiat", modelo: "Uno Mille", versao: "Fire 1.0" },
-  { id: "mod_002", marca: "Volkswagen", modelo: "Gol G5", versao: "1.6 Power" },
-  { id: "mod_003", marca: "Chevrolet", modelo: "Onix Plus", versao: "LTZ 1.0 Turbo" },
-  { id: "mod_004", marca: "Toyota", modelo: "Hilux SW4", versao: "SRX Diamond 2.8 Diesel" },
-  { id: "mod_005", marca: "Honda", modelo: "Civic", versao: "EXL 2.0 CVT" },
-];
-
 export default function GerenciarModelosVeiculoPage() {
-  // const { toast } = useToast();
-  const [modelosVeiculo, setModelosVeiculo] = useState<ModeloVeiculo[]>(initialModelosVeiculo);
+  const { toast } = useToast();
+  const [modelosVeiculo, setModelosVeiculo] = useState<ModeloVeiculo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredModelos, setFilteredModelos] = useState<ModeloVeiculo[]>(initialModelosVeiculo);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -60,22 +52,55 @@ export default function GerenciarModelosVeiculoPage() {
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [modeloVeiculoToDelete, setModeloVeiculoToDelete] = useState<ModeloVeiculo | null>(null);
 
-  useEffect(() => {
-    // Supabase: Fetch initial data for ModelosVeiculo
-    // async function fetchModelos() {
-    //   // const { data, error } = await supabase.from('ModelosVeiculo').select('*').order('marca').order('modelo').order('versao');
-    //   // if (error) { /* toast error */ } else { setModelosVeiculo(data || []); setFilteredModelos(data || []); }
-    // }
-    // fetchModelos();
-    setFilteredModelos(
-      modelosVeiculo.filter(item =>
-        item.marca.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.versao.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-  }, [searchTerm, modelosVeiculo]);
+  const fetchModelosVeiculo = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setIsFetching(false); setIsLoading(false); setModelosVeiculo([]); return;
+    }
+    if (isFetching) setIsLoading(true);
 
+    console.log("Fetching ModelosVeiculo, search:", searchTerm);
+    
+    let query = supabase
+      .from('ModelosVeiculo')
+      .select('id_modelo, marca, modelo, versao')
+      .order('marca', { ascending: true })
+      .order('modelo', { ascending: true })
+      .order('versao', { ascending: true, nullsFirst: false });
+
+    if (searchTerm) {
+      query = query.or(`marca.ilike.%${searchTerm}%,modelo.ilike.%${searchTerm}%,versao.ilike.%${searchTerm}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar modelos de veículo:", JSON.stringify(error, null, 2));
+      toast({ title: "Erro ao Buscar Dados", description: error.message || "Não foi possível carregar os modelos.", variant: "destructive" });
+      setModelosVeiculo([]);
+    } else {
+      setModelosVeiculo((data || []).map(item => ({
+        id: item.id_modelo,
+        marca: item.marca,
+        modelo: item.modelo,
+        versao: item.versao || null,
+      })));
+    }
+    setIsLoading(false);
+    setIsFetching(false);
+  };
+
+  useEffect(() => {
+    fetchModelosVeiculo();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setIsFetching(true); // Indicate fetching for new search
+    fetchModelosVeiculo(); 
+  };
+  
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
@@ -90,7 +115,7 @@ export default function GerenciarModelosVeiculoPage() {
   const handleOpenEditModal = (item: ModeloVeiculo) => {
     setModalMode('edit');
     setCurrentModeloVeiculo(item);
-    setFormData({ marca: item.marca, modelo: item.modelo, versao: item.versao });
+    setFormData({ marca: item.marca, modelo: item.modelo, versao: item.versao || '' });
     setIsModalOpen(true);
   };
 
@@ -106,27 +131,68 @@ export default function GerenciarModelosVeiculoPage() {
 
   const handleSaveModeloVeiculo = async (event: FormEvent) => {
     event.preventDefault();
-    if (!formData.marca.trim() || !formData.modelo.trim() || !formData.versao.trim()) {
-      // toast({ title: "Erro de Validação", description: "Marca, Modelo e Versão são obrigatórios.", variant: "destructive" });
-      console.error("Validação: Marca, Modelo e Versão são obrigatórios.");
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      return;
+    }
+    if (!formData.marca.trim() || !formData.modelo.trim()) { // Versão pode ser opcional dependendo da sua regra de negócio
+      toast({ title: "Erro de Validação", description: "Marca e Modelo são obrigatórios.", variant: "destructive" });
       return;
     }
 
-    if (modalMode === 'create') {
-      // Supabase: Insert new ModeloVeiculo
-      // const { data, error } = await supabase.from('ModelosVeiculo').insert([{ ...formData }]).select();
-      // if (error) { /* handle error */ } else { setModelosVeiculo(prev => [...prev, data[0]].sort(...)); /* toast success */ }
-      const newId = `mod_new_${Date.now()}`;
-      setModelosVeiculo(prev => [...prev, { id: newId, ...formData }].sort((a,b) => a.marca.localeCompare(b.marca) || a.modelo.localeCompare(b.modelo) || a.versao.localeCompare(b.versao)));
-      console.log("Simulando criação de Modelo de Veículo:", { ...formData });
-    } else if (modalMode === 'edit' && currentModeloVeiculo) {
-      // Supabase: Update existing ModeloVeiculo
-      // const { data, error } = await supabase.from('ModelosVeiculo').update({ ...formData }).eq('id', currentModeloVeiculo.id).select();
-      // if (error) { /* handle error */ } else { setModelosVeiculo(prev => prev.map(m => m.id === currentModeloVeiculo.id ? data[0] : m).sort(...)); /* toast success */ }
-      setModelosVeiculo(prev => prev.map(m => m.id === currentModeloVeiculo.id ? { ...m, ...formData } : m).sort((a,b) => a.marca.localeCompare(b.marca) || a.modelo.localeCompare(b.modelo) || a.versao.localeCompare(b.versao)));
-      console.log("Simulando atualização de Modelo de Veículo:", { id: currentModeloVeiculo.id, ...formData });
+    setIsLoading(true);
+    let error = null;
+    const payload = {
+      marca: formData.marca.trim(),
+      modelo: formData.modelo.trim(),
+      versao: formData.versao.trim() || null, // Envia null se vazio
+    };
+    
+    try {
+      if (modalMode === 'create') {
+        console.log("Attempting to INSERT ModeloVeiculo:", payload);
+        const { error: insertError } = await supabase
+          .from('ModelosVeiculo')
+          .insert([payload])
+          .select()
+          .single();
+        error = insertError;
+        if (!error) {
+          toast({ title: "Sucesso!", description: "Novo modelo de veículo cadastrado." });
+        }
+      } else if (modalMode === 'edit' && currentModeloVeiculo) {
+        console.log("Attempting to UPDATE ModeloVeiculo ID:", currentModeloVeiculo.id, "with data:", payload);
+        const { error: updateError } = await supabase
+          .from('ModelosVeiculo')
+          .update(payload)
+          .eq('id_modelo', currentModeloVeiculo.id)
+          .select()
+          .single();
+        error = updateError;
+        if (!error) {
+          toast({ title: "Sucesso!", description: "Modelo de veículo atualizado." });
+        }
+      }
+
+      if (error) {
+        console.error(`Erro ao salvar modelo (${modalMode}):`, JSON.stringify(error, null, 2)); 
+        toast({ 
+            title: `Erro ao Salvar (${modalMode})`, 
+            description: error.message || "Falha na operação. Verifique se os dados são válidos (ex: combinação única de marca, modelo, versão).", 
+            variant: "destructive",
+            duration: 7000
+        });
+      } else {
+        setIsFetching(true);
+        fetchModelosVeiculo(); 
+        handleCloseModal();
+      }
+    } catch (catchError: any) {
+        console.error(`Exceção ao salvar modelo (${modalMode}):`, catchError);
+        toast({ title: "Erro Inesperado", description: catchError.message || "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
     }
-    handleCloseModal();
   };
 
   const handleDeleteClick = (item: ModeloVeiculo) => {
@@ -135,12 +201,24 @@ export default function GerenciarModelosVeiculoPage() {
   };
 
   const confirmDeleteModeloVeiculo = async () => {
-    if (!modeloVeiculoToDelete) return;
-    // Supabase: Delete ModeloVeiculo
-    // const { error } = await supabase.from('ModelosVeiculo').delete().eq('id', modeloVeiculoToDelete.id);
-    // if (error) { /* handle error, consider FK constraints */ } else { setModelosVeiculo(prev => prev.filter(m => m.id !== modeloVeiculoToDelete.id)); /* toast success */ }
-    setModelosVeiculo(prev => prev.filter(m => m.id !== modeloVeiculoToDelete!.id));
-    console.log("Simulando exclusão de Modelo de Veículo:", modeloVeiculoToDelete);
+    if (!modeloVeiculoToDelete || !supabase) return;
+    
+    setIsLoading(true);
+    console.log("Attempting to DELETE ModeloVeiculo ID:", modeloVeiculoToDelete.id);
+    const { error } = await supabase
+      .from('ModelosVeiculo')
+      .delete()
+      .eq('id_modelo', modeloVeiculoToDelete.id);
+
+    if (error) {
+      console.error('Falha ao excluir modelo de veículo:', JSON.stringify(error, null, 2));
+      toast({ title: "Erro ao Excluir", description: error.message || "Falha ao excluir. Verifique se este modelo está em uso.", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso!", description: `Modelo "${modeloVeiculoToDelete.marca} ${modeloVeiculoToDelete.modelo}" excluído.` });
+      setIsFetching(true);
+      fetchModelosVeiculo(); 
+    }
+    setIsLoading(false);
     setIsDeleteAlertOpen(false);
     setModeloVeiculoToDelete(null);
   };
@@ -157,7 +235,7 @@ export default function GerenciarModelosVeiculoPage() {
               Visualize, cadastre, edite e remova as marcas, modelos e versões de veículos.
             </p>
           </div>
-          <Button onClick={handleOpenCreateModal}>
+          <Button onClick={handleOpenCreateModal} disabled={isLoading && isFetching}>
             <PlusCircle className="mr-2 h-5 w-5" /> Cadastrar Novo Modelo
           </Button>
         </div>
@@ -165,119 +243,130 @@ export default function GerenciarModelosVeiculoPage() {
 
       <Card className="shadow-lg mb-8">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Modelos de Veículo</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Modelos</CardTitle>
         </CardHeader>
         <CardContent>
-          <Input
-            type="text"
-            placeholder="Pesquisar por marca, modelo ou versão..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            className="w-full"
-          />
+          <form onSubmit={handleSearchSubmit} className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="Pesquisar por marca, modelo ou versão..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+              className="flex-grow"
+              disabled={isLoading && isFetching}
+            />
+            <Button type="submit" disabled={isLoading && isFetching}>
+              <Search className="mr-2 h-4 w-4" /> {isLoading && isFetching ? "Buscando..." : "Buscar"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Modelos de Veículo Cadastrados</CardTitle>
-          <CardDescription>Total de {filteredModelos.length} modelos no sistema.</CardDescription>
+          <CardTitle>Modelos Cadastrados</CardTitle>
+          <CardDescription>Total de {modelosVeiculo.length} modelos no sistema.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px] hidden sm:table-cell">ID</TableHead>
-                  <TableHead>Marca</TableHead>
-                  <TableHead>Modelo</TableHead>
-                  <TableHead>Versão</TableHead>
-                  <TableHead className="text-right w-[180px]">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredModelos.length > 0 ? (
-                  filteredModelos.map((item) => (
+            {isFetching ? (
+              <p className="text-center text-muted-foreground py-4">Carregando modelos...</p>
+            ) : !isLoading && modelosVeiculo.length === 0 && !searchTerm ? (
+              <p className="text-center text-muted-foreground py-4">Nenhum modelo cadastrado.</p>
+            ) : !isLoading && modelosVeiculo.length === 0 && searchTerm ? (
+                 <p className="text-center text-muted-foreground py-4">Nenhum modelo encontrado com o termo "{searchTerm}".</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
+                    <TableHead>Marca</TableHead>
+                    <TableHead>Modelo</TableHead>
+                    <TableHead>Versão</TableHead>
+                    <TableHead className="text-right w-[180px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {modelosVeiculo.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{item.id}</TableCell>
                       <TableCell>{item.marca}</TableCell>
                       <TableCell>{item.modelo}</TableCell>
-                      <TableCell>{item.versao}</TableCell>
+                      <TableCell>{item.versao || 'N/A'}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(item)}>
+                        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(item)} disabled={isLoading}>
                           <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(item)}>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(item)} disabled={isLoading}>
                           <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">Nenhum modelo de veículo encontrado.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={(open) => { if (!isLoading) setIsModalOpen(open); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{modalMode === 'create' ? 'Cadastrar Novo Modelo de Veículo' : 'Editar Modelo de Veículo'}</DialogTitle>
+            <DialogTitle>{modalMode === 'create' ? 'Cadastrar Novo Modelo' : 'Editar Modelo'}</DialogTitle>
             <DialogDescription>
-              {modalMode === 'create' ? 'Preencha os dados do novo modelo.' : `Editando o modelo: ${currentModeloVeiculo?.marca || ''} ${currentModeloVeiculo?.modelo || ''} ${currentModeloVeiculo?.versao || ''}`}
+              {modalMode === 'create' ? 'Preencha os dados do novo modelo.' : `Editando: ${currentModeloVeiculo?.marca || ''} ${currentModeloVeiculo?.modelo || ''} ${currentModeloVeiculo?.versao || ''}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveModeloVeiculo} className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="marca">Marca <span className="text-destructive">*</span></Label>
-              <Input id="marca" name="marca" value={formData.marca} onChange={handleFormChange} required />
+              <Input id="marca" name="marca" value={formData.marca} onChange={handleFormChange} required disabled={isLoading} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="modelo">Modelo <span className="text-destructive">*</span></Label>
-              <Input id="modelo" name="modelo" value={formData.modelo} onChange={handleFormChange} required />
+              <Input id="modelo" name="modelo" value={formData.modelo} onChange={handleFormChange} required disabled={isLoading} />
             </div>
              <div className="grid gap-2">
-              <Label htmlFor="versao">Versão <span className="text-destructive">*</span></Label>
-              <Input id="versao" name="versao" value={formData.versao} onChange={handleFormChange} required />
+              <Label htmlFor="versao">Versão</Label>
+              <Input id="versao" name="versao" value={formData.versao} onChange={handleFormChange} disabled={isLoading} />
             </div>
             <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="outline" onClick={handleCloseModal}>Cancelar</Button></DialogClose>
-              <Button type="submit">{modalMode === 'create' ? 'Salvar Modelo' : 'Salvar Alterações'}</Button>
+              <DialogClose asChild><Button type="button" variant="outline" onClick={handleCloseModal} disabled={isLoading}>Cancelar</Button></DialogClose>
+              <Button type="submit" disabled={isLoading}>{isLoading ? "Salvando..." : (modalMode === 'create' ? 'Salvar Modelo' : 'Salvar Alterações')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
       {modeloVeiculoToDelete && (
-        <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialog open={isDeleteAlertOpen} onOpenChange={(open) => { if (!isLoading) setIsDeleteAlertOpen(open); }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <div className="flex items-center"><AlertTriangle className="h-6 w-6 text-destructive mr-2" /><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle></div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o modelo de veículo <strong>{modeloVeiculoToDelete.marca} {modeloVeiculoToDelete.modelo} {modeloVeiculoToDelete.versao}</strong>? Esta ação é irreversível.
+                Tem certeza que deseja excluir o modelo <strong>{modeloVeiculoToDelete.marca} {modeloVeiculoToDelete.modelo} ({modeloVeiculoToDelete.versao || 'N/A'})</strong>? Esta ação é irreversível e pode afetar veículos associados.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setIsDeleteAlertOpen(false)}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteModeloVeiculo} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Confirmar Exclusão</AlertDialogAction>
+              <AlertDialogCancel onClick={() => setIsDeleteAlertOpen(false)} disabled={isLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteModeloVeiculo} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
+                {isLoading ? "Excluindo..." : "Confirmar Exclusão"}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
       {/* Supabase Integration Notes:
         - Listagem: Fetch from public."ModelosVeiculo".
-        - Cadastro: POST to public."ModelosVeiculo".
-        - Edição: PUT/PATCH to public."ModelosVeiculo".
-        - Exclusão: DELETE from public."ModelosVeiculo".
-        - RLS or backend logic should handle constraints if ModelosVeiculo is linked to public."Veiculos".
+        - Cadastro: POST to public."ModelosVeiculo". Fields: marca, modelo, versao.
+        - Edição: PUT/PATCH to public."ModelosVeiculo" by id_modelo.
+        - Exclusão: DELETE from public."ModelosVeiculo" by id_modelo.
+        - RLS: Ensure 'admin' or 'supervisor' (based on get_user_role()) can perform these operations.
+          - SELECT can be open to 'authenticated'.
+        - Consider unique constraint (marca, modelo, versao) in Supabase.
       */}
     </div>
   );
 }
 
-    
