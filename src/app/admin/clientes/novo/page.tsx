@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent, useEffect, type ChangeEvent } from 'react';
@@ -16,7 +17,8 @@ import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, Dia
 import { UserPlus, Save, XCircle, HomeIcon, InfoIcon, Users, Briefcase, Link2, CalendarDays, ClipboardList, Edit3 as EditIcon, PlusCircle } from 'lucide-react';
 import { format, parseISO, isValid } from "date-fns";
 import { cn } from '@/lib/utils';
-// import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 const brazilianStates = [
   { value: "AC", label: "Acre" }, { value: "AL", label: "Alagoas" }, { value: "AP", label: "Amapá" },
@@ -30,6 +32,7 @@ const brazilianStates = [
   { value: "SP", label: "São Paulo" }, { value: "SE", label: "Sergipe" }, { value: "TO", label: "Tocantins" }
 ];
 
+// Placeholder: In a real app, fetch these from Supabase public.Municipios based on selected Estado
 const placeholderMunicipios: Record<string, {value: string, label: string}[]> = {
   SP: [{ value: "sao_paulo", label: "São Paulo" }, { value: "campinas", label: "Campinas" }],
   RJ: [{ value: "rio_de_janeiro", label: "Rio de Janeiro" }, { value: "niteroi", label: "Niterói" }],
@@ -37,6 +40,7 @@ const placeholderMunicipios: Record<string, {value: string, label: string}[]> = 
   BA: [{ value: "salvador", label: "Salvador" }, { value: "feira_de_santana", label: "Feira de Santana"}],
 };
 
+// Placeholder: In a real app, fetch these from Supabase public.TiposEntidade or similar
 const tiposRelacao = [
   { value: "associado", label: "Associado" },
   { value: "cooperado", label: "Cooperado" },
@@ -44,14 +48,14 @@ const tiposRelacao = [
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
+// Placeholder: In a real app, fetch these from Supabase public.Entidades
 const organizacoesDisponiveis = [
-  { value: "org_001", label: "Cooperativa Alfa" },
-  { value: "org_002", label: "Associação Beta" },
-  { value: "org_003", label: "Empresa Gama" },
+  { value: "1", label: "Cooperativa Alfa (Exemplo ID 1)" }, // Assuming IDs are numeric now
+  { value: "2", label: "Associação Beta (Exemplo ID 2)" },
+  { value: "3", label: "Empresa Gama (Exemplo ID 3)" },
 ];
 
-interface CNHData {
-  id_cnh?: string; // Will be undefined for new CNH on new PF
+interface CNHDataForForm { // For form state, ID is not present
   numero_registro: string;
   categoria: string;
   data_emissao: string; // YYYY-MM-DD
@@ -62,14 +66,14 @@ interface CNHData {
   observacoes_cnh: string | null;
 }
 
-const initialCnhModalFormData: Omit<CNHData, 'id_cnh'> = {
+const initialCnhModalFormData: CNHDataForForm = {
   numero_registro: '', categoria: '', data_emissao: '', data_validade: '',
   primeira_habilitacao: null, local_emissao_cidade: null, local_emissao_uf: null, observacoes_cnh: null,
 };
 
 export default function NovaPessoaFisicaPage() {
   const router = useRouter();
-  // const { toast } = useToast();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [currentMunicipios, setCurrentMunicipios] = useState<{value: string, label: string}[]>([]);
 
@@ -81,27 +85,28 @@ export default function NovaPessoaFisicaPage() {
     email: '',
     telefone: '',
     tipoRelacao: '',
-    organizacaoVinculadaId: '',
+    organizacaoVinculadaId: '', // This will store the ID of the selected organization
     logradouro: '',
     numero: '',
     complemento: '',
     bairro: '',
     cep: '',
-    estado: '',
-    municipio: '',
+    estado: '', // UF
+    municipio: '', // nome_municipio or id_municipio
     observacoes: '',
-    cnh: null as CNHData | null, // To store CNH data collected from modal
+    cnh: null as CNHDataForForm | null, // To store CNH data collected from modal
   });
 
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
-  const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create'); // 'edit' if formData.cnh exists
-  const [cnhModalFormData, setCnhModalFormData] = useState<Omit<CNHData, 'id_cnh'>>(initialCnhModalFormData);
+  const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create'); 
+  const [cnhModalFormData, setCnhModalFormData] = useState<CNHDataForForm>(initialCnhModalFormData);
 
   const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
 
   useEffect(() => {
     if (formData.estado) {
-      // @ts-ignore
+      // TODO: Replace with actual fetch logic for municipios from Supabase based on formData.estado
+      // For now, using placeholder
       setCurrentMunicipios(placeholderMunicipios[formData.estado] || []);
     } else {
       setCurrentMunicipios([]);
@@ -119,6 +124,7 @@ export default function NovaPessoaFisicaPage() {
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
      if (name === 'estado') { 
+        // TODO: Fetch municipios for the selected state from Supabase
         setFormData(prev => ({ ...prev, municipio: '' }));
     }
   };
@@ -127,21 +133,18 @@ export default function NovaPessoaFisicaPage() {
     setFormData(prev => ({...prev, [name]: date }));
   };
 
-  // CNH Modal Handlers
   const handleOpenCnhModal = () => {
     if (formData.cnh) {
       setCnhModalMode('edit');
-      // Ensure all fields are initialized, even optional ones, from existing formData.cnh
-      const existingCnh = formData.cnh;
       setCnhModalFormData({
-        numero_registro: existingCnh.numero_registro || '',
-        categoria: existingCnh.categoria || '',
-        data_emissao: existingCnh.data_emissao || '',
-        data_validade: existingCnh.data_validade || '',
-        primeira_habilitacao: existingCnh.primeira_habilitacao || null,
-        local_emissao_cidade: existingCnh.local_emissao_cidade || null,
-        local_emissao_uf: existingCnh.local_emissao_uf || null,
-        observacoes_cnh: existingCnh.observacoes_cnh || null,
+        numero_registro: formData.cnh.numero_registro || '',
+        categoria: formData.cnh.categoria || '',
+        data_emissao: formData.cnh.data_emissao || '',
+        data_validade: formData.cnh.data_validade || '',
+        primeira_habilitacao: formData.cnh.primeira_habilitacao || null,
+        local_emissao_cidade: formData.cnh.local_emissao_cidade || null,
+        local_emissao_uf: formData.cnh.local_emissao_uf || null,
+        observacoes_cnh: formData.cnh.observacoes_cnh || null,
       });
     } else {
       setCnhModalMode('create');
@@ -155,11 +158,11 @@ export default function NovaPessoaFisicaPage() {
     setCnhModalFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleCnhDateChange = (name: keyof Omit<CNHData, 'id_cnh'>, date: Date | undefined) => {
+  const handleCnhDateChange = (name: keyof CNHDataForForm, date: Date | undefined) => {
     setCnhModalFormData(prev => ({ ...prev, [name]: date ? format(date, "yyyy-MM-dd") : '' }));
   };
 
-  const handleCnhSelectChange = (name: keyof Omit<CNHData, 'id_cnh'>, value: string) => {
+  const handleCnhSelectChange = (name: keyof CNHDataForForm, value: string) => {
      setCnhModalFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -167,19 +170,13 @@ export default function NovaPessoaFisicaPage() {
     event.preventDefault();
     if (!cnhModalFormData.numero_registro || !cnhModalFormData.categoria || !cnhModalFormData.data_emissao || !cnhModalFormData.data_validade) {
       console.error("Validação CNH: Campos obrigatórios (Número, Categoria, Emissão, Validade) não preenchidos.");
-      // toast({ title: "CNH: Campos Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
+      toast({ title: "CNH: Campos Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
       return;
     }
     
-    const stagedCnhData: CNHData = {
-        // id_cnh will be set by backend for new CNHs, or use existing if editing staged one
-        id_cnh: formData.cnh?.id_cnh, // Keep existing staged ID if any
-        ...cnhModalFormData,
-    };
-
-    setFormData(prev => ({ ...prev, cnh: stagedCnhData }));
+    setFormData(prev => ({ ...prev, cnh: { ...cnhModalFormData } }));
     setIsCnhModalOpen(false);
-    // toast({ title: "Dados da CNH Preparados!", description: "As informações da CNH foram adicionadas ao formulário." });
+    toast({ title: "Dados da CNH Preparados!", description: "As informações da CNH foram adicionadas ao formulário principal." });
   };
   
   function formatDateForDisplay(dateString: string | null | undefined): string {
@@ -193,39 +190,124 @@ export default function NovaPessoaFisicaPage() {
     } catch (e) {
         return "Data inválida";
     }
-}
+  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!supabase) {
+      toast({ title: "Erro de Configuração", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      return;
+    }
     setIsLoading(true);
 
+    // Client-side validation
     if (!formData.nomeCompleto || !formData.cpf || !formData.email || !formData.tipoRelacao) {
-      console.error("Validação: Nome, CPF, E-mail e Tipo de Relação são obrigatórios.");
+      toast({ title: "Campos Obrigatórios", description: "Nome, CPF, E-mail e Tipo de Relação são obrigatórios.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
     if (isOrganizacaoRequired && !formData.organizacaoVinculadaId) {
-      console.error("Validação: Organização Vinculada é obrigatória para este tipo de relação.");
+      toast({ title: "Campo Obrigatório", description: "Organização Vinculada é obrigatória para este tipo de relação.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
     
-    const payload = {
-      ...formData,
-      dataNascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
-      // formData.cnh already contains the staged CNH data or null
-    };
-    console.log('Form data to be submitted (Pessoa Física e CNH):', payload);
-    // Supabase:
-    // 1. Insert into public.PessoasFisicas.
-    // 2. If payload.cnh is not null, get the new id_pessoa_fisica.
-    // 3. Insert into public.CNHs with payload.cnh data and the new id_pessoa_fisica.
-    // (This should be done in a transaction if possible).
+    try {
+      let id_endereco_criado: number | null = null;
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated pessoa física and CNH creation finished');
-    setIsLoading(false);
-    router.push('/admin/clientes'); 
+      // 1. Insert Endereco if provided
+      if (formData.logradouro && formData.bairro && formData.cep && formData.municipio && formData.estado) {
+        // TODO: Fetch id_municipio based on formData.municipio (name) and formData.estado (UF)
+        // For now, assuming formData.municipio can be a placeholder ID or we need a lookup function
+        const municipioIdPlaceholder = 1; // Replace with actual logic
+        
+        const { data: enderecoData, error: enderecoError } = await supabase
+          .from('Enderecos')
+          .insert({
+            logradouro: formData.logradouro,
+            numero: formData.numero || null,
+            complemento: formData.complemento || null,
+            bairro: formData.bairro,
+            cep: formData.cep,
+            id_municipio: municipioIdPlaceholder, // This needs to be the actual ID
+          })
+          .select('id_endereco')
+          .single();
+
+        if (enderecoError) throw enderecoError;
+        id_endereco_criado = enderecoData?.id_endereco || null;
+      }
+
+      // 2. Insert PessoaFisica
+      const pessoaFisicaPayload = {
+        nome_completo: formData.nomeCompleto,
+        cpf: formData.cpf,
+        rg: formData.rg || null,
+        data_nascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
+        email: formData.email,
+        telefone: formData.telefone || null,
+        id_endereco: id_endereco_criado,
+        // 'tipo_relacao' field will be stored directly on PessoasFisicas if schema allows,
+        // or managed through MembrosEntidade. Assuming it's on PessoasFisicas for now.
+        // If your DB has `tipo_relacao` on PessoasFisicas, add it here.
+        // observacoes: formData.observacoes, // Add if 'observacoes' column exists in PessoasFisicas
+      };
+
+      const { data: pessoaFisicaData, error: pessoaFisicaError } = await supabase
+        .from('PessoasFisicas')
+        .insert(pessoaFisicaPayload)
+        .select('id_pessoa_fisica')
+        .single();
+
+      if (pessoaFisicaError) throw pessoaFisicaError;
+      const newPessoaFisicaId = pessoaFisicaData?.id_pessoa_fisica;
+
+      if (!newPessoaFisicaId) {
+        throw new Error("Falha ao obter ID da nova pessoa física.");
+      }
+
+      // 3. Insert CNH if provided
+      if (formData.cnh) {
+        const cnhPayload = {
+          id_pessoa_fisica: newPessoaFisicaId,
+          numero_registro: formData.cnh.numero_registro,
+          categoria: formData.cnh.categoria,
+          data_emissao: formData.cnh.data_emissao ? format(parseISO(formData.cnh.data_emissao), "yyyy-MM-dd") : null,
+          data_validade: formData.cnh.data_validade ? format(parseISO(formData.cnh.data_validade), "yyyy-MM-dd") : null,
+          primeira_habilitacao: formData.cnh.primeira_habilitacao ? format(parseISO(formData.cnh.primeira_habilitacao), "yyyy-MM-dd") : null,
+          local_emissao_cidade: formData.cnh.local_emissao_cidade || null,
+          local_emissao_estado_uf: formData.cnh.local_emissao_uf || null, // Ensure this is 'local_emissao_estado_uf' in your DB
+          observacoes: formData.cnh.observacoes_cnh || null, // Ensure this is 'observacoes' in your DB
+        };
+        const { error: cnhError } = await supabase.from('CNHs').insert(cnhPayload);
+        if (cnhError) throw cnhError; // Or handle more gracefully, e.g., log and continue
+      }
+
+      // 4. Insert MembrosEntidade if required
+      if (isOrganizacaoRequired && formData.organizacaoVinculadaId) {
+        const membroEntidadePayload = {
+          id_entidade_pai: parseInt(formData.organizacaoVinculadaId, 10), // Ensure ID is integer
+          id_membro_pessoa_fisica: newPessoaFisicaId,
+          tipo_membro: 'Pessoa Fisica', // Match your DB CHECK constraint
+          funcao_no_membro: formData.tipoRelacao, // Or a more specific mapping
+        };
+        const { error: membroError } = await supabase.from('MembrosEntidade').insert(membroEntidadePayload);
+        if (membroError) throw membroError; // Or handle gracefully
+      }
+      
+      // If Observacoes are part of PessoasFisicas, they'd be in pessoaFisicaPayload.
+      // If they are separate, handle them here.
+      // For now, assuming 'observacoes' might not be directly on PessoasFisicas table.
+
+      toast({ title: "Pessoa Física Cadastrada!", description: `${formData.nomeCompleto} foi adicionado com sucesso.` });
+      router.push('/admin/clientes');
+
+    } catch (error: any) {
+      console.error('Erro ao cadastrar Pessoa Física:', error);
+      toast({ title: "Erro ao Cadastrar", description: `Falha ao cadastrar: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -400,3 +482,31 @@ export default function NovaPessoaFisicaPage() {
 //     - Insert the CNH data (from formData.cnh) into public.CNHs, including the id_pessoa_fisica.
 //   - Ideally, these two operations should be part of a transaction to ensure data consistency.
 //     Supabase Edge Functions are a good way to handle transactional multi-table inserts.
+//
+// Supabase Integration Notes for Main Form:
+// 1. Endereço:
+//    - If address fields (logradouro, bairro, cep, municipio, estado) are filled,
+//      first INSERT into public."Enderecos".
+//    - Requires id_municipio. You'll need to fetch this ID from public."Municipios"
+//      based on the selected municipio name and estado UF.
+//    - Get the new id_endereco returned from this insert.
+// 2. PessoaFisica:
+//    - INSERT into public."PessoasFisicas" including the id_endereco if created.
+//    - If your DB schema for PessoasFisicas has a 'tipo_relacao' column, include formData.tipoRelacao.
+//    - Include formData.observacoes if a corresponding column exists.
+//    - Get the new id_pessoa_fisica.
+// 3. CNH (Handled above, after PessoaFisica is created).
+// 4. MembrosEntidade:
+//    - If isOrganizacaoRequired is true AND formData.organizacaoVinculadaId is set:
+//      - INSERT into public."MembrosEntidade" with:
+//        - id_entidade_pai: formData.organizacaoVinculadaId (ensure it's an integer ID)
+//        - id_membro_pessoa_fisica: the new id_pessoa_fisica
+//        - tipo_membro: 'Pessoa Fisica' (matching your DB CHECK constraint)
+//        - funcao_no_membro: formData.tipoRelacao (or map this value to a specific function role)
+//        - data_associacao: (optional, defaults to CURRENT_DATE in DB)
+//
+// All these inserts should ideally be wrapped in a transaction (e.g., using an Edge Function)
+// to ensure data consistency. If any step fails, previous steps should be rolled back.
+// Remember to handle potential errors from each Supabase call and provide user feedback.
+// Also, dynamically load options for 'Tipo de Relação', 'Organização Vinculada', 'Estado', 'Município'
+// from their respective Supabase tables instead of using placeholders.
