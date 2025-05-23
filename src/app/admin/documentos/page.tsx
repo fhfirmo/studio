@@ -14,12 +14,12 @@ import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, isValid } from 'date-fns';
 
 interface DocumentoSupabase {
-  id_arquivo: string; // Assuming UUID
+  id_arquivo: string;
   nome_arquivo: string;
   tipo_documento: string | null;
   data_upload: string;
   tamanho_bytes: number;
-  caminho_armazenamento: string; // For download/view
+  caminho_armazenamento: string;
   PessoasFisicas?: { nome_completo: string } | null;
   Entidades?: { nome: string } | null;
   Veiculos?: { placa_atual: string, ModelosVeiculo?: { nome_modelo: string } | null } | null;
@@ -37,10 +37,18 @@ interface DocumentoRow {
   storagePath: string;
 }
 
-const initialDocumentos: DocumentoRow[] = []; // Start empty
+// Updated initialDocumentos with more diverse examples for association
+const initialDocumentosData: DocumentoRow[] = [
+  { id: "doc_001", titulo: "Contrato João", tipo: "Contrato", dataUpload: "2024-01-01T10:00:00Z", tamanho: "500 KB", associadoA_nome: "João da Silva Sauro", associadoA_tipo: "Pessoa Física", storagePath: "contratos/joao_contrato.pdf" },
+  { id: "doc_002", titulo: "Apólice ABC-1234", tipo: "Apólice", dataUpload: "2024-01-05T11:30:00Z", tamanho: "1.2 MB", associadoA_nome: "ABC-1234 (Onix)", associadoA_tipo: "Veículo", storagePath: "apolices/veiculo_abc1234.pdf" },
+  { id: "doc_003", titulo: "CNPJ Cooperativa", tipo: "CNPJ", dataUpload: "2024-01-10T14:15:00Z", tamanho: "300 KB", associadoA_nome: "Cooperativa Alfa", associadoA_tipo: "Organização", storagePath: "documentos_org/coop_alfa_cnpj.jpg" },
+  { id: "doc_004", titulo: "Proposta Seguro X", tipo: "Proposta", dataUpload: "2024-01-15T09:00:00Z", tamanho: "800 KB", associadoA_nome: "Apólice 98765", associadoA_tipo: "Seguro", storagePath: "propostas/seguro_x.pdf" },
+  { id: "doc_005", titulo: "Manual do Sistema", tipo: "Manual", dataUpload: "2024-01-20T16:45:00Z", tamanho: "2.5 MB", associadoA_nome: null, associadoA_tipo: "Nenhum", storagePath: "manuais/sistema_v1.pdf" },
+];
+
 
 export default function GerenciamentoDocumentosPage() {
-  const [documentos, setDocumentos] = useState<DocumentoRow[]>(initialDocumentos);
+  const [documentos, setDocumentos] = useState<DocumentoRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -56,7 +64,7 @@ export default function GerenciamentoDocumentosPage() {
   };
 
   const formatBytes = (bytes: number, decimals = 2) => {
-    if (bytes === 0) return '0 Bytes';
+    if (!bytes || bytes === 0) return '0 Bytes';
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -66,10 +74,11 @@ export default function GerenciamentoDocumentosPage() {
 
   const fetchDocumentos = async () => {
     if (!supabase) {
-      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
       setIsLoading(false); setDocumentos([]); return;
     }
     setIsLoading(true);
+    console.log(`FetchDocumentos: Iniciando busca com termo: "${searchTerm}"`);
     
     let query = supabase
       .from('Arquivos')
@@ -88,24 +97,25 @@ export default function GerenciamentoDocumentosPage() {
       .order('data_upload', { ascending: false });
 
     if (searchTerm) {
+      // Simplified search: only on Arquivos direct columns for now to isolate the issue
       query = query.or(
         `nome_arquivo.ilike.%${searchTerm}%,` +
-        `tipo_documento.ilike.%${searchTerm}%,` +
-        `PessoasFisicas.nome_completo.ilike.%${searchTerm}%,` +
-        `Entidades.nome.ilike.%${searchTerm}%,` +
-        `Veiculos.placa_atual.ilike.%${searchTerm}%,` +
-        `Seguros.numero_apolice.ilike.%${searchTerm}%`
+        `tipo_documento.ilike.%${searchTerm}%`
       );
+      console.log("FetchDocumentos: Filtro OR aplicado para nome_arquivo e tipo_documento.");
     }
 
     const { data, error } = await query;
 
     if (error) {
-      console.error("Erro ao buscar documentos:", error);
-      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      const errorMessage = error.message || `Erro desconhecido ao buscar documentos. Código: ${error.code || 'N/A'}. Detalhes no console.`;
+      console.error("Erro ao buscar documentos - Detalhes Completos:", JSON.stringify(error, null, 2));
+      console.error("Erro ao buscar documentos (objeto original):", error);
+      toast({ title: "Erro ao Buscar Dados", description: errorMessage, variant: "destructive", duration: 10000 });
       setDocumentos([]);
     } else {
-      const formattedData: DocumentoRow[] = data.map((doc: DocumentoSupabase) => {
+      console.log("FetchDocumentos: Dados recebidos do Supabase:", data);
+      const formattedData: DocumentoRow[] = (data || []).map((doc: DocumentoSupabase) => {
         let associadoA_nome: string | null = null;
         let associadoA_tipo: DocumentoRow['associadoA_tipo'] = 'Nenhum';
 
@@ -116,7 +126,7 @@ export default function GerenciamentoDocumentosPage() {
           associadoA_nome = doc.Entidades.nome;
           associadoA_tipo = 'Organização';
         } else if (doc.Veiculos) {
-          associadoA_nome = `${doc.Veiculos.placa_atual} (${doc.Veiculos.ModelosVeiculo?.nome_modelo || 'N/A'})`;
+          associadoA_nome = `${doc.Veiculos.placa_atual || 'N/P'} (${doc.Veiculos.ModelosVeiculo?.nome_modelo || 'N/M'})`;
           associadoA_tipo = 'Veículo';
         } else if (doc.Seguros) {
           associadoA_nome = doc.Seguros.numero_apolice;
@@ -128,12 +138,13 @@ export default function GerenciamentoDocumentosPage() {
           titulo: doc.nome_arquivo,
           tipo: doc.tipo_documento,
           dataUpload: formatDateForDisplay(doc.data_upload),
-          tamanho: formatBytes(doc.tamanho_bytes),
+          tamanho: formatBytes(doc.tamanho_bytes || 0),
           associadoA_nome,
           associadoA_tipo,
           storagePath: doc.caminho_armazenamento,
         };
       });
+      console.log("FetchDocumentos: Dados formatados:", formattedData);
       setDocumentos(formattedData);
     }
     setIsLoading(false);
@@ -141,11 +152,11 @@ export default function GerenciamentoDocumentosPage() {
   
   useEffect(() => {
     fetchDocumentos();
-  }, []);
+  }, []); // Fetch on mount. To re-fetch on search, `handleSearchSubmit` should call `fetchDocumentos`.
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    fetchDocumentos();
+    fetchDocumentos(); // Re-fetch with current searchTerm
   };
 
   const handleDeleteClick = (documento: DocumentoRow) => {
@@ -156,77 +167,93 @@ export default function GerenciamentoDocumentosPage() {
   const confirmDeleteDocumento = async () => {
     if (!documentoToDelete || !supabase) return;
     
-    // 1. Delete file from Supabase Storage
-    const { error: storageError } = await supabase.storage
-      .from('documentos_bucket') // Replace with your actual bucket name
-      .remove([documentoToDelete.storagePath]);
+    try {
+      // 1. Delete file from Supabase Storage
+      console.log(`Attempting to delete from Storage: bucket 'documentos_bucket', path '${documentoToDelete.storagePath}'`);
+      const { error: storageError } = await supabase.storage
+        .from('documentos_bucket') // Ensure this is your correct bucket name
+        .remove([documentoToDelete.storagePath]);
 
-    if (storageError) {
-      console.error('Falha ao excluir arquivo do Storage:', storageError.message);
-      toast({ title: "Erro ao Excluir Arquivo", description: `Falha ao remover do armazenamento: ${storageError.message}`, variant: "destructive" });
-      // Decide if you want to proceed with DB deletion if storage deletion fails
-      // setIsAlertOpen(false);
-      // setDocumentoToDelete(null);
-      // return;
-    } else {
-      console.log("Arquivo excluído do Storage:", documentoToDelete.storagePath);
-    }
+      if (storageError) {
+        // Don't stop if storage deletion fails, but notify user. The DB record might still be deletable.
+        console.error('Falha ao excluir arquivo do Storage:', storageError.message);
+        toast({ title: "Aviso: Erro no Storage", description: `Falha ao remover do armazenamento: ${storageError.message}. Tentando excluir registro do BD.`, variant: "destructive", duration: 7000 });
+      } else {
+        console.log("Arquivo excluído do Storage com sucesso:", documentoToDelete.storagePath);
+      }
 
-    // 2. Delete record from database
-    const { error: dbError } = await supabase
-      .from('Arquivos')
-      .delete()
-      .eq('id_arquivo', documentoToDelete.id);
+      // 2. Delete record from database
+      console.log(`Attempting to delete from DB: table 'Arquivos', id '${documentoToDelete.id}'`);
+      const { error: dbError } = await supabase
+        .from('Arquivos')
+        .delete()
+        .eq('id_arquivo', documentoToDelete.id);
 
-    if (dbError) {
-      console.error('Falha ao excluir registro do documento:', dbError.message);
-      toast({ title: "Erro ao Excluir Registro", description: `Falha ao excluir do banco de dados: ${dbError.message}`, variant: "destructive" });
-    } else {
+      if (dbError) {
+        throw dbError; // Throw to be caught by the outer catch block
+      }
+
       toast({ title: "Documento Excluído!", description: `O documento ${documentoToDelete.titulo} foi excluído com sucesso.` });
       fetchDocumentos(); 
+    
+    } catch (error: any) {
+        const message = error.message || "Ocorreu um erro ao excluir o documento.";
+        console.error('Falha ao excluir documento (geral):', message, error);
+        toast({ title: "Erro ao Excluir", description: message, variant: "destructive" });
+    } finally {
+        setIsAlertOpen(false);
+        setDocumentoToDelete(null);
     }
-    setIsAlertOpen(false);
-    setDocumentoToDelete(null);
   };
 
   const handleDownload = async (documento: DocumentoRow) => {
     if (!supabase) return;
-    const { data, error } = await supabase.storage
-      .from('documentos_bucket') // Replace with your actual bucket name
-      .download(documento.storagePath);
+    console.log(`Attempting download: bucket 'documentos_bucket', path '${documento.storagePath}'`);
+    try {
+        const { data, error } = await supabase.storage
+        .from('documentos_bucket') // Ensure this is your correct bucket name
+        .download(documento.storagePath);
 
-    if (error) {
-      toast({ title: "Erro no Download", description: error.message, variant: "destructive" });
-      return;
-    }
-    if (data) {
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = documento.titulo; // Use the document's title as the filename
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({ title: "Download Iniciado", description: `Baixando ${documento.titulo}...` });
+        if (error) throw error;
+
+        if (data) {
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = documento.titulo; 
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({ title: "Download Iniciado", description: `Baixando ${documento.titulo}...` });
+        }
+    } catch (error: any) {
+        console.error("Erro no download:", error);
+        toast({ title: "Erro no Download", description: error.message || "Não foi possível baixar o arquivo.", variant: "destructive" });
     }
   };
 
   const handleView = async (documento: DocumentoRow) => {
      if (!supabase) return;
-    // For PDFs and images, you can get a public URL or signed URL
-    const { data } = supabase.storage
-      .from('documentos_bucket') // Replace with your actual bucket name
-      .getPublicUrl(documento.storagePath);
+     console.log(`Attempting view: bucket 'documentos_bucket', path '${documento.storagePath}'`);
+     try {
+        const { data } = supabase.storage
+        .from('documentos_bucket') // Ensure this is your correct bucket name
+        .getPublicUrl(documento.storagePath);
 
-    if (data?.publicUrl) {
-      window.open(data.publicUrl, '_blank');
-    } else {
-      // For other types, or if public URLs are not enabled, initiate download
-      // Or show a message "Preview not available, please download."
-      toast({ title: "Visualização", description: "Abrindo documento... (Se não abrir, tente o download)", variant: "default" });
-      handleDownload(documento); 
-    }
+        if (data?.publicUrl) {
+            console.log("Public URL for view:", data.publicUrl);
+            window.open(data.publicUrl, '_blank');
+        } else {
+            // Fallback or if public URLs are not enabled / file type not suitable for direct view
+            toast({ title: "Visualização Indisponível", description: "Preview não disponível para este arquivo ou URL pública não configurada. Tente o download.", variant: "default" });
+            // Optionally, attempt download as a fallback
+            // handleDownload(documento); 
+        }
+     } catch (error: any) {
+        console.error("Erro ao obter URL pública:", error);
+        toast({ title: "Erro ao Visualizar", description: error.message || "Não foi possível obter o link para visualização.", variant: "destructive" });
+     }
   };
 
   return (
@@ -258,7 +285,7 @@ export default function GerenciamentoDocumentosPage() {
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Pesquisar por Título, Tipo, Associado..."
+              placeholder="Pesquisar por Título ou Tipo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
@@ -290,7 +317,7 @@ export default function GerenciamentoDocumentosPage() {
                   <TableHead className="hidden lg:table-cell">Tamanho</TableHead>
                   <TableHead className="hidden md:table-cell">Associado a</TableHead>
                   <TableHead className="hidden md:table-cell">Tipo Associação</TableHead>
-                  <TableHead className="text-right w-[320px]">Ações</TableHead> 
+                  <TableHead className="text-right min-w-[280px] sm:min-w-[320px]">Ações</TableHead> 
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -373,7 +400,20 @@ export default function GerenciamentoDocumentosPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      {/* 
+        Supabase Integration Notes:
+        - Fetch from public."Arquivos" table.
+        - JOINs needed for associated entities:
+          - public."PessoasFisicas" ON Arquivos.id_pessoa_fisica_associada = PessoasFisicas.id_pessoa_fisica
+          - public."Entidades" ON Arquivos.id_entidade_associada = Entidades.id_entidade
+          - public."Veiculos" ON Arquivos.id_veiculo = Veiculos.id_veiculo (JOIN ModelosVeiculo for model name)
+          - public."Seguros" ON Arquivos.id_seguro = Seguros.id_seguro
+        - Search: Backend search should be implemented on 'nome_arquivo', 'tipo_documento'. Searching on related entity names requires more complex queries or a dedicated search view/function.
+        - View/Download: Use Supabase Storage methods to get public URLs or download files.
+        - Delete: Must delete from Supabase Storage AND from the 'Arquivos' database table.
+      */}
     </div>
   );
 }
+
     
