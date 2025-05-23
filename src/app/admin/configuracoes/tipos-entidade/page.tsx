@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect, type FormEvent } from 'react';
-import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
 import {
@@ -28,28 +26,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, Settings } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast"; // Uncomment if using toasts
+import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, Settings, Building2 } from "lucide-react";
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
-interface TipoEntidade {
-  id: string; // Assuming IDs are strings like 'tipo_001' or numbers
+interface TipoEntidadeSupabase {
+  id_tipo_entidade: number;
   nome_tipo: string;
 }
 
-const initialTiposEntidade: TipoEntidade[] = [
-  { id: "tipo_001", nome_tipo: "Instituição" },
-  { id: "tipo_002", nome_tipo: "Federação" },
-  { id: "tipo_003", nome_tipo: "Cooperativa Principal" },
-  { id: "tipo_004", nome_tipo: "Associação Principal" },
-  { id: "tipo_005", nome_tipo: "Empresa Privada" },
-  { id: "tipo_006", nome_tipo: "Outro" },
-];
+interface TipoEntidade extends TipoEntidadeSupabase {} // Alias for clarity in component
 
 export default function GerenciarTiposEntidadePage() {
-  // const { toast } = useToast(); // Uncomment if using toasts
-  const [tiposEntidade, setTiposEntidade] = useState<TipoEntidade[]>(initialTiposEntidade);
+  const { toast } = useToast();
+  const [tiposEntidade, setTiposEntidade] = useState<TipoEntidade[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredTipos, setFilteredTipos] = useState<TipoEntidade[]>(initialTiposEntidade);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -59,28 +51,49 @@ export default function GerenciarTiposEntidadePage() {
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [tipoEntidadeToDelete, setTipoEntidadeToDelete] = useState<TipoEntidade | null>(null);
 
-  useEffect(() => {
-    // Supabase: Fetch initial data for TiposEntidade
-    // async function fetchTipos() {
-    //   // const { data, error } = await supabase.from('TiposEntidade').select('*').order('nome_tipo');
-    //   // if (error) {
-    //   //   toast({ title: "Erro ao carregar tipos", description: error.message, variant: "destructive" });
-    //   // } else {
-    //   //   setTiposEntidade(data || []);
-    //   //   setFilteredTipos(data || []);
-    //   // }
-    // }
-    // fetchTipos();
-    setFilteredTipos(
-      tiposEntidade.filter(tipo =>
-        tipo.nome_tipo.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-  }, [searchTerm, tiposEntidade]);
+  const fetchTiposEntidade = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setIsLoading(false);
+      setTiposEntidade([]);
+      return;
+    }
+    setIsLoading(true);
+    
+    let query = supabase
+      .from('TiposEntidade')
+      .select('id_tipo_entidade, nome_tipo')
+      .order('nome_tipo', { ascending: true });
 
+    if (searchTerm) {
+      query = query.ilike('nome_tipo', `%${searchTerm}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar tipos de entidade:", error);
+      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      setTiposEntidade([]);
+    } else {
+      setTiposEntidade(data as TipoEntidade[] || []);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchTiposEntidade();
+  }, []); // Fetch on mount
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    fetchTiposEntidade(); // Re-fetch with current searchTerm
+  };
+  
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
+
 
   const handleOpenCreateModal = () => {
     setModalMode('create');
@@ -108,36 +121,49 @@ export default function GerenciarTiposEntidadePage() {
 
   const handleSaveEntityType = async (event: FormEvent) => {
     event.preventDefault();
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      return;
+    }
     if (!formData.nome_tipo.trim()) {
-      // toast({ title: "Erro de Validação", description: "O nome do tipo não pode ser vazio.", variant: "destructive" });
-      console.error("Validação: Nome do tipo é obrigatório.");
+      toast({ title: "Erro de Validação", description: "O nome do tipo não pode ser vazio.", variant: "destructive" });
       return;
     }
 
-    if (modalMode === 'create') {
-      // Supabase: Insert new TipoEntidade
-      // const { data, error } = await supabase.from('TiposEntidade').insert([{ nome_tipo: formData.nome_tipo }]).select();
-      // if (error) { /* handle error, toast */ }
-      // else {
-      //   setTiposEntidade(prev => [...prev, data[0]].sort((a, b) => a.nome_tipo.localeCompare(b.nome_tipo)));
-      //   toast({ title: "Sucesso!", description: "Novo tipo de entidade cadastrado." });
-      // }
-      const newId = `tipo_new_${Date.now()}`; // Placeholder ID
-      setTiposEntidade(prev => [...prev, { id: newId, nome_tipo: formData.nome_tipo }].sort((a,b) => a.nome_tipo.localeCompare(b.nome_tipo)));
-      console.log("Simulando criação:", { nome_tipo: formData.nome_tipo });
+    setIsLoading(true);
+    let error = null;
 
+    if (modalMode === 'create') {
+      const { data: newData, error: insertError } = await supabase
+        .from('TiposEntidade')
+        .insert([{ nome_tipo: formData.nome_tipo.trim() }])
+        .select()
+        .single();
+      error = insertError;
+      if (!error && newData) {
+        toast({ title: "Sucesso!", description: "Novo tipo de entidade cadastrado." });
+      }
     } else if (modalMode === 'edit' && currentTipoEntidade) {
-      // Supabase: Update existing TipoEntidade
-      // const { data, error } = await supabase.from('TiposEntidade').update({ nome_tipo: formData.nome_tipo }).eq('id', currentTipoEntidade.id).select();
-      // if (error) { /* handle error, toast */ }
-      // else {
-      //   setTiposEntidade(prev => prev.map(t => t.id === currentTipoEntidade.id ? data[0] : t).sort((a,b) => a.nome_tipo.localeCompare(b.nome_tipo)));
-      //   toast({ title: "Sucesso!", description: "Tipo de entidade atualizado." });
-      // }
-      setTiposEntidade(prev => prev.map(t => t.id === currentTipoEntidade.id ? { ...t, nome_tipo: formData.nome_tipo } : t).sort((a,b) => a.nome_tipo.localeCompare(b.nome_tipo)));
-      console.log("Simulando atualização:", { id: currentTipoEntidade.id, nome_tipo: formData.nome_tipo });
+      const { data: updatedData, error: updateError } = await supabase
+        .from('TiposEntidade')
+        .update({ nome_tipo: formData.nome_tipo.trim() })
+        .eq('id_tipo_entidade', currentTipoEntidade.id_tipo_entidade)
+        .select()
+        .single();
+      error = updateError;
+      if (!error && updatedData) {
+        toast({ title: "Sucesso!", description: "Tipo de entidade atualizado." });
+      }
     }
-    handleCloseModal();
+
+    if (error) {
+      console.error(`Erro ao salvar tipo de entidade (${modalMode}):`, error);
+      toast({ title: `Erro ao Salvar (${modalMode})`, description: error.message, variant: "destructive" });
+    } else {
+      fetchTiposEntidade(); // Refresh list
+      handleCloseModal();
+    }
+    setIsLoading(false);
   };
 
   const handleDeleteClick = (tipo: TipoEntidade) => {
@@ -146,16 +172,22 @@ export default function GerenciarTiposEntidadePage() {
   };
 
   const confirmDeleteEntityType = async () => {
-    if (!tipoEntidadeToDelete) return;
-    // Supabase: Delete TipoEntidade
-    // const { error } = await supabase.from('TiposEntidade').delete().eq('id', tipoEntidadeToDelete.id);
-    // if (error) { /* handle error, toast. Consider FK constraints */ }
-    // else {
-    //   setTiposEntidade(prev => prev.filter(t => t.id !== tipoEntidadeToDelete.id));
-    //   toast({ title: "Sucesso!", description: `Tipo de entidade "${tipoEntidadeToDelete.nome_tipo}" excluído.` });
-    // }
-    setTiposEntidade(prev => prev.filter(t => t.id !== tipoEntidadeToDelete!.id));
-    console.log("Simulando exclusão:", tipoEntidadeToDelete);
+    if (!tipoEntidadeToDelete || !supabase) return;
+    
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('TiposEntidade')
+      .delete()
+      .eq('id_tipo_entidade', tipoEntidadeToDelete.id_tipo_entidade);
+
+    if (error) {
+      console.error('Falha ao excluir tipo de entidade:', error);
+      toast({ title: "Erro ao Excluir", description: `Falha: ${error.message}. Verifique se este tipo está em uso.`, variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso!", description: `Tipo de entidade "${tipoEntidadeToDelete.nome_tipo}" excluído.` });
+      fetchTiposEntidade(); // Refresh the list
+    }
+    setIsLoading(false);
     setIsDeleteAlertOpen(false);
     setTipoEntidadeToDelete(null);
   };
@@ -166,13 +198,13 @@ export default function GerenciarTiposEntidadePage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
-              <Settings className="mr-3 h-8 w-8" /> Gerenciamento de Tipos de Entidade
+              <Building2 className="mr-3 h-8 w-8" /> Gerenciamento de Tipos de Entidade
             </h1>
             <p className="text-muted-foreground mt-1">
               Visualize, cadastre, edite e remova os tipos de organização disponíveis no sistema.
             </p>
           </div>
-          <Button onClick={handleOpenCreateModal}>
+          <Button onClick={handleOpenCreateModal} disabled={isLoading}>
             <PlusCircle className="mr-2 h-5 w-5" /> Cadastrar Novo Tipo
           </Button>
         </div>
@@ -183,13 +215,19 @@ export default function GerenciarTiposEntidadePage() {
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Tipos de Entidade</CardTitle>
         </CardHeader>
         <CardContent>
-          <Input
-            type="text"
-            placeholder="Pesquisar por nome do tipo..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            className="w-full"
-          />
+          <form onSubmit={handleSearchSubmit} className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="Pesquisar por nome do tipo..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+              className="flex-grow"
+              disabled={isLoading}
+            />
+            <Button type="submit" disabled={isLoading}>
+              <Search className="mr-2 h-4 w-4" /> {isLoading ? "Buscando..." : "Buscar"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
@@ -197,49 +235,46 @@ export default function GerenciarTiposEntidadePage() {
         <CardHeader>
           <CardTitle>Tipos de Entidade Cadastrados</CardTitle>
           <CardDescription>
-            Total de {filteredTipos.length} tipos no sistema.
+            Total de {tiposEntidade.length} tipos no sistema.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px] hidden sm:table-cell">ID</TableHead>
-                  <TableHead>Nome do Tipo</TableHead>
-                  <TableHead className="text-right w-[180px]">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTipos.length > 0 ? (
-                  filteredTipos.map((tipo) => (
-                    <TableRow key={tipo.id}>
-                      <TableCell className="font-medium text-xs hidden sm:table-cell">{tipo.id}</TableCell>
+            {isLoading && tiposEntidade.length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">Carregando tipos de entidade...</p>
+            ) : !isLoading && tiposEntidade.length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">Nenhum tipo de entidade cadastrado ou encontrado.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px] hidden sm:table-cell">ID</TableHead>
+                    <TableHead>Nome do Tipo</TableHead>
+                    <TableHead className="text-right w-[180px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tiposEntidade.map((tipo) => (
+                    <TableRow key={tipo.id_tipo_entidade}>
+                      <TableCell className="font-medium text-xs hidden sm:table-cell">{tipo.id_tipo_entidade}</TableCell>
                       <TableCell>{tipo.nome_tipo}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(tipo)}>
+                        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(tipo)} disabled={isLoading}>
                           <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(tipo)}>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(tipo)} disabled={isLoading}>
                           <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center h-24 text-muted-foreground">
-                      Nenhum tipo de entidade encontrado.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Modal para Cadastro/Edição */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -250,7 +285,7 @@ export default function GerenciarTiposEntidadePage() {
           </DialogHeader>
           <form onSubmit={handleSaveEntityType} className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="nome_tipo" className="text-right">
+              <Label htmlFor="nome_tipo" className="text-right col-span-1">
                 Nome <span className="text-destructive">*</span>
               </Label>
               <Input
@@ -260,53 +295,45 @@ export default function GerenciarTiposEntidadePage() {
                 onChange={handleFormChange}
                 className="col-span-3"
                 required
+                disabled={isLoading}
               />
             </div>
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline" onClick={handleCloseModal}>Cancelar</Button>
-              </DialogClose>
-              <Button type="submit">{modalMode === 'create' ? 'Salvar Tipo' : 'Salvar Alterações'}</Button>
+              <DialogClose asChild><Button type="button" variant="outline" onClick={handleCloseModal} disabled={isLoading}>Cancelar</Button></DialogClose>
+              <Button type="submit" disabled={isLoading}>{isLoading ? "Salvando..." : (modalMode === 'create' ? 'Salvar Tipo' : 'Salvar Alterações')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Confirmação de Exclusão */}
       {tipoEntidadeToDelete && (
         <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <div className="flex items-center">
-                <AlertTriangle className="h-6 w-6 text-destructive mr-2" />
-                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-              </div>
+              <div className="flex items-center"><AlertTriangle className="h-6 w-6 text-destructive mr-2" /><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle></div>
               <AlertDialogDescription className="pt-2">
                 Tem certeza que deseja excluir o tipo de entidade <strong>{tipoEntidadeToDelete.nome_tipo}</strong>? Esta ação é irreversível e pode afetar as Organizações associadas.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setIsDeleteAlertOpen(false)}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteEntityType} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                Confirmar Exclusão
+              <AlertDialogCancel onClick={() => setIsDeleteAlertOpen(false)} disabled={isLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteEntityType} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
+                {isLoading ? "Excluindo..." : "Confirmar Exclusão"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/* 
-        Supabase Integration Notes:
-        - Listagem: Fetch from public."TiposEntidade", implement server-side search if possible or filter client-side.
-        - Cadastro: POST to public."TiposEntidade" with nome_tipo.
-        - Edição: 
-          - Fetch the specific TipoEntidade by ID to pre-fill the form.
-          - PUT/PATCH to public."TiposEntidade" with the updated nome_tipo.
-        - Exclusão: DELETE from public."TiposEntidade" by ID.
-          - RLS or backend logic should handle constraints if TiposEntidade is linked to public."Entidades" (e.g., prevent deletion if in use, or cascade deletion if appropriate).
-        - After each successful operation, re-fetch or update the local state to refresh the list.
-      */}
     </div>
   );
 }
+
+// Supabase Integration Notes:
+// - Listagem: Fetch from public."TiposEntidade", implement server-side search if possible or filter client-side.
+// - Cadastro: POST to public."TiposEntidade" with nome_tipo.
+// - Edição: Fetch the specific TipoEntidade by ID to pre-fill the form. PUT/PATCH to public."TiposEntidade".
+// - Exclusão: DELETE from public."TiposEntidade" by ID. Backend RLS/constraints should handle FK issues.
+// - After each successful operation, re-fetch or update the local state to refresh the list.
+// - Remember to implement appropriate RLS policies on public."TiposEntidade" in Supabase.
+//   - e.g., admins/supervisors can CRUD, others can SELECT.
 
