@@ -35,7 +35,7 @@ interface TipoEntidadeSupabase {
   nome_tipo: string;
 }
 
-interface TipoEntidade extends TipoEntidadeSupabase {} // Alias for clarity in component
+interface TipoEntidade extends TipoEntidadeSupabase {}
 
 export default function GerenciarTiposEntidadePage() {
   const { toast } = useToast();
@@ -59,6 +59,7 @@ export default function GerenciarTiposEntidadePage() {
       return;
     }
     setIsLoading(true);
+    console.log("GerenciarTiposEntidadePage: Fetching TiposEntidade, search:", searchTerm);
     
     let query = supabase
       .from('TiposEntidade')
@@ -72,22 +73,23 @@ export default function GerenciarTiposEntidadePage() {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Erro ao buscar tipos de entidade:", error);
-      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      console.error("GerenciarTiposEntidadePage: Erro ao buscar tipos de entidade:", error);
+      toast({ title: "Erro ao Buscar Dados", description: error.message || "Não foi possível carregar os tipos de entidade.", variant: "destructive" });
       setTiposEntidade([]);
     } else {
       setTiposEntidade(data as TipoEntidade[] || []);
+      console.log("GerenciarTiposEntidadePage: TiposEntidade fetched:", data);
     }
     setIsLoading(false);
   };
 
   useEffect(() => {
     fetchTiposEntidade();
-  }, []); // Fetch on mount
+  }, []); 
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    fetchTiposEntidade(); // Re-fetch with current searchTerm
+    fetchTiposEntidade(); 
   };
   
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,38 +134,54 @@ export default function GerenciarTiposEntidadePage() {
 
     setIsLoading(true);
     let error = null;
+    let operationData = null;
 
-    if (modalMode === 'create') {
-      const { data: newData, error: insertError } = await supabase
-        .from('TiposEntidade')
-        .insert([{ nome_tipo: formData.nome_tipo.trim() }])
-        .select()
-        .single();
-      error = insertError;
-      if (!error && newData) {
-        toast({ title: "Sucesso!", description: "Novo tipo de entidade cadastrado." });
+    try {
+      if (modalMode === 'create') {
+        console.log("GerenciarTiposEntidadePage: Attempting to INSERT TipoEntidade:", formData);
+        const { data: newData, error: insertError } = await supabase
+          .from('TiposEntidade')
+          .insert([{ nome_tipo: formData.nome_tipo.trim() }])
+          .select()
+          .single();
+        error = insertError;
+        operationData = newData;
+        if (!error && newData) {
+          toast({ title: "Sucesso!", description: "Novo tipo de entidade cadastrado." });
+        }
+      } else if (modalMode === 'edit' && currentTipoEntidade) {
+        console.log("GerenciarTiposEntidadePage: Attempting to UPDATE TipoEntidade ID:", currentTipoEntidade.id_tipo_entidade, "with data:", formData);
+        const { data: updatedData, error: updateError } = await supabase
+          .from('TiposEntidade')
+          .update({ nome_tipo: formData.nome_tipo.trim() })
+          .eq('id_tipo_entidade', currentTipoEntidade.id_tipo_entidade)
+          .select()
+          .single();
+        error = updateError;
+        operationData = updatedData;
+        if (!error && updatedData) {
+          toast({ title: "Sucesso!", description: "Tipo de entidade atualizado." });
+        }
       }
-    } else if (modalMode === 'edit' && currentTipoEntidade) {
-      const { data: updatedData, error: updateError } = await supabase
-        .from('TiposEntidade')
-        .update({ nome_tipo: formData.nome_tipo.trim() })
-        .eq('id_tipo_entidade', currentTipoEntidade.id_tipo_entidade)
-        .select()
-        .single();
-      error = updateError;
-      if (!error && updatedData) {
-        toast({ title: "Sucesso!", description: "Tipo de entidade atualizado." });
-      }
-    }
 
-    if (error) {
-      console.error(`Erro ao salvar tipo de entidade (${modalMode}):`, error);
-      toast({ title: `Erro ao Salvar (${modalMode})`, description: error.message, variant: "destructive" });
-    } else {
-      fetchTiposEntidade(); // Refresh list
-      handleCloseModal();
+      if (error) {
+        console.error(`GerenciarTiposEntidadePage: Erro ao salvar tipo de entidade (${modalMode}):`, JSON.stringify(error, null, 2), error); // Log the full error object
+        toast({ 
+            title: `Erro ao Salvar (${modalMode})`, 
+            description: error.message || "Falha na operação. Verifique permissões (RLS) e se os dados são válidos (ex: nome único).", 
+            variant: "destructive",
+            duration: 7000
+        });
+      } else {
+        fetchTiposEntidade(); 
+        handleCloseModal();
+      }
+    } catch (catchError: any) {
+        console.error(`GerenciarTiposEntidadePage: Exceção ao salvar tipo de entidade (${modalMode}):`, catchError);
+        toast({ title: "Erro Inesperado", description: catchError.message || "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleDeleteClick = (tipo: TipoEntidade) => {
@@ -175,17 +193,18 @@ export default function GerenciarTiposEntidadePage() {
     if (!tipoEntidadeToDelete || !supabase) return;
     
     setIsLoading(true);
+    console.log("GerenciarTiposEntidadePage: Attempting to DELETE TipoEntidade ID:", tipoEntidadeToDelete.id_tipo_entidade);
     const { error } = await supabase
       .from('TiposEntidade')
       .delete()
       .eq('id_tipo_entidade', tipoEntidadeToDelete.id_tipo_entidade);
 
     if (error) {
-      console.error('Falha ao excluir tipo de entidade:', error);
-      toast({ title: "Erro ao Excluir", description: `Falha: ${error.message}. Verifique se este tipo está em uso.`, variant: "destructive" });
+      console.error('GerenciarTiposEntidadePage: Falha ao excluir tipo de entidade:', error);
+      toast({ title: "Erro ao Excluir", description: error.message || "Falha ao excluir. Verifique se este tipo está em uso.", variant: "destructive" });
     } else {
       toast({ title: "Sucesso!", description: `Tipo de entidade "${tipoEntidadeToDelete.nome_tipo}" excluído.` });
-      fetchTiposEntidade(); // Refresh the list
+      fetchTiposEntidade(); 
     }
     setIsLoading(false);
     setIsDeleteAlertOpen(false);
@@ -240,7 +259,7 @@ export default function GerenciarTiposEntidadePage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            {isLoading && tiposEntidade.length === 0 ? (
+            {isLoading && tiposEntidade.length === 0 && !searchTerm ? (
               <p className="text-center text-muted-foreground py-4">Carregando tipos de entidade...</p>
             ) : !isLoading && tiposEntidade.length === 0 ? (
               <p className="text-center text-muted-foreground py-4">Nenhum tipo de entidade cadastrado ou encontrado.</p>
@@ -280,7 +299,7 @@ export default function GerenciarTiposEntidadePage() {
           <DialogHeader>
             <DialogTitle>{modalMode === 'create' ? 'Cadastrar Novo Tipo de Entidade' : 'Editar Tipo de Entidade'}</DialogTitle>
             <DialogDescription>
-              {modalMode === 'create' ? 'Preencha o nome para o novo tipo de entidade.' : `Editando o tipo: ${currentTipoEntidade?.nome_tipo}`}
+              {modalMode === 'create' ? 'Preencha o nome para o novo tipo de entidade.' : `Editando o tipo: ${currentTipoEntidade?.nome_tipo || ''}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveEntityType} className="grid gap-4 py-4">
@@ -324,16 +343,15 @@ export default function GerenciarTiposEntidadePage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      {/* 
+        Supabase Integration RLS Notes for public."TiposEntidade":
+        - SELECT: Allow for 'admin', 'supervisor', 'operator' (and 'client' if they need to see this for display purposes).
+                  Or simply `USING (true)` for authenticated users if this is non-sensitive lookup data.
+        - INSERT, UPDATE, DELETE: Typically restricted to 'admin' and 'supervisor'.
+        - Ensure `public.get_user_role()` returns the correct role for the logged-in user.
+        - Check for UNIQUE constraint on `nome_tipo`.
+      */}
     </div>
   );
 }
-
-// Supabase Integration Notes:
-// - Listagem: Fetch from public."TiposEntidade", implement server-side search if possible or filter client-side.
-// - Cadastro: POST to public."TiposEntidade" with nome_tipo.
-// - Edição: Fetch the specific TipoEntidade by ID to pre-fill the form. PUT/PATCH to public."TiposEntidade".
-// - Exclusão: DELETE from public."TiposEntidade" by ID. Backend RLS/constraints should handle FK issues.
-// - After each successful operation, re-fetch or update the local state to refresh the list.
-// - Remember to implement appropriate RLS policies on public."TiposEntidade" in Supabase.
-//   - e.g., admins/supervisors can CRUD, others can SELECT.
 
