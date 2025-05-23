@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, Settings, Building2 } from "lucide-react";
+import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, Building2 } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
@@ -42,6 +42,7 @@ export default function GerenciarTiposEntidadePage() {
   const [tiposEntidade, setTiposEntidade] = useState<TipoEntidade[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(true); // Separate state for initial fetch
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -54,11 +55,14 @@ export default function GerenciarTiposEntidadePage() {
   const fetchTiposEntidade = async () => {
     if (!supabase) {
       toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setIsFetching(false);
       setIsLoading(false);
       setTiposEntidade([]);
       return;
     }
-    setIsLoading(true);
+    setIsLoading(true); // For search/refresh loading
+    if (isFetching) setIsLoading(true); // For initial load spinner
+
     console.log("GerenciarTiposEntidadePage: Fetching TiposEntidade, search:", searchTerm);
     
     let query = supabase
@@ -73,7 +77,7 @@ export default function GerenciarTiposEntidadePage() {
     const { data, error } = await query;
 
     if (error) {
-      console.error("GerenciarTiposEntidadePage: Erro ao buscar tipos de entidade:", error);
+      console.error("GerenciarTiposEntidadePage: Erro ao buscar tipos de entidade:", JSON.stringify(error, null, 2));
       toast({ title: "Erro ao Buscar Dados", description: error.message || "Não foi possível carregar os tipos de entidade.", variant: "destructive" });
       setTiposEntidade([]);
     } else {
@@ -81,10 +85,12 @@ export default function GerenciarTiposEntidadePage() {
       console.log("GerenciarTiposEntidadePage: TiposEntidade fetched:", data);
     }
     setIsLoading(false);
+    setIsFetching(false);
   };
 
   useEffect(() => {
     fetchTiposEntidade();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const handleSearchSubmit = (event: FormEvent) => {
@@ -200,7 +206,7 @@ export default function GerenciarTiposEntidadePage() {
       .eq('id_tipo_entidade', tipoEntidadeToDelete.id_tipo_entidade);
 
     if (error) {
-      console.error('GerenciarTiposEntidadePage: Falha ao excluir tipo de entidade:', error);
+      console.error('GerenciarTiposEntidadePage: Falha ao excluir tipo de entidade:', JSON.stringify(error, null, 2));
       toast({ title: "Erro ao Excluir", description: error.message || "Falha ao excluir. Verifique se este tipo está em uso.", variant: "destructive" });
     } else {
       toast({ title: "Sucesso!", description: `Tipo de entidade "${tipoEntidadeToDelete.nome_tipo}" excluído.` });
@@ -244,7 +250,7 @@ export default function GerenciarTiposEntidadePage() {
               disabled={isLoading}
             />
             <Button type="submit" disabled={isLoading}>
-              <Search className="mr-2 h-4 w-4" /> {isLoading ? "Buscando..." : "Buscar"}
+              <Search className="mr-2 h-4 w-4" /> {isLoading && !isFetching ? "Buscando..." : "Buscar"}
             </Button>
           </form>
         </CardContent>
@@ -259,10 +265,12 @@ export default function GerenciarTiposEntidadePage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            {isLoading && tiposEntidade.length === 0 && !searchTerm ? (
+            {isFetching ? (
               <p className="text-center text-muted-foreground py-4">Carregando tipos de entidade...</p>
-            ) : !isLoading && tiposEntidade.length === 0 ? (
-              <p className="text-center text-muted-foreground py-4">Nenhum tipo de entidade cadastrado ou encontrado.</p>
+            ) : !isLoading && tiposEntidade.length === 0 && !searchTerm ? (
+              <p className="text-center text-muted-foreground py-4">Nenhum tipo de entidade cadastrado.</p>
+            ) : !isLoading && tiposEntidade.length === 0 && searchTerm ? (
+                 <p className="text-center text-muted-foreground py-4">Nenhum tipo de entidade encontrado com o termo "{searchTerm}".</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -345,13 +353,13 @@ export default function GerenciarTiposEntidadePage() {
       )}
       {/* 
         Supabase Integration RLS Notes for public."TiposEntidade":
-        - SELECT: Allow for 'admin', 'supervisor', 'operator' (and 'client' if they need to see this for display purposes).
-                  Or simply `USING (true)` for authenticated users if this is non-sensitive lookup data.
+        - SELECT: Users with 'admin', 'supervisor', 'operator' roles should be able to read all.
+                  Clients might also need read access if this info is displayed to them (e.g., in filters or organization details).
         - INSERT, UPDATE, DELETE: Typically restricted to 'admin' and 'supervisor'.
-        - Ensure `public.get_user_role()` returns the correct role for the logged-in user.
+        - Ensure your RLS policy 'TiposEntidade: Allow admin/supervisor to manage.' is active and correct.
+        - The public.get_user_role() function must return 'admin' or 'supervisor' for the logged-in user performing these actions.
         - Check for UNIQUE constraint on `nome_tipo`.
       */}
     </div>
   );
 }
-
