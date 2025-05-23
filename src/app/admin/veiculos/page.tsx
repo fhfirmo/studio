@@ -25,7 +25,7 @@ interface VeiculoSupabase {
 }
 
 interface VeiculoRow {
-  id: number; // Corresponds to id_veiculo
+  id: number;
   placa: string;
   modelo: string | null;
   marca: string | null;
@@ -36,7 +36,7 @@ interface VeiculoRow {
   tipoProprietario: 'Pessoa Física' | 'Organização' | 'N/A';
 }
 
-const initialVeiculos: VeiculoRow[] = []; // Start with empty
+const initialVeiculos: VeiculoRow[] = [];
 
 export default function GerenciamentoVeiculosPage() {
   const [veiculos, setVeiculos] = useState<VeiculoRow[]>(initialVeiculos);
@@ -54,6 +54,7 @@ export default function GerenciamentoVeiculosPage() {
       return;
     }
     setIsLoading(true);
+    console.log(`fetchVeiculos: Iniciando busca com termo: "${searchTerm}"`);
     
     let query = supabase
       .from('Veiculos')
@@ -71,24 +72,32 @@ export default function GerenciamentoVeiculosPage() {
       .order('placa_atual', { ascending: true });
 
     if (searchTerm) {
-      // Basic search: placa, model name (if available), owner name
-      // More complex search might require a database function or view
+      // Simplified search: only on direct columns of Veiculos for now
+      // Searching on related tables with .or() can be complex if relations are null
       query = query.or(
         `placa_atual.ilike.%${searchTerm}%,` +
-        `ModelosVeiculo.nome_modelo.ilike.%${searchTerm}%,` +
-        `PessoasFisicas.nome_completo.ilike.%${searchTerm}%,` +
-        `Entidades.nome.ilike.%${searchTerm}%`
+        `marca.ilike.%${searchTerm}%,` + 
+        `chassi.ilike.%${searchTerm}%` // Assuming chassi is a direct and searchable column
       );
+      console.log("fetchVeiculos: Filtro OR aplicado para placa_atual, marca, chassi.");
     }
 
     const { data, error } = await query;
 
     if (error) {
-      console.error("Erro ao buscar veículos:", error);
-      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      // Log the full error object for better debugging
+      console.error("Erro ao buscar veículos - Detalhes Completos:", JSON.stringify(error, null, 2));
+      console.error("Erro ao buscar veículos (objeto original):", error);
+      toast({ 
+        title: "Erro ao Buscar Dados", 
+        description: error.message || `Erro desconhecido ao buscar veículos. Código: ${error.code || 'N/A'}. Verifique o console e as RLS.`, 
+        variant: "destructive",
+        duration: 7000 
+      });
       setVeiculos([]);
     } else {
-      const formattedData: VeiculoRow[] = data.map((v: VeiculoSupabase) => ({
+      console.log("fetchVeiculos: Dados recebidos do Supabase:", data);
+      const formattedData: VeiculoRow[] = (data || []).map((v: VeiculoSupabase) => ({
         id: v.id_veiculo,
         placa: v.placa_atual,
         modelo: v.ModelosVeiculo?.nome_modelo || 'N/A',
@@ -99,6 +108,7 @@ export default function GerenciamentoVeiculosPage() {
         nomeProprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome || 'N/A',
         tipoProprietario: v.PessoasFisicas ? 'Pessoa Física' : (v.Entidades ? 'Organização' : 'N/A'),
       }));
+      console.log("fetchVeiculos: Dados formatados:", formattedData);
       setVeiculos(formattedData);
     }
     setIsLoading(false);
@@ -106,11 +116,12 @@ export default function GerenciamentoVeiculosPage() {
 
   useEffect(() => {
     fetchVeiculos();
-  }, []); // Fetch on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    fetchVeiculos(); // Re-fetch with current searchTerm
+    fetchVeiculos(); 
   };
 
   const handleDeleteClick = (veiculo: VeiculoRow) => {
@@ -121,6 +132,7 @@ export default function GerenciamentoVeiculosPage() {
   const confirmDeleteVeiculo = async () => {
     if (!veiculoToDelete || !supabase) return;
     
+    setIsLoading(true);
     const { error } = await supabase
       .from('Veiculos')
       .delete()
@@ -131,8 +143,9 @@ export default function GerenciamentoVeiculosPage() {
       toast({ title: "Erro ao Excluir", description: `Falha ao excluir veículo: ${error.message}`, variant: "destructive" });
     } else {
       toast({ title: "Veículo Excluído!", description: `O veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo || ''} foi excluído.` });
-      fetchVeiculos(); // Refresh the list
+      fetchVeiculos(); 
     }
+    setIsLoading(false);
     setIsAlertOpen(false);
     setVeiculoToDelete(null);
   };
@@ -160,13 +173,13 @@ export default function GerenciamentoVeiculosPage() {
       <Card className="shadow-lg mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Veículos</CardTitle>
-          <CardDescription>Filtre veículos por placa, modelo, marca ou nome do proprietário.</CardDescription>
+          <CardDescription>Filtre veículos por placa, marca ou chassi.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Pesquisar por Placa, Modelo, Marca ou Proprietário..."
+              placeholder="Pesquisar por Placa, Marca ou Chassi..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
@@ -204,9 +217,15 @@ export default function GerenciamentoVeiculosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={10} className="text-center h-24">Carregando...</TableCell></TableRow>
-                ) : veiculos.length > 0 ? (
+                {isLoading && veiculos.length === 0 ? ( // Show loading only if list is empty
+                  <TableRow><TableCell colSpan={10} className="text-center h-24">Carregando veículos...</TableCell></TableRow>
+                ) : !isLoading && veiculos.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center h-24 text-muted-foreground">
+                      {searchTerm ? `Nenhum veículo encontrado para "${searchTerm}".` : "Nenhum veículo cadastrado no momento."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
                   veiculos.map((veiculo) => (
                     <TableRow key={veiculo.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{veiculo.id}</TableCell>
@@ -240,12 +259,6 @@ export default function GerenciamentoVeiculosPage() {
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center h-24 text-muted-foreground">
-                      Nenhum veículo cadastrado no momento.
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -274,7 +287,18 @@ export default function GerenciamentoVeiculosPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      {/* 
+        Supabase Integration Notes:
+        - `fetchVeiculos` needs to correctly query 'Veiculos' and JOIN/nest `ModelosVeiculo`, `PessoasFisicas`, `Entidades`.
+        - Search term (`searchTerm`) in `fetchVeiculos` should ideally filter on `placa_atual`, `ModelosVeiculo.nome_modelo`, 
+          `PessoasFisicas.nome_completo`, and `Entidades.nome_fantasia`. This requires careful construction of the .or() clause
+          or using a database function/view for optimized search.
+        - `confirmDeleteVeiculo` should call Supabase to delete from 'Veiculos' table.
+        - RLS policies on all involved tables (`Veiculos`, `ModelosVeiculo`, `PessoasFisicas`, `Entidades`) must allow
+          the logged-in user (admin/supervisor/operator) to perform SELECT and DELETE operations.
+      */}
     </div>
   );
 }
+
     
