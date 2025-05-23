@@ -30,19 +30,17 @@ import { PlusCircle, Edit3, Trash2, Search, AlertTriangle, Building2 } from "luc
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
-interface TipoEntidadeSupabase {
+interface TipoEntidade {
   id_tipo_entidade: number;
   nome_tipo: string;
 }
-
-interface TipoEntidade extends TipoEntidadeSupabase {}
 
 export default function GerenciarTiposEntidadePage() {
   const { toast } = useToast();
   const [tiposEntidade, setTiposEntidade] = useState<TipoEntidade[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(true); // Separate state for initial fetch
+  const [isFetching, setIsFetching] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -60,8 +58,8 @@ export default function GerenciarTiposEntidadePage() {
       setTiposEntidade([]);
       return;
     }
-    setIsLoading(true); // For search/refresh loading
-    if (isFetching) setIsLoading(true); // For initial load spinner
+    setIsLoading(true);
+    if (isFetching) setIsLoading(true);
 
     console.log("GerenciarTiposEntidadePage: Fetching TiposEntidade, search:", searchTerm);
     
@@ -102,7 +100,6 @@ export default function GerenciarTiposEntidadePage() {
     setSearchTerm(event.target.value);
   };
 
-
   const handleOpenCreateModal = () => {
     setModalMode('create');
     setCurrentTipoEntidade(null);
@@ -140,38 +137,51 @@ export default function GerenciarTiposEntidadePage() {
 
     setIsLoading(true);
     let error = null;
-    let operationData = null;
-
+    
     try {
+      // Diagnostic: Call get_user_role from client-side
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_role');
+      if (rpcError) {
+        console.error(`GerenciarTiposEntidadePage: Erro ao chamar RPC get_user_role:`, JSON.stringify(rpcError, null, 2));
+        toast({ title: "Erro de Diagnóstico", description: `Falha ao verificar o papel do usuário via RPC: ${rpcError.message}. Verifique o console.`, variant: "destructive", duration: 7000 });
+        setIsLoading(false);
+        return;
+      }
+      console.log(`GerenciarTiposEntidadePage: Resultado da RPC get_user_role (client-side):`, rpcData);
+      if (rpcData !== 'admin' && rpcData !== 'supervisor') {
+         toast({ title: "Permissão Insuficiente (Diagnóstico)", description: `Seu papel atual detectado é '${rpcData}'. A política RLS requer 'admin' ou 'supervisor' para esta operação. Verifique seu perfil e a função get_user_role.`, variant: "destructive", duration: 10000 });
+         setIsLoading(false);
+         return;
+      }
+      // End Diagnostic
+
       if (modalMode === 'create') {
         console.log("GerenciarTiposEntidadePage: Attempting to INSERT TipoEntidade:", formData);
-        const { data: newData, error: insertError } = await supabase
+        const { error: insertError } = await supabase
           .from('TiposEntidade')
           .insert([{ nome_tipo: formData.nome_tipo.trim() }])
           .select()
           .single();
         error = insertError;
-        operationData = newData;
-        if (!error && newData) {
+        if (!error) {
           toast({ title: "Sucesso!", description: "Novo tipo de entidade cadastrado." });
         }
       } else if (modalMode === 'edit' && currentTipoEntidade) {
         console.log("GerenciarTiposEntidadePage: Attempting to UPDATE TipoEntidade ID:", currentTipoEntidade.id_tipo_entidade, "with data:", formData);
-        const { data: updatedData, error: updateError } = await supabase
+        const { error: updateError } = await supabase
           .from('TiposEntidade')
           .update({ nome_tipo: formData.nome_tipo.trim() })
           .eq('id_tipo_entidade', currentTipoEntidade.id_tipo_entidade)
           .select()
           .single();
         error = updateError;
-        operationData = updatedData;
-        if (!error && updatedData) {
+        if (!error) {
           toast({ title: "Sucesso!", description: "Tipo de entidade atualizado." });
         }
       }
 
       if (error) {
-        console.error(`GerenciarTiposEntidadePage: Erro ao salvar tipo de entidade (${modalMode}):`, JSON.stringify(error, null, 2), error); // Log the full error object
+        console.error(`GerenciarTiposEntidadePage: Erro ao salvar tipo de entidade (${modalMode}):`, JSON.stringify(error, null, 2), error); 
         toast({ 
             title: `Erro ao Salvar (${modalMode})`, 
             description: error.message || "Falha na operação. Verifique permissões (RLS) e se os dados são válidos (ex: nome único).", 
@@ -353,13 +363,15 @@ export default function GerenciarTiposEntidadePage() {
       )}
       {/* 
         Supabase Integration RLS Notes for public."TiposEntidade":
-        - SELECT: Users with 'admin', 'supervisor', 'operator' roles should be able to read all.
-                  Clients might also need read access if this info is displayed to them (e.g., in filters or organization details).
-        - INSERT, UPDATE, DELETE: Typically restricted to 'admin' and 'supervisor'.
-        - Ensure your RLS policy 'TiposEntidade: Allow admin/supervisor to manage.' is active and correct.
-        - The public.get_user_role() function must return 'admin' or 'supervisor' for the logged-in user performing these actions.
-        - Check for UNIQUE constraint on `nome_tipo`.
+        - SELECT: Users with 'admin', 'supervisor' roles should be able to read all.
+        - INSERT, UPDATE, DELETE: Restricted to 'admin' and 'supervisor'.
+        - RLS Policy Example (needs get_user_role() function):
+          CREATE POLICY "Allow admin/supervisor to manage TiposEntidade"
+          ON public."TiposEntidade" FOR ALL
+          USING (public.get_user_role() IN ('admin', 'supervisor'))
+          WITH CHECK (public.get_user_role() IN ('admin', 'supervisor'));
       */}
     </div>
   );
 }
+
