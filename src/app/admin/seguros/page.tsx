@@ -9,95 +9,139 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ShieldCheck, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
+import { format, parseISO, isValid } from 'date-fns';
 
-// Placeholder data - In a real app, this would come from Supabase
-const initialSeguros = [
-  { id: "seg_001", numeroApolice: "APOLICE-2024-001", veiculo: "Fiat Uno - ABC-1234", dataInicio: "2024-01-15", dataFim: "2025-01-14", valorTotal: 1250.75 },
-  { id: "seg_002", numeroApolice: "APOLICE-2024-002", veiculo: "VW Gol - DEF-5678", dataInicio: "2024-03-01", dataFim: "2025-02-28", valorTotal: 1480.00 },
-  { id: "seg_003", numeroApolice: "APOLICE-2024-003", veiculo: "Chevrolet Onix - GHI-9012", dataInicio: "2024-05-20", dataFim: "2025-05-19", valorTotal: 1320.50 },
-  { id: "seg_004", numeroApolice: "APOLICE-2024-004", veiculo: "Hyundai HB20 - JKL-3456", dataInicio: "2023-12-10", dataFim: "2024-12-09", valorTotal: 1100.00 },
-  { id: "seg_005", numeroApolice: "APOLICE-2024-005", veiculo: "Ford Ka - MNO-7890", dataInicio: "2024-07-01", dataFim: "2025-06-30", valorTotal: 995.90 },
-];
-
-interface Seguro {
-  id: string;
-  numeroApolice: string;
-  veiculo: string; // Could be an object with more vehicle details in a real app
-  dataInicio: string;
-  dataFim: string;
-  valorTotal: number;
+interface SeguroSupabase {
+  id_seguro: number;
+  numero_apolice: string;
+  vigencia_inicio: string;
+  vigencia_fim: string;
+  valor_indenizacao: number | null;
+  Seguradoras: { nome_seguradora: string } | null;
+  Veiculos: { placa_atual: string, ModelosVeiculo: { nome_modelo: string } | null } | null;
+  PessoasFisicas: { nome_completo: string } | null; // Titular PF
+  Entidades: { nome: string } | null; // Titular PJ
 }
 
+interface SeguroRow {
+  id: number; // Corresponds to id_seguro
+  numeroApolice: string;
+  veiculoDesc: string | null;
+  seguradoraNome: string | null;
+  dataInicio: string;
+  dataFim: string;
+  valorIndenizacao: number | null;
+  titularNome: string | null;
+}
+
+const initialSeguros: SeguroRow[] = []; // Start empty
+
 export default function GerenciamentoSegurosPage() {
-  const [seguros, setSeguros] = useState<Seguro[]>(initialSeguros);
+  const [seguros, setSeguros] = useState<SeguroRow[]>(initialSeguros);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
-  const [seguroToDelete, setSeguroToDelete] = useState<{ id: string; numeroApolice: string } | null>(null);
-  // const { toast } = useToast(); // Uncomment for feedback
+  const [seguroToDelete, setSeguroToDelete] = useState<{ id: number; numeroApolice: string } | null>(null);
+  const { toast } = useToast();
 
-  // In a real app, seguros would be fetched from Supabase:
-  // useEffect(() => {
-  //   async function fetchSeguros() {
-  //     // const { data, error } = await supabase.from('seguros').select('*, veiculos (placa, modelo)'); // Example join
-  //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar seguros."}) */ }
-  //     // else { setSeguros(data || []); }
-  //   }
-  //   fetchSeguros();
-  // }, []);
-
-  const handleSearch = (event: FormEvent) => {
-    event.preventDefault();
-    console.log(`Searching for seguro: ${searchTerm} (placeholder - Supabase query needed for 'seguros' table)`);
-    // const filteredSeguros = initialSeguros.filter(seguro => 
-    //   seguro.numeroApolice.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   seguro.veiculo.toLowerCase().includes(searchTerm.toLowerCase())
-    // );
-    // setSeguros(filteredSeguros);
-    // if (filteredSeguros.length === 0) {
-    //   // toast({ title: "Nenhum Resultado", description: `Não foram encontrados seguros para "${searchTerm}".` });
-    // }
+  const formatDateForDisplay = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
+    try {
+        const date = parseISO(dateString);
+        return isValid(date) ? format(date, "dd/MM/yyyy") : "Data inválida";
+    } catch (e) { return "Data inválida"; }
   };
 
-  const handleDeleteClick = (seguro: Seguro) => {
+  const formatCurrency = (value: number | null) => {
+    if (value === null || value === undefined) return "N/A";
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const fetchSeguros = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
+      setIsLoading(false); setSeguros([]); return;
+    }
+    setIsLoading(true);
+    
+    let query = supabase
+      .from('Seguros')
+      .select(`
+        id_seguro,
+        numero_apolice,
+        vigencia_inicio,
+        vigencia_fim,
+        valor_indenizacao,
+        Seguradoras ( nome_seguradora ),
+        Veiculos ( placa_atual, ModelosVeiculo ( nome_modelo ) ),
+        PessoasFisicas ( nome_completo ),
+        Entidades ( nome )
+      `)
+      .order('numero_apolice', { ascending: true });
+
+    if (searchTerm) {
+      query = query.or(
+        `numero_apolice.ilike.%${searchTerm}%,` +
+        `Veiculos.placa_atual.ilike.%${searchTerm}%`
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar seguros:", error);
+      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      setSeguros([]);
+    } else {
+      const formattedData: SeguroRow[] = data.map((s: SeguroSupabase) => ({
+        id: s.id_seguro,
+        numeroApolice: s.numero_apolice,
+        veiculoDesc: s.Veiculos ? `${s.Veiculos.placa_atual} (${s.Veiculos.ModelosVeiculo?.nome_modelo || 'N/A'})` : 'N/A',
+        seguradoraNome: s.Seguradoras?.nome_seguradora || 'N/A',
+        dataInicio: formatDateForDisplay(s.vigencia_inicio),
+        dataFim: formatDateForDisplay(s.vigencia_fim),
+        valorIndenizacao: s.valor_indenizacao,
+        titularNome: s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A',
+      }));
+      setSeguros(formattedData);
+    }
+    setIsLoading(false);
+  };
+  
+  useEffect(() => {
+    fetchSeguros();
+  }, []); 
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    fetchSeguros();
+  };
+
+  const handleDeleteClick = (seguro: SeguroRow) => {
     setSeguroToDelete({ id: seguro.id, numeroApolice: seguro.numeroApolice });
     setIsAlertOpen(true);
   };
 
   const confirmDeleteSeguro = async () => {
-    if (!seguroToDelete) return;
+    if (!seguroToDelete || !supabase) return;
     
-    console.log(`Attempting to delete seguro ID: ${seguroToDelete.id}, Apólice: ${seguroToDelete.numeroApolice}`);
-    // Placeholder for Supabase API call to delete seguro
-    // try {
-    //   // const { error } = await supabase.from('seguros').delete().eq('id', seguroToDelete.id);
-    //   // if (error) throw error;
-    //   setSeguros(prevSeguros => prevSeguros.filter(s => s.id !== seguroToDelete.id));
-    //   // toast({ title: "Seguro Excluído!", description: `O seguro ${seguroToDelete.numeroApolice} foi excluído.` });
-    // } catch (error: any) {
-    //   console.error('Failed to delete seguro:', error.message);
-    //   // toast({ title: "Erro ao Excluir", description: `Falha ao excluir seguro: ${error.message}`, variant: "destructive" });
-    // } finally {
-    //   setIsAlertOpen(false);
-    //   setSeguroToDelete(null);
-    // }
+    const { error } = await supabase
+      .from('Seguros')
+      .delete()
+      .eq('id_seguro', seguroToDelete.id);
 
-    // Simulate API call and update UI
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setSeguros(prevSeguros => prevSeguros.filter(s => s.id !== seguroToDelete!.id));
-    console.log(`Seguro ${seguroToDelete.numeroApolice} (ID: ${seguroToDelete.id}) deleted (simulated).`);
-    // toast({ title: "Seguro Excluído! (Simulado)", description: `O seguro ${seguroToDelete.numeroApolice} foi excluído.` });
+    if (error) {
+      console.error('Falha ao excluir seguro:', error.message);
+      toast({ title: "Erro ao Excluir", description: `Falha ao excluir seguro: ${error.message}`, variant: "destructive" });
+    } else {
+      toast({ title: "Seguro Excluído!", description: `O seguro ${seguroToDelete.numeroApolice} foi excluído.` });
+      fetchSeguros(); 
+    }
     setIsAlertOpen(false);
     setSeguroToDelete(null);
   };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-  }
-
-  const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  }
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -125,16 +169,17 @@ export default function GerenciamentoSegurosPage() {
           <CardDescription>Filtre seguros por número da apólice ou placa do veículo.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Digite para pesquisar..."
+              placeholder="Pesquisar por Nº Apólice ou Placa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
+              disabled={isLoading}
             />
-            <Button type="submit">
-              <Search className="mr-2 h-4 w-4" /> Buscar
+            <Button type="submit" disabled={isLoading}>
+              <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
             </Button>
           </form>
         </CardContent>
@@ -154,23 +199,29 @@ export default function GerenciamentoSegurosPage() {
                 <TableRow>
                   <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
                   <TableHead>Nº Apólice</TableHead>
-                  <TableHead>Veículo (Placa)</TableHead>
-                  <TableHead className="hidden md:table-cell">Data Início</TableHead>
-                  <TableHead className="hidden md:table-cell">Data Fim</TableHead>
-                  <TableHead className="hidden lg:table-cell text-right">Valor Total</TableHead>
+                  <TableHead className="hidden md:table-cell">Titular</TableHead>
+                  <TableHead className="hidden md:table-cell">Veículo</TableHead>
+                  <TableHead>Seguradora</TableHead>
+                  <TableHead>Início Vig.</TableHead>
+                  <TableHead>Fim Vig.</TableHead>
+                  <TableHead className="hidden lg:table-cell text-right">Valor</TableHead>
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {seguros.length > 0 ? (
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={9} className="text-center h-24">Carregando...</TableCell></TableRow>
+                ) : seguros.length > 0 ? (
                   seguros.map((seguro) => (
                     <TableRow key={seguro.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{seguro.id}</TableCell>
                       <TableCell className="font-semibold">{seguro.numeroApolice}</TableCell>
-                      <TableCell>{seguro.veiculo}</TableCell>
-                      <TableCell className="hidden md:table-cell">{formatDate(seguro.dataInicio)}</TableCell>
-                      <TableCell className="hidden md:table-cell">{formatDate(seguro.dataFim)}</TableCell>
-                      <TableCell className="hidden lg:table-cell text-right">{formatCurrency(seguro.valorTotal)}</TableCell>
+                      <TableCell className="hidden md:table-cell">{seguro.titularNome}</TableCell>
+                      <TableCell className="hidden md:table-cell">{seguro.veiculoDesc}</TableCell>
+                      <TableCell>{seguro.seguradoraNome}</TableCell>
+                      <TableCell>{seguro.dataInicio}</TableCell>
+                      <TableCell>{seguro.dataFim}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-right">{formatCurrency(seguro.valorIndenizacao)}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do seguro ${seguro.numeroApolice}`}>
                            <Link href={`/admin/seguros/${seguro.id}`}>
@@ -195,7 +246,7 @@ export default function GerenciamentoSegurosPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
                       Nenhum seguro cadastrado no momento.
                     </TableCell>
                   </TableRow>
@@ -227,20 +278,7 @@ export default function GerenciamentoSegurosPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/*
-        Supabase Integration Notes:
-        - Insurance list will be fetched from a Supabase table (e.g., 'seguros'), potentially with a join to 'veiculos' to get vehicle details.
-        - Search functionality will query the Supabase 'seguros' table by policy number or vehicle plate.
-        - "Cadastrar Novo Seguro" button links to '/admin/seguros/novo'.
-        - "Detalhes" button links to '/admin/seguros/[id]', passing the insurance ID.
-        - "Editar" button links to '/admin/seguros/[id]/editar', passing the insurance ID. This page needs to be created.
-        - "Excluir" button will trigger a Supabase API call (DELETE to 'seguros' table) after confirmation.
-      */}
     </div>
   );
 }
-
-    
-
     

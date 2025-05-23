@@ -8,130 +8,226 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileText, Search, Eye, Trash2, Download, Upload, AlertTriangle, Edit3, Link2 } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
+import { FileText, Search, Eye, Trash2, Download, Upload, AlertTriangle, Edit3 } from "lucide-react";
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
+import { format, parseISO, isValid } from 'date-fns';
 
-interface Documento {
-  id: string;
-  titulo: string;
-  tipo: string; // This is 'tipo_documento' from Arquivos table
-  dataUpload: string;
-  tamanho: string;
-  associadoA_nome: string | null; // Name of the associated entity
-  associadoA_tipo: 'Pessoa Física' | 'Organização' | 'Veículo' | 'Seguro' | 'Nenhum'; // Type of association
+interface DocumentoSupabase {
+  id_arquivo: string; // Assuming UUID
+  nome_arquivo: string;
+  tipo_documento: string | null;
+  data_upload: string;
+  tamanho_bytes: number;
+  caminho_armazenamento: string; // For download/view
+  PessoasFisicas?: { nome_completo: string } | null;
+  Entidades?: { nome: string } | null;
+  Veiculos?: { placa_atual: string, ModelosVeiculo?: { nome_modelo: string } | null } | null;
+  Seguros?: { numero_apolice: string } | null;
 }
 
-// Updated placeholder data
-const initialDocumentos: Documento[] = [
-  { id: "doc_001", titulo: "Contrato João", tipo: "Contrato", dataUpload: "2024-01-01", tamanho: "500 KB", associadoA_nome: "João da Silva Sauro", associadoA_tipo: "Pessoa Física" },
-  { id: "doc_002", titulo: "Apólice ABC-1234", tipo: "Apólice", dataUpload: "2024-01-05", tamanho: "1.2 MB", associadoA_nome: "ABC-1234 (Onix)", associadoA_tipo: "Veículo" },
-  { id: "doc_003", titulo: "CNPJ Cooperativa", tipo: "CNPJ", dataUpload: "2024-01-10", tamanho: "300 KB", associadoA_nome: "Cooperativa Alfa", associadoA_tipo: "Organização" },
-  { id: "doc_004", titulo: "Proposta Seguro X", tipo: "Proposta", dataUpload: "2024-01-15", tamanho: "800 KB", associadoA_nome: "Apólice 98765", associadoA_tipo: "Seguro" },
-  { id: "doc_005", titulo: "Manual do Sistema", tipo: "Manual", dataUpload: "2024-01-20", tamanho: "2.5 MB", associadoA_nome: null, associadoA_tipo: "Nenhum" },
-];
+interface DocumentoRow {
+  id: string;
+  titulo: string;
+  tipo: string | null;
+  dataUpload: string;
+  tamanho: string;
+  associadoA_nome: string | null;
+  associadoA_tipo: 'Pessoa Física' | 'Organização' | 'Veículo' | 'Seguro' | 'Nenhum';
+  storagePath: string;
+}
 
+const initialDocumentos: DocumentoRow[] = []; // Start empty
 
 export default function GerenciamentoDocumentosPage() {
-  const [documentos, setDocumentos] = useState<Documento[]>(initialDocumentos);
+  const [documentos, setDocumentos] = useState<DocumentoRow[]>(initialDocumentos);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
-  const [documentoToDelete, setDocumentoToDelete] = useState<{ id: string; titulo: string } | null>(null);
-  // const { toast } = useToast(); // Uncomment for feedback
+  const [documentoToDelete, setDocumentoToDelete] = useState<{ id: string; titulo: string; storagePath: string } | null>(null);
+  const { toast } = useToast();
 
-  // In a real app, documentos would be fetched from Supabase:
-  // useEffect(() => {
-  //   async function fetchDocumentos() {
-  //     // const { data, error } = await supabase.from('Arquivos')
-  //     // .select(`
-  //     //   id, titulo, tipo_documento, data_upload, tamanho_bytes,
-  //     //   PessoasFisicas ( nome_completo ),
-  //     //   Entidades ( nome_fantasia ),
-  //     //   Veiculos ( placa, ModelosVeiculo ( nome_modelo ) ),
-  //     //   Seguros ( numero_apolice )
-  //     // `); 
-  //     // if (error) { /* handle error */ }
-  //     // else { 
-  //     //   const formattedData = data.map(doc => {
-  //     //     let associadoA_nome = null;
-  //     //     let associadoA_tipo = 'Nenhum';
-  //     //     if (doc.PessoasFisicas) {
-  //     //       associadoA_nome = doc.PessoasFisicas.nome_completo;
-  //     //       associadoA_tipo = 'Pessoa Física';
-  //     //     } else if (doc.Entidades) {
-  //     //       associadoA_nome = doc.Entidades.nome_fantasia;
-  //     //       associadoA_tipo = 'Organização';
-  //     //     } else if (doc.Veiculos) {
-  //     //       associadoA_nome = `${doc.Veiculos.placa} (${doc.Veiculos.ModelosVeiculo?.nome_modelo || 'Modelo Desc.'})`;
-  //     //       associadoA_tipo = 'Veículo';
-  //     //     } else if (doc.Seguros) {
-  //     //       associadoA_nome = doc.Seguros.numero_apolice;
-  //     //       associadoA_tipo = 'Seguro';
-  //     //     }
-  //     //     return {
-  //     //       id: doc.id,
-  //     //       titulo: doc.titulo,
-  //     //       tipo: doc.tipo_documento, // map from db
-  //     //       dataUpload: doc.data_upload,
-  //     //       tamanho: doc.tamanho_bytes ? (doc.tamanho_bytes / 1024).toFixed(2) + ' KB' : 'N/A',
-  //     //       associadoA_nome,
-  //     //       associadoA_tipo,
-  //     //     };
-  //     //   });
-  //     //   setDocumentos(formattedData || []); 
-  //     // }
-  //   }
-  //   fetchDocumentos();
-  // }, []);
-
-  const handleSearch = (event: FormEvent) => {
-    event.preventDefault();
-    console.log(`Searching for documento: ${searchTerm} (placeholder - Supabase query needed for 'Arquivos' table)`);
-    // const filteredDocumentos = initialDocumentos.filter(doc => 
-    //   doc.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   doc.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   (doc.associadoA_nome && doc.associadoA_nome.toLowerCase().includes(searchTerm.toLowerCase()))
-    // );
-    // setDocumentos(filteredDocumentos);
-    // if (filteredDocumentos.length === 0) {
-    //   // toast({ title: "Nenhum Resultado", description: `Não foram encontrados documentos para "${searchTerm}".` });
-    // }
+  const formatDateForDisplay = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = parseISO(dateString);
+      return isValid(date) ? format(date, "dd/MM/yyyy HH:mm") : "Data inválida";
+    } catch (e) { return "Data inválida"; }
   };
 
-  const handleDeleteClick = (documento: Documento) => {
-    setDocumentoToDelete({ id: documento.id, titulo: documento.titulo });
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
+  const fetchDocumentos = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
+      setIsLoading(false); setDocumentos([]); return;
+    }
+    setIsLoading(true);
+    
+    let query = supabase
+      .from('Arquivos')
+      .select(`
+        id_arquivo,
+        nome_arquivo,
+        tipo_documento,
+        data_upload,
+        tamanho_bytes,
+        caminho_armazenamento,
+        PessoasFisicas ( nome_completo ),
+        Entidades ( nome ),
+        Veiculos ( placa_atual, ModelosVeiculo ( nome_modelo ) ),
+        Seguros ( numero_apolice )
+      `)
+      .order('data_upload', { ascending: false });
+
+    if (searchTerm) {
+      query = query.or(
+        `nome_arquivo.ilike.%${searchTerm}%,` +
+        `tipo_documento.ilike.%${searchTerm}%,` +
+        `PessoasFisicas.nome_completo.ilike.%${searchTerm}%,` +
+        `Entidades.nome.ilike.%${searchTerm}%,` +
+        `Veiculos.placa_atual.ilike.%${searchTerm}%,` +
+        `Seguros.numero_apolice.ilike.%${searchTerm}%`
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar documentos:", error);
+      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      setDocumentos([]);
+    } else {
+      const formattedData: DocumentoRow[] = data.map((doc: DocumentoSupabase) => {
+        let associadoA_nome: string | null = null;
+        let associadoA_tipo: DocumentoRow['associadoA_tipo'] = 'Nenhum';
+
+        if (doc.PessoasFisicas) {
+          associadoA_nome = doc.PessoasFisicas.nome_completo;
+          associadoA_tipo = 'Pessoa Física';
+        } else if (doc.Entidades) {
+          associadoA_nome = doc.Entidades.nome;
+          associadoA_tipo = 'Organização';
+        } else if (doc.Veiculos) {
+          associadoA_nome = `${doc.Veiculos.placa_atual} (${doc.Veiculos.ModelosVeiculo?.nome_modelo || 'N/A'})`;
+          associadoA_tipo = 'Veículo';
+        } else if (doc.Seguros) {
+          associadoA_nome = doc.Seguros.numero_apolice;
+          associadoA_tipo = 'Seguro';
+        }
+
+        return {
+          id: doc.id_arquivo,
+          titulo: doc.nome_arquivo,
+          tipo: doc.tipo_documento,
+          dataUpload: formatDateForDisplay(doc.data_upload),
+          tamanho: formatBytes(doc.tamanho_bytes),
+          associadoA_nome,
+          associadoA_tipo,
+          storagePath: doc.caminho_armazenamento,
+        };
+      });
+      setDocumentos(formattedData);
+    }
+    setIsLoading(false);
+  };
+  
+  useEffect(() => {
+    fetchDocumentos();
+  }, []);
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    fetchDocumentos();
+  };
+
+  const handleDeleteClick = (documento: DocumentoRow) => {
+    setDocumentoToDelete({ id: documento.id, titulo: documento.titulo, storagePath: documento.storagePath });
     setIsAlertOpen(true);
   };
 
   const confirmDeleteDocumento = async () => {
-    if (!documentoToDelete) return;
+    if (!documentoToDelete || !supabase) return;
     
-    console.log(`Attempting to delete documento ID: ${documentoToDelete.id}, Titulo: ${documentoToDelete.titulo}`);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setDocumentos(prevDocumentos => prevDocumentos.filter(d => d.id !== documentoToDelete!.id));
-    console.log(`Documento ${documentoToDelete.titulo} (ID: ${documentoToDelete.id}) deleted (simulated).`);
-    // toast({ title: "Documento Excluído! (Simulado)", description: `O documento ${documentoToDelete.titulo} foi excluído.` });
+    // 1. Delete file from Supabase Storage
+    const { error: storageError } = await supabase.storage
+      .from('documentos_bucket') // Replace with your actual bucket name
+      .remove([documentoToDelete.storagePath]);
+
+    if (storageError) {
+      console.error('Falha ao excluir arquivo do Storage:', storageError.message);
+      toast({ title: "Erro ao Excluir Arquivo", description: `Falha ao remover do armazenamento: ${storageError.message}`, variant: "destructive" });
+      // Decide if you want to proceed with DB deletion if storage deletion fails
+      // setIsAlertOpen(false);
+      // setDocumentoToDelete(null);
+      // return;
+    } else {
+      console.log("Arquivo excluído do Storage:", documentoToDelete.storagePath);
+    }
+
+    // 2. Delete record from database
+    const { error: dbError } = await supabase
+      .from('Arquivos')
+      .delete()
+      .eq('id_arquivo', documentoToDelete.id);
+
+    if (dbError) {
+      console.error('Falha ao excluir registro do documento:', dbError.message);
+      toast({ title: "Erro ao Excluir Registro", description: `Falha ao excluir do banco de dados: ${dbError.message}`, variant: "destructive" });
+    } else {
+      toast({ title: "Documento Excluído!", description: `O documento ${documentoToDelete.titulo} foi excluído com sucesso.` });
+      fetchDocumentos(); 
+    }
     setIsAlertOpen(false);
     setDocumentoToDelete(null);
   };
 
-  const handleDownload = (documento: Documento) => {
-    console.log(`Downloading documento: ${documento.titulo} (ID: ${documento.id})`);
-    // toast({ title: "Download Iniciado (Simulado)", description: `O download de ${documento.titulo} começaria agora.`});
-  }
+  const handleDownload = async (documento: DocumentoRow) => {
+    if (!supabase) return;
+    const { data, error } = await supabase.storage
+      .from('documentos_bucket') // Replace with your actual bucket name
+      .download(documento.storagePath);
 
-  const handleView = (documento: Documento) => {
-    console.log(`Viewing documento: ${documento.titulo} (ID: ${documento.id})`);
-    // toast({ title: "Visualizando Documento (Simulado)", description: `Abrindo ${documento.titulo} em nova aba...`});
-  }
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A";
-    try {
-      return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-    } catch(e) {
-      return "Data Inválida";
+    if (error) {
+      toast({ title: "Erro no Download", description: error.message, variant: "destructive" });
+      return;
     }
-  }
+    if (data) {
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = documento.titulo; // Use the document's title as the filename
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Download Iniciado", description: `Baixando ${documento.titulo}...` });
+    }
+  };
+
+  const handleView = async (documento: DocumentoRow) => {
+     if (!supabase) return;
+    // For PDFs and images, you can get a public URL or signed URL
+    const { data } = supabase.storage
+      .from('documentos_bucket') // Replace with your actual bucket name
+      .getPublicUrl(documento.storagePath);
+
+    if (data?.publicUrl) {
+      window.open(data.publicUrl, '_blank');
+    } else {
+      // For other types, or if public URLs are not enabled, initiate download
+      // Or show a message "Preview not available, please download."
+      toast({ title: "Visualização", description: "Abrindo documento... (Se não abrir, tente o download)", variant: "default" });
+      handleDownload(documento); 
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -159,16 +255,17 @@ export default function GerenciamentoDocumentosPage() {
           <CardDescription>Filtre documentos por título, tipo ou entidade associada.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Digite para pesquisar..."
+              placeholder="Pesquisar por Título, Tipo, Associado..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
+              disabled={isLoading}
             />
-            <Button type="submit">
-              <Search className="mr-2 h-4 w-4" /> Buscar
+            <Button type="submit" disabled={isLoading}>
+              <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
             </Button>
           </form>
         </CardContent>
@@ -197,22 +294,24 @@ export default function GerenciamentoDocumentosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {documentos.length > 0 ? (
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={8} className="text-center h-24">Carregando...</TableCell></TableRow>
+                ) : documentos.length > 0 ? (
                   documentos.map((documento) => (
                     <TableRow key={documento.id}>
-                      <TableCell className="font-medium text-xs hidden sm:table-cell">{documento.id}</TableCell>
+                      <TableCell className="font-medium text-xs hidden sm:table-cell">{documento.id.substring(0,8)}...</TableCell>
                       <TableCell className="font-semibold">{documento.titulo}</TableCell>
-                      <TableCell className="hidden md:table-cell">{documento.tipo}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{formatDate(documento.dataUpload)}</TableCell>
+                      <TableCell className="hidden md:table-cell">{documento.tipo || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{documento.dataUpload}</TableCell>
                       <TableCell className="hidden lg:table-cell">{documento.tamanho}</TableCell>
                       <TableCell className="hidden md:table-cell">{documento.associadoA_nome || "N/A"}</TableCell>
                       <TableCell className="hidden md:table-cell">
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                             documento.associadoA_tipo === 'Nenhum' ? 'bg-muted text-muted-foreground' : 
-                            documento.associadoA_tipo === 'Pessoa Física' ? 'bg-blue-100 text-blue-700' :
-                            documento.associadoA_tipo === 'Organização' ? 'bg-purple-100 text-purple-700' :
-                            documento.associadoA_tipo === 'Veículo' ? 'bg-green-100 text-green-700' :
-                            documento.associadoA_tipo === 'Seguro' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
+                            documento.associadoA_tipo === 'Pessoa Física' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                            documento.associadoA_tipo === 'Organização' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' :
+                            documento.associadoA_tipo === 'Veículo' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                            documento.associadoA_tipo === 'Seguro' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                         }`}>
                            {documento.associadoA_tipo}
                         </span>
@@ -242,7 +341,7 @@ export default function GerenciamentoDocumentosPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center h-24 text-muted-foreground"> {/* Updated colSpan */}
+                    <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
                       Nenhum documento cadastrado no momento.
                     </TableCell>
                   </TableRow>
@@ -262,7 +361,7 @@ export default function GerenciamentoDocumentosPage() {
                 <AlertDialogTitle>Confirmar Exclusão de Documento</AlertDialogTitle>
               </div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o documento <strong>{documentoToDelete.titulo}</strong> (ID: {documentoToDelete.id})? Esta ação é irreversível e o arquivo será removido.
+                Tem certeza que deseja excluir o documento <strong>{documentoToDelete.titulo}</strong> (ID: {documentoToDelete.id.substring(0,8)}...)? Esta ação é irreversível e o arquivo será removido do armazenamento e do banco de dados.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -274,26 +373,7 @@ export default function GerenciamentoDocumentosPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/*
-        Supabase Integration Notes:
-        - Document list will be fetched from 'public.Arquivos'.
-        - To populate 'Associado a' and 'Tipo de Associação':
-          - The query to 'public.Arquivos' will need to conditionally JOIN with:
-            - 'public.PessoasFisicas' on 'Arquivos.id_pessoa_fisica_associada' = 'PessoasFisicas.id' (to get nome_completo).
-            - 'public.Entidades' on 'Arquivos.id_entidade_associada' = 'Entidades.id' (to get nome_fantasia).
-            - 'public.Veiculos' on 'Arquivos.id_veiculo' = 'Veiculos.id' (to get placa and potentially model via another join to ModelosVeiculo).
-            - 'public.Seguros' on 'Arquivos.id_seguro' = 'Seguros.id' (to get numero_apolice).
-          - The frontend logic will then determine which association is active and display the corresponding name and type.
-        - Search functionality will query the metadata in 'public.Arquivos' and potentially the names in the associated tables.
-        - "Upload de Novo Documento" button links to '/admin/documentos/novo'.
-        - "Visualizar" button: Will obtain a public or signed URL from Supabase Storage.
-        - "Editar" button links to '/admin/documentos/[id]/editar'.
-        - "Download" button: Will obtain a download URL from Supabase Storage.
-        - "Excluir" button will trigger API calls to delete the file from Storage and its metadata from 'Arquivos'.
-      */}
     </div>
   );
 }
-
     

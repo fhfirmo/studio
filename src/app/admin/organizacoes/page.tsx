@@ -9,100 +9,107 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Building, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
-// Placeholder data - In a real app, this would come from Supabase
-const initialOrganizacoes = [
-  { id: "org_001", nome: "Cooperativa Alfa", tipoOrganizacao: "Cooperativa Principal", cnpj: "11.222.333/0001-44", telefone: "(11) 91234-5678" },
-  { id: "org_002", nome: "Associação Beta", tipoOrganizacao: "Associação de Produtores", cnpj: "22.333.444/0001-55", telefone: "(22) 92345-6789" },
-  { id: "org_003", nome: "Empresa Gama", tipoOrganizacao: "Empresa Privada", cnpj: "33.444.555/0001-66", telefone: "(33) 93456-7890" },
-  { id: "org_004", nome: "Sindicato Delta", tipoOrganizacao: "Sindicato Regional", cnpj: "44.555.666/0001-77", telefone: "(44) 94567-8901" },
-  { id: "org_005", nome: "ONG Epsilon", tipoOrganizacao: "Organização Não Governamental", cnpj: "55.666.777/0001-88", telefone: "(55) 95678-9012" },
-];
-
-interface Organizacao {
-  id: string;
+interface OrganizacaoSupabase {
+  id_entidade: number;
   nome: string;
-  tipoOrganizacao: string; // This would be the 'nome_tipo' from public.TiposEntidade
   cnpj: string;
-  telefone: string;
+  telefone: string | null;
+  TiposEntidade: { nome_tipo: string } | null;
 }
 
+interface OrganizacaoRow {
+  id: number; // Corresponds to id_entidade
+  nome: string;
+  tipoOrganizacao: string | null;
+  cnpj: string;
+  telefone: string | null;
+}
+
+const initialOrganizacoes: OrganizacaoRow[] = []; // Start with empty, will be fetched
+
 export default function GerenciamentoOrganizacoesPage() {
-  const [organizacoes, setOrganizacoes] = useState<Organizacao[]>(initialOrganizacoes);
+  const [organizacoes, setOrganizacoes] = useState<OrganizacaoRow[]>(initialOrganizacoes);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
-  const [organizacaoToDelete, setOrganizacaoToDelete] = useState<{ id: string; nome: string } | null>(null);
-  // const { toast } = useToast(); // Uncomment for feedback
+  const [organizacaoToDelete, setOrganizacaoToDelete] = useState<{ id: number; nome: string } | null>(null);
+  const { toast } = useToast();
 
-  // In a real app, organizations would be fetched from Supabase:
-  // useEffect(() => {
-  //   async function fetchOrganizacoes() {
-  //     // const { data, error } = await supabase
-  //     //   .from('Entidades') // Assuming your table is 'Entidades'
-  //     //   .select(`
-  //     //     id,
-  //     //     nome_fantasia, // Assuming this is the organization name
-  //     //     cnpj,
-  //     //     telefone_comercial, // Assuming this is the phone
-  //     //     TiposEntidade ( nome_tipo ) // Assuming 'TiposEntidade' is the related table and 'tipo_entidade_id' is the FK
-  //     //   `);
-  //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar organizações."}) */ }
-  //     // else { 
-  //     //   const formattedData = data.map(org => ({
-  //     //     id: org.id,
-  //     //     nome: org.nome_fantasia,
-  //     //     tipoOrganizacao: org.TiposEntidade.nome_tipo,
-  //     //     cnpj: org.cnpj,
-  //     //     telefone: org.telefone_comercial,
-  //     //   }));
-  //     //   setOrganizacoes(formattedData || []); 
-  //     // }
-  //   }
-  //   fetchOrganizacoes();
-  // }, []);
+  const fetchOrganizacoes = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
+      setIsLoading(false);
+      setOrganizacoes([]);
+      return;
+    }
+    setIsLoading(true);
+    
+    let query = supabase
+      .from('Entidades')
+      .select(`
+        id_entidade,
+        nome,
+        cnpj,
+        telefone,
+        TiposEntidade ( nome_tipo )
+      `)
+      .order('nome', { ascending: true });
 
-  const handleSearch = (event: FormEvent) => {
+    if (searchTerm) {
+      query = query.or(`nome.ilike.%${searchTerm}%,cnpj.ilike.%${searchTerm}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar organizações:", error);
+      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      setOrganizacoes([]);
+    } else {
+      const formattedData: OrganizacaoRow[] = data.map((org: OrganizacaoSupabase) => ({
+        id: org.id_entidade,
+        nome: org.nome,
+        tipoOrganizacao: org.TiposEntidade?.nome_tipo || 'N/A',
+        cnpj: org.cnpj,
+        telefone: org.telefone,
+      }));
+      setOrganizacoes(formattedData);
+    }
+    setIsLoading(false);
+  };
+  
+  useEffect(() => {
+    fetchOrganizacoes();
+  }, []); // Fetch on mount
+
+  const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    console.log(`Searching for organizacao: ${searchTerm} (placeholder - Supabase query needed for 'Entidades' table)`);
-    // const filteredOrganizacoes = initialOrganizacoes.filter(org => 
-    //   org.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   org.cnpj.includes(searchTerm)
-    // );
-    // setOrganizacoes(filteredOrganizacoes);
-    // if (filteredOrganizacoes.length === 0) {
-    //   // toast({ title: "Nenhum Resultado", description: `Não foram encontradas organizações para "${searchTerm}".` });
-    // }
+    fetchOrganizacoes(); // Re-fetch with current searchTerm
   };
 
-  const handleDeleteClick = (organizacao: Organizacao) => {
+  const handleDeleteClick = (organizacao: OrganizacaoRow) => {
     setOrganizacaoToDelete({ id: organizacao.id, nome: organizacao.nome });
     setIsAlertOpen(true);
   };
 
   const confirmDeleteOrganizacao = async () => {
-    if (!organizacaoToDelete) return;
+    if (!organizacaoToDelete || !supabase) return;
     
-    console.log(`Attempting to delete organizacao ID: ${organizacaoToDelete.id}, Nome: ${organizacaoToDelete.nome}`);
-    // Placeholder for Supabase API call to delete organizacao
-    // try {
-    //   // const { error } = await supabase.from('Entidades').delete().eq('id', organizacaoToDelete.id); 
-    //   // if (error) throw error;
-    //   setOrganizacoes(prevOrganizacoes => prevOrganizacoes.filter(o => o.id !== organizacaoToDelete.id));
-    //   // toast({ title: "Organização Excluída!", description: `A organização ${organizacaoToDelete.nome} foi excluída.` });
-    // } catch (error: any) {
-    //   console.error('Failed to delete organizacao:', error.message);
-    //   // toast({ title: "Erro ao Excluir", description: `Falha ao excluir organização: ${error.message}`, variant: "destructive" });
-    // } finally {
-    //   setIsAlertOpen(false);
-    //   setOrganizacaoToDelete(null);
-    // }
+    const { error } = await supabase
+      .from('Entidades')
+      .delete()
+      .eq('id_entidade', organizacaoToDelete.id);
 
-    // Simulate API call and update UI
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setOrganizacoes(prevOrganizacoes => prevOrganizacoes.filter(o => o.id !== organizacaoToDelete!.id));
-    console.log(`Organização ${organizacaoToDelete.nome} (ID: ${organizacaoToDelete.id}) deleted (simulated).`);
-    // toast({ title: "Organização Excluída! (Simulado)", description: `A organização ${organizacaoToDelete.nome} foi excluída.` });
+    if (error) {
+      console.error('Falha ao excluir organização:', error.message);
+      toast({ title: "Erro ao Excluir", description: `Falha ao excluir organização: ${error.message}`, variant: "destructive" });
+    } else {
+      toast({ title: "Organização Excluída!", description: `A organização ${organizacaoToDelete.nome} foi excluída.` });
+      fetchOrganizacoes(); // Refresh the list
+    }
     setIsAlertOpen(false);
     setOrganizacaoToDelete(null);
   };
@@ -133,16 +140,17 @@ export default function GerenciamentoOrganizacoesPage() {
           <CardDescription>Filtre organizações por nome ou CNPJ.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
               placeholder="Pesquisar por nome ou CNPJ..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
+              disabled={isLoading}
             />
-            <Button type="submit">
-              <Search className="mr-2 h-4 w-4" /> Buscar
+            <Button type="submit" disabled={isLoading}>
+              <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
             </Button>
           </form>
         </CardContent>
@@ -169,14 +177,16 @@ export default function GerenciamentoOrganizacoesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {organizacoes.length > 0 ? (
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center h-24">Carregando...</TableCell></TableRow>
+                ) : organizacoes.length > 0 ? (
                   organizacoes.map((org) => (
                     <TableRow key={org.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{org.id}</TableCell>
                       <TableCell className="font-semibold">{org.nome}</TableCell>
                       <TableCell className="hidden md:table-cell">{org.tipoOrganizacao}</TableCell>
                       <TableCell className="hidden lg:table-cell">{org.cnpj}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{org.telefone}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{org.telefone || "N/A"}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes da organização ${org.nome}`}>
                            <Link href={`/admin/organizacoes/${org.id}`}>
@@ -233,22 +243,7 @@ export default function GerenciamentoOrganizacoesPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/*
-        Supabase Integration Notes:
-        - Organization list will be fetched from 'Entidades' table (or similar).
-        - 'Tipo da Organização' will be fetched via a join with 'TiposEntidade' table (using foreign key like 'tipo_entidade_id').
-        - Search functionality will query the Supabase 'Entidades' table.
-        - "Cadastrar Nova Organização" button links to '/admin/organizacoes/novo'.
-        - "Detalhes" button links to '/admin/organizacoes/[id]'.
-        - "Editar" button links to '/admin/organizacoes/[id]/editar'.
-        - "Excluir" button will trigger a Supabase API call (DELETE to 'Entidades' table) after confirmation.
-      */}
     </div>
   );
 }
-
-    
-
-
     

@@ -9,109 +9,130 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Car, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast"; // Uncomment for feedback
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
-interface Veiculo {
-  id: string;
+interface VeiculoSupabase {
+  id_veiculo: number;
+  placa_atual: string;
+  marca: string | null;
+  ano_fabricacao: number | null;
+  tipo_especie: string | null;
+  combustivel: string | null;
+  ModelosVeiculo: { nome_modelo: string } | null;
+  PessoasFisicas: { nome_completo: string } | null;
+  Entidades: { nome: string } | null;
+}
+
+interface VeiculoRow {
+  id: number; // Corresponds to id_veiculo
   placa: string;
-  modelo: string;
-  marca: string;
-  ano: number;
-  tipoEspecie: string;
-  combustivel: string;
-  nomeProprietario: string;
+  modelo: string | null;
+  marca: string | null;
+  ano: number | null;
+  tipoEspecie: string | null;
+  combustivel: string | null;
+  nomeProprietario: string | null;
   tipoProprietario: 'Pessoa Física' | 'Organização' | 'N/A';
 }
 
-const initialVeiculos: Veiculo[] = [
-  { id: "vei_001", placa: "ABC-1234", modelo: "Fiat Uno", marca: "Fiat", ano: 2020, tipoEspecie: "Passageiro", combustivel: "Flex", nomeProprietario: "João da Silva Sauro", tipoProprietario: "Pessoa Física" },
-  { id: "vei_002", placa: "DEF-5678", modelo: "Volkswagen Gol", marca: "Volkswagen", ano: 2021, tipoEspecie: "Passageiro", combustivel: "Gasolina", nomeProprietario: "Cooperativa Alfa", tipoProprietario: "Organização" },
-  { id: "vei_003", placa: "GHI-9012", modelo: "Chevrolet Onix", marca: "Chevrolet", ano: 2022, tipoEspecie: "Passageiro", combustivel: "Etanol", nomeProprietario: "Maria Oliveira Costa", tipoProprietario: "Pessoa Física" },
-  { id: "vei_004", placa: "JKL-3456", modelo: "Hyundai HB20", marca: "Hyundai", ano: 2019, tipoEspecie: "Passageiro", combustivel: "Flex", nomeProprietario: "Associação Beta", tipoProprietario: "Organização" },
-  { id: "vei_005", placa: "MNO-7890", modelo: "Ford Ka", marca: "Ford", ano: 2023, tipoEspecie: "Passageiro", combustivel: "Gasolina", nomeProprietario: "Carlos Pereira Lima", tipoProprietario: "Pessoa Física" },
-];
-
+const initialVeiculos: VeiculoRow[] = []; // Start with empty
 
 export default function GerenciamentoVeiculosPage() {
-  const [veiculos, setVeiculos] = useState<Veiculo[]>(initialVeiculos);
+  const [veiculos, setVeiculos] = useState<VeiculoRow[]>(initialVeiculos);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
-  const [veiculoToDelete, setVeiculoToDelete] = useState<{ id: string; placa: string; modelo: string } | null>(null);
-  // const { toast } = useToast(); // Uncomment for feedback
+  const [veiculoToDelete, setVeiculoToDelete] = useState<{ id: number; placa: string; modelo: string | null } | null>(null);
+  const { toast } = useToast();
 
-  // In a real app, veiculos would be fetched from Supabase:
-  // useEffect(() => {
-  //   async function fetchVeiculos() {
-  //     // const { data, error } = await supabase
-  //     //  .from('Veiculos')
-  //     //  .select(`
-  //     //    id, placa, marca, ano, tipo_especie, combustivel,
-  //     //    ModelosVeiculo ( nome_modelo ), 
-  //     //    PessoasFisicas ( nome_completo ),
-  //     //    Entidades ( nome_fantasia ) 
-  //     //  `);
-  //     // if (error) { /* handle error */ }
-  //     // else { 
-  //     //   const formattedData = data.map(v => ({
-  //     //     id: v.id,
-  //     //     placa: v.placa,
-  //     //     modelo: v.ModelosVeiculo.nome_modelo, // Assuming 'ModelosVeiculo' is related table for model name
-  //     //     marca: v.marca,
-  //     //     ano: v.ano,
-  //     //     tipoEspecie: v.tipo_especie,
-  //     //     combustivel: v.combustivel,
-  //     //     nomeProprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome_fantasia || 'N/A',
-  //     //     tipoProprietario: v.id_proprietario_pessoa_fisica ? 'Pessoa Física' : (v.id_proprietario_entidade ? 'Organização' : 'N/A'),
-  //     //   }));
-  //     //   setVeiculos(formattedData || []); 
-  //     // }
-  //   }
-  //   fetchVeiculos();
-  // }, []);
+  const fetchVeiculos = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
+      setIsLoading(false);
+      setVeiculos([]);
+      return;
+    }
+    setIsLoading(true);
+    
+    let query = supabase
+      .from('Veiculos')
+      .select(`
+        id_veiculo,
+        placa_atual,
+        marca,
+        ano_fabricacao,
+        tipo_especie,
+        combustivel,
+        ModelosVeiculo ( nome_modelo ), 
+        PessoasFisicas ( nome_completo ),
+        Entidades ( nome )
+      `)
+      .order('placa_atual', { ascending: true });
 
-  const handleSearch = (event: FormEvent) => {
-    event.preventDefault();
-    console.log(`Searching for vehicle: ${searchTerm} (placeholder - Supabase query needed for 'Veiculos' table, joining with PessoasFisicas/Entidades for owner name)`);
-    // const filteredVeiculos = initialVeiculos.filter(veiculo => 
-    //   veiculo.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   veiculo.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   veiculo.marca.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //   veiculo.nomeProprietario.toLowerCase().includes(searchTerm.toLowerCase())
-    // );
-    // setVeiculos(filteredVeiculos);
-    // if (filteredVeiculos.length === 0) {
-    //   // toast({ title: "Nenhum Resultado", description: `Não foram encontrados veículos para "${searchTerm}".` });
-    // }
+    if (searchTerm) {
+      // Basic search: placa, model name (if available), owner name
+      // More complex search might require a database function or view
+      query = query.or(
+        `placa_atual.ilike.%${searchTerm}%,` +
+        `ModelosVeiculo.nome_modelo.ilike.%${searchTerm}%,` +
+        `PessoasFisicas.nome_completo.ilike.%${searchTerm}%,` +
+        `Entidades.nome.ilike.%${searchTerm}%`
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Erro ao buscar veículos:", error);
+      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      setVeiculos([]);
+    } else {
+      const formattedData: VeiculoRow[] = data.map((v: VeiculoSupabase) => ({
+        id: v.id_veiculo,
+        placa: v.placa_atual,
+        modelo: v.ModelosVeiculo?.nome_modelo || 'N/A',
+        marca: v.marca,
+        ano: v.ano_fabricacao,
+        tipoEspecie: v.tipo_especie,
+        combustivel: v.combustivel,
+        nomeProprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome || 'N/A',
+        tipoProprietario: v.PessoasFisicas ? 'Pessoa Física' : (v.Entidades ? 'Organização' : 'N/A'),
+      }));
+      setVeiculos(formattedData);
+    }
+    setIsLoading(false);
   };
 
-  const handleDeleteClick = (veiculo: Veiculo) => {
+  useEffect(() => {
+    fetchVeiculos();
+  }, []); // Fetch on mount
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    fetchVeiculos(); // Re-fetch with current searchTerm
+  };
+
+  const handleDeleteClick = (veiculo: VeiculoRow) => {
     setVeiculoToDelete({ id: veiculo.id, placa: veiculo.placa, modelo: veiculo.modelo });
     setIsAlertOpen(true);
   };
 
   const confirmDeleteVeiculo = async () => {
-    if (!veiculoToDelete) return;
+    if (!veiculoToDelete || !supabase) return;
     
-    console.log(`Attempting to delete vehicle ID: ${veiculoToDelete.id}, Placa: ${veiculoToDelete.placa}, Modelo: ${veiculoToDelete.modelo}`);
-    // Placeholder for Supabase API call to delete veiculo
-    // try {
-    //   // const { error } = await supabase.from('Veiculos').delete().eq('id', veiculoToDelete.id); 
-    //   // if (error) throw error;
-    //   setVeiculos(prevVeiculos => prevVeiculos.filter(v => v.id !== veiculoToDelete.id));
-    //   // toast({ title: "Veículo Excluído!", description: `O veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo} foi excluído.` });
-    // } catch (error: any) {
-    //   console.error('Failed to delete vehicle:', error.message);
-    //   // toast({ title: "Erro ao Excluir", description: `Falha ao excluir veículo: ${error.message}`, variant: "destructive" });
-    // } finally {
-    //   setIsAlertOpen(false);
-    //   setVeiculoToDelete(null);
-    // }
+    const { error } = await supabase
+      .from('Veiculos')
+      .delete()
+      .eq('id_veiculo', veiculoToDelete.id);
 
-    // Simulate API call and update UI
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setVeiculos(prevVeiculos => prevVeiculos.filter(v => v.id !== veiculoToDelete!.id));
-    console.log(`Veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo} (ID: ${veiculoToDelete.id}) deleted (simulated).`);
-    // toast({ title: "Veículo Excluído! (Simulado)", description: `O veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo} foi excluído.` });
+    if (error) {
+      console.error('Falha ao excluir veículo:', error.message);
+      toast({ title: "Erro ao Excluir", description: `Falha ao excluir veículo: ${error.message}`, variant: "destructive" });
+    } else {
+      toast({ title: "Veículo Excluído!", description: `O veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo || ''} foi excluído.` });
+      fetchVeiculos(); // Refresh the list
+    }
     setIsAlertOpen(false);
     setVeiculoToDelete(null);
   };
@@ -142,16 +163,17 @@ export default function GerenciamentoVeiculosPage() {
           <CardDescription>Filtre veículos por placa, modelo, marca ou nome do proprietário.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
               placeholder="Pesquisar por Placa, Modelo, Marca ou Proprietário..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
+              disabled={isLoading}
             />
-            <Button type="submit">
-              <Search className="mr-2 h-4 w-4" /> Buscar
+            <Button type="submit" disabled={isLoading}>
+              <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
             </Button>
           </form>
         </CardContent>
@@ -182,17 +204,19 @@ export default function GerenciamentoVeiculosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {veiculos.length > 0 ? (
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={10} className="text-center h-24">Carregando...</TableCell></TableRow>
+                ) : veiculos.length > 0 ? (
                   veiculos.map((veiculo) => (
                     <TableRow key={veiculo.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{veiculo.id}</TableCell>
                       <TableCell className="font-semibold">{veiculo.placa}</TableCell>
-                      <TableCell>{veiculo.modelo}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.marca}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.ano}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{veiculo.tipoEspecie}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{veiculo.combustivel}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.nomeProprietario}</TableCell>
+                      <TableCell>{veiculo.modelo || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.marca || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.ano || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.tipoEspecie || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.combustivel || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.nomeProprietario || "N/A"}</TableCell>
                       <TableCell className="hidden lg:table-cell">{veiculo.tipoProprietario}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa}`}>
@@ -238,7 +262,7 @@ export default function GerenciamentoVeiculosPage() {
                 <AlertDialogTitle>Confirmar Exclusão de Veículo</AlertDialogTitle>
               </div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o veículo <strong>{veiculoToDelete.placa} - {veiculoToDelete.modelo}</strong> (ID: {veiculoToDelete.id})? Esta ação é irreversível.
+                Tem certeza que deseja excluir o veículo <strong>{veiculoToDelete.placa} - {veiculoToDelete.modelo || ''}</strong> (ID: {veiculoToDelete.id})? Esta ação é irreversível.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -250,23 +274,7 @@ export default function GerenciamentoVeiculosPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/*
-        Supabase Integration Notes:
-        - Vehicle list will be fetched from 'public.Veiculos'.
-        - To display 'Modelo': Join with 'public.ModelosVeiculo' using 'id_modelo_veiculo' to get 'nome_modelo'.
-        - To display 'Nome Proprietário' and 'Tipo Proprietário':
-          - Conditionally JOIN with 'public.PessoasFisicas' on 'Veiculos.id_proprietario_pessoa_fisica' = 'PessoasFisicas.id'.
-          - Conditionally JOIN with 'public.Entidades' on 'Veiculos.id_proprietario_entidade' = 'Entidades.id'.
-          - Determine 'Tipo Proprietário' based on which FK is populated.
-        - 'Tipo/Espécie' and 'Combustível' come directly from 'public.Veiculos'.
-        - Search functionality will query 'public.Veiculos' and related tables for placa, modelo, marca, or owner's name.
-        - "Cadastrar Novo Veículo" button links to '/admin/veiculos/novo'.
-        - "Detalhes" button links to '/admin/veiculos/[id]'.
-        - "Editar" button links to '/admin/veiculos/[id]/editar'.
-        - "Excluir" button will trigger a Supabase API call (DELETE to 'public.Veiculos' table) after confirmation.
-      */}
     </div>
   );
 }
-
+    
