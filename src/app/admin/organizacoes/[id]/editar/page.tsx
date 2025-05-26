@@ -43,6 +43,7 @@ interface CNPJApiResponse {
   data_inicio_atividade?: string;
   porte?: string;
   natureza_juridica?: string;
+  cnae_fiscal?: number;
   cnae_fiscal_descricao?: string;
   cnaes_secundarios?: { codigo: number; descricao: string }[];
   descricao_situacao_cadastral?: string;
@@ -124,8 +125,6 @@ async function getOrganizacaoById(orgId: string): Promise<OrganizacaoDataFromDB 
         return null;
     }
     
-    // Supabase: Fetch Entidade data by ID, including direct address fields, QSA, and all other new columns.
-    // Example: .select('*, QSA(*), TiposEntidade(nome_tipo)')
     const { data: orgData, error: orgError } = await supabase
         .from('Entidades')
         .select(`
@@ -204,7 +203,7 @@ const initialFormData = {
   codigo_entidade: '',
   id_tipo_entidade: '',
   telefone: '',
-  email: '', // Default to empty string
+  email: '',
   logradouro: '',
   numero: '',
   complemento: '',
@@ -326,6 +325,8 @@ export default function EditarOrganizacaoPage() {
   const handleCnpjBlur = async (event: FocusEvent<HTMLInputElement>) => {
     const cnpjValue = event.target.value;
     const cleanedCnpjForAPI = cnpjValue.replace(/\D/g, '');
+    console.log("EditarOrganizacaoPage: handleCnpjBlur triggered with CNPJ:", cnpjValue, "Cleaned:", cleanedCnpjForAPI);
+
 
     if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14) {
       setIsCnpjLoading(true);
@@ -349,7 +350,7 @@ export default function EditarOrganizacaoPage() {
           estado_uf: apiData.uf || '',
           cep: (apiData.cep || '').replace(/\D/g, ''),
           telefone: getValueOrDefault(apiData.ddd_telefone_1, prev.telefone),
-          email: apiData.email?.toLowerCase() || '', // Ensure empty string for null/undefined API email
+          email: apiData.email?.toLowerCase() || '',
         }));
         setDisplayOnlyApiData(prev => ({
             ...(prev ?? {cnae_secundarios: [], qsa: []}),
@@ -426,8 +427,7 @@ export default function EditarOrganizacaoPage() {
     
     try {
       const numericOrgId = parseInt(organizacaoId, 10);
-      // Omit rpc call for brevity as it's similar to 'novo' page
-
+      
       const entidadeUpdatePayload = {
         nome: formData.nome,
         nome_fantasia: formData.nome_fantasia === "sem informação" ? null : formData.nome_fantasia.trim() || null,
@@ -435,11 +435,11 @@ export default function EditarOrganizacaoPage() {
         cnpj: formData.cnpj.replace(/\D/g, ''),
         id_tipo_entidade: parseInt(formData.id_tipo_entidade, 10),
         telefone: formData.telefone === "sem informação" ? null : formData.telefone.trim() || null,
-        email: formData.email.trim() || null, // Send null to DB if email is empty
+        email: formData.email.trim() || null,
         data_inicio_atividade: formData.data_inicio_atividade === "sem informação" || !formData.data_inicio_atividade ? null : formData.data_inicio_atividade,
         porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa.trim() || null,
         natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica.trim() || null,
-        cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal.trim() || null,
+        cnae_principal: formData.cnae_principal === "sem informação" ? null : (formData.cnae_principal.trim() || null),
         cnae_secundarios: displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 ? displayOnlyApiData.cnae_secundarios : null, 
         descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral.trim() || null,
         logradouro: formData.logradouro.trim() || null,
@@ -448,21 +448,20 @@ export default function EditarOrganizacaoPage() {
         bairro: formData.bairro.trim() || null,
         cidade: formData.cidade.trim() || null,
         estado_uf: formData.estado_uf.trim() || null,
-        cep: formData.cep.replace(/\D/g, '') || null,
+        cep: formData.cep.replace(/\D/g, '').substring(0, 8) || null,
         endereco2_logradouro: formData.endereco2_logradouro.trim() || null,
         endereco2_numero: formData.endereco2_numero.trim() || null,
         endereco2_complemento: formData.endereco2_complemento.trim() || null,
         endereco2_bairro: formData.endereco2_bairro.trim() || null,
         endereco2_cidade: formData.endereco2_cidade.trim() || null,
         endereco2_estado_uf: formData.endereco2_estado_uf.trim() || null,
-        endereco2_cep: formData.endereco2_cep.replace(/\D/g, '') || null,
+        endereco2_cep: formData.endereco2_cep.replace(/\D/g, '').substring(0, 8) || null,
         nome_contato_responsavel: formData.nome_contato_responsavel.trim() || null,
         cargo_contato_responsavel: formData.cargo_contato_responsavel.trim() || null,
         email_contato: formData.email_contato.trim() || null,
         telefone_contato: formData.telefone_contato.trim() || null,
         observacoes_contato: formData.observacoes_contato.trim() || null,
         observacoes: formData.observacoes.trim() || null,
-        // user_id and responsavel_cadastro are typically not updated here unless intended
       };
 
       const { error: updateError } = await supabase
@@ -472,13 +471,7 @@ export default function EditarOrganizacaoPage() {
 
       if (updateError) throw updateError;
       
-      // QSA Management on edit is complex.
-      // If QSA data came from the API and is stored in displayOnlyApiData,
-      // and business logic dictates that API QSA data should replace DB QSA data (or merge):
       if (displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0) {
-        // Strategy: Delete existing QSA for this id_entidade and insert new ones.
-        // This is simpler than diffing but means manual QSA edits in DB would be lost on CNPJ re-fetch.
-        // For more robust QSA editing, a dedicated QSA management interface might be needed.
         console.log("EditarOrganizacaoPage: Atualizando QSA para Entidade ID:", numericOrgId);
         const { error: deleteQsaError } = await supabase
             .from('QSA')
@@ -491,7 +484,6 @@ export default function EditarOrganizacaoPage() {
             nome_socio: socio.nome_socio,
             qualificacao_socio: socio.qualificacao_socio,
             data_entrada_sociedade: socio.data_entrada_sociedade || null,
-            // observacoes: (socio as QSAItemFromDB).observacoes || null, // If QSA has editable observacoes from form
         }));
          const { error: insertQsaError } = await supabase.from('QSA').insert(qsaPayloadToInsert);
          if (insertQsaError) console.warn("EditarOrganizacaoPage: Aviso ao inserir novo QSA:", insertQsaError.message);
@@ -502,7 +494,11 @@ export default function EditarOrganizacaoPage() {
 
     } catch (error: any) {
       console.error('EditarOrganizacaoPage: Erro ao atualizar Organização:', JSON.stringify(error, null, 2), error);
-      toast({ title: "Erro ao Atualizar", description: error.message || "Ocorreu um erro. Verifique o console e as permissões RLS.", variant: "destructive" });
+      if (error.code === '22001') {
+        toast({ title: "Erro ao Atualizar", description: "Um dos campos de texto é muito longo para o banco de dados (Ex: CEP ou Código muito extenso). Verifique os dados e tente novamente.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao Atualizar", description: error.message || "Ocorreu um erro. Verifique o console e as permissões RLS.", variant: "destructive" });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -550,7 +546,7 @@ export default function EditarOrganizacaoPage() {
 
           <TabsContent value="informacoes">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Identificação</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Informações</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="cnpj">CNPJ <span className="text-destructive">*</span></Label>
@@ -559,7 +555,7 @@ export default function EditarOrganizacaoPage() {
                     name="cnpj" 
                     value={formData.cnpj} 
                     onChange={handleChange}
-                    onBlur={handleCnpjBlur} // Re-fetch if CNPJ is changed
+                    onBlur={handleCnpjBlur} 
                     placeholder="00.000.000/0000-00"
                     required 
                     disabled={isLoading || isCnpjLoading || isFetchingInitialData} 
@@ -729,3 +725,6 @@ export default function EditarOrganizacaoPage() {
 - CEP API: Integrate real API for address fields.
 - CNPJ field is typically read-only on edit. If re-fetch by CNPJ is needed, a separate button might be better.
 */
+
+
+    

@@ -42,15 +42,15 @@ interface CNPJApiResponse {
   numero?: string;
   complemento?: string;
   bairro?: string;
-  municipio?: string; 
-  uf?: string; 
+  municipio?: string;
+  uf?: string;
   cep?: string;
   ddd_telefone_1?: string;
   email?: string;
   qsa?: QSAItemFromAPI[];
 }
 
-interface BrasilApiCepResponse { // For CEP API
+interface BrasilApiCepResponse {
   cep: string;
   state: string;
   city: string;
@@ -59,12 +59,13 @@ interface BrasilApiCepResponse { // For CEP API
   service: string;
 }
 
-const getValueOrDefault = (value: string | null | undefined, defaultValueIfNullOrEmpty = "sem informação"): string => {
+const getValueOrDefault = (value: string | null | undefined, defaultValueIfNullOrEmpty: string = "sem informação"): string => {
     if (value === null || value === undefined || String(value).trim() === '') {
         return defaultValueIfNullOrEmpty;
     }
     return String(value).trim();
 };
+
 
 async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNPJApiResponse | null> {
   const apiUrl = `https://brasilapi.com.br/api/cnpj/v1/${cleanedCnpj}`;
@@ -73,11 +74,11 @@ async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNP
 
   try {
     const response = await fetch(apiUrl);
-    const rawTextResponse = await response.text(); // Get raw text first
+    const rawTextResponse = await response.text();
     console.log(`NovaOrganizacaoPage: CNPJ API response status: ${response.status} ${response.statusText}`);
     
     if (!response.ok) {
-      console.error(`NovaOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}. Corpo: ${rawTextResponse}`);
+      console.error(`NovaOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}. Corpo cru: ${rawTextResponse}`);
       return null;
     }
     
@@ -96,6 +97,7 @@ async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNP
     return null;
   }
 }
+
 
 async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiCepResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
@@ -119,12 +121,12 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiCepRes
 
 const initialFormData = {
   cnpj: '',
-  nome: '', // Razão Social
+  nome: '', 
   nome_fantasia: '',
   codigo_entidade: '',
   id_tipo_entidade: '',
   telefone: '',
-  email: '', // Default to empty string
+  email: '',
   logradouro: '',
   numero: '',
   complemento: '',
@@ -182,17 +184,18 @@ export default function NovaOrganizacaoPage() {
 
   const handleCnpjBlur = async (event: FocusEvent<HTMLInputElement>) => {
     const cnpjValue = event.target.value;
-    const cleanedCnpj = cnpjValue.replace(/\D/g, '');
+    const cleanedCnpjForAPI = cnpjValue.replace(/\D/g, '');
+    console.log("NovaOrganizacaoPage: handleCnpjBlur triggered with CNPJ:", cnpjValue, "Cleaned:", cleanedCnpjForAPI);
 
-    if (cleanedCnpj && cleanedCnpj.length === 14) {
+    if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14) {
       setIsCnpjLoading(true);
-      const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj);
+      const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpjForAPI);
       if (apiData) {
         setFormData(prev => ({
           ...prev,
           nome: apiData.razao_social || '',
           nome_fantasia: getValueOrDefault(apiData.nome_fantasia, prev.nome_fantasia),
-          cnpj: apiData.cnpj || cleanedCnpj,
+          cnpj: apiData.cnpj || cleanedCnpjForAPI, // Use cleaned CNPJ from API if available
           data_inicio_atividade: getValueOrDefault(apiData.data_inicio_atividade, prev.data_inicio_atividade),
           porte_empresa: getValueOrDefault(apiData.porte, prev.porte_empresa),
           natureza_juridica: getValueOrDefault(apiData.natureza_juridica, prev.natureza_juridica),
@@ -206,11 +209,11 @@ export default function NovaOrganizacaoPage() {
           estado_uf: apiData.uf || '',
           cep: (apiData.cep || '').replace(/\D/g, ''),
           telefone: getValueOrDefault(apiData.ddd_telefone_1, prev.telefone),
-          email: apiData.email?.toLowerCase() || '', // Ensure empty string for null/undefined API email
+          email: apiData.email?.toLowerCase() || '',
         }));
         setDisplayOnlyApiData({
           cnae_secundarios: apiData.cnaes_secundarios || [],
-          qsa: (apiData.qsa || []).map(s => ({
+           qsa: (apiData.qsa || []).map(s => ({
             nome_socio: s.nome_socio,
             qualificacao_socio: s.qualificacao_socio,
             data_entrada_sociedade: s.data_entrada_sociedade || null
@@ -220,7 +223,7 @@ export default function NovaOrganizacaoPage() {
       } else {
         toast({
           title: "CNPJ Não Encontrado ou Erro na API",
-          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro ao consultar a API. Verifique o número digitado e tente novamente. Consulte o console para mais detalhes do erro.",
+          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro. Verifique o número e tente novamente. Consulte o console para detalhes.",
           variant: "default",
           duration: 7000,
         });
@@ -279,29 +282,39 @@ export default function NovaOrganizacaoPage() {
     }
     setIsLoading(true);
 
+    // Client-side validation
     if (!formData.cnpj || !formData.nome || !formData.codigo_entidade || !formData.id_tipo_entidade) {
       toast({ title: "Campos Obrigatórios", description: "CNPJ, Nome da Organização (Razão Social), Código da Entidade e Tipo de Organização são obrigatórios.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
     
+    // Diagnostic: Call get_user_role from client-side
     try {
-      // Diagnostic: Call get_user_role from client-side
+      console.log("NovaOrganizacaoPage: Verificando papel do usuário antes de submeter...");
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_role');
       if (rpcError) {
         console.error(`NovaOrganizacaoPage: Erro ao chamar RPC get_user_role:`, JSON.stringify(rpcError, null, 2));
-        toast({ title: "Erro de Diagnóstico", description: `Falha ao verificar o papel do usuário via RPC: ${rpcError.message}. Verifique o console.`, variant: "destructive", duration: 7000 });
+        toast({ title: "Erro de Diagnóstico", description: `Falha ao verificar o papel do usuário via RPC: ${rpcError.message || 'Erro desconhecido'}. Verifique o console.`, variant: "destructive", duration: 7000 });
         setIsLoading(false);
         return;
       }
       console.log(`NovaOrganizacaoPage: Resultado da RPC get_user_role (client-side):`, rpcData);
-      if (!['admin', 'supervisor', 'operator'].includes(rpcData)) { // Ensure 'operator' is included if they can create
+      if (!['admin', 'supervisor', 'operator'].includes(rpcData)) {
          toast({ title: "Permissão Insuficiente (Diagnóstico)", description: `Seu papel atual detectado é '${rpcData}'. A política RLS requer 'admin', 'supervisor' ou 'operator' para esta operação. Verifique seu perfil e a função get_user_role.`, variant: "destructive", duration: 10000 });
          setIsLoading(false);
          return;
       }
-      // End Diagnostic
+      console.log("NovaOrganizacaoPage: Verificação de papel do usuário concluída. Prosseguindo com o cadastro...");
+    } catch (diagError: any) {
+      console.error("NovaOrganizacaoPage: Erro crítico durante o diagnóstico de RPC:", diagError.message);
+      toast({ title: "Erro Crítico de Diagnóstico", description: "Falha ao verificar permissões.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+    // End Diagnostic
 
+    try {
       const entidadePayload = {
         nome: formData.nome,
         nome_fantasia: formData.nome_fantasia === "sem informação" ? null : formData.nome_fantasia.trim() || null,
@@ -309,11 +322,11 @@ export default function NovaOrganizacaoPage() {
         codigo_entidade: formData.codigo_entidade,
         id_tipo_entidade: parseInt(formData.id_tipo_entidade, 10),
         telefone: formData.telefone === "sem informação" ? null : formData.telefone.trim() || null,
-        email: formData.email.trim() || null, // Send null to DB if email is empty
+        email: formData.email.trim() || null,
         data_inicio_atividade: formData.data_inicio_atividade === "sem informação" || !formData.data_inicio_atividade ? null : formData.data_inicio_atividade,
         porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa.trim() || null,
         natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica.trim() || null,
-        cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal.trim() || null,
+        cnae_principal: formData.cnae_principal === "sem informação" ? null : (formData.cnae_principal.trim() || null),
         cnae_secundarios: displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 ? displayOnlyApiData.cnae_secundarios : null,
         descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral.trim() || null,
         logradouro: formData.logradouro.trim() || null,
@@ -322,21 +335,20 @@ export default function NovaOrganizacaoPage() {
         bairro: formData.bairro.trim() || null,
         cidade: formData.cidade.trim() || null,
         estado_uf: formData.estado_uf.trim() || null,
-        cep: formData.cep.replace(/\D/g, '') || null,
+        cep: formData.cep.replace(/\D/g, '').substring(0, 8) || null,
         endereco2_logradouro: formData.endereco2_logradouro.trim() || null,
         endereco2_numero: formData.endereco2_numero.trim() || null,
         endereco2_complemento: formData.endereco2_complemento.trim() || null,
         endereco2_bairro: formData.endereco2_bairro.trim() || null,
         endereco2_cidade: formData.endereco2_cidade.trim() || null,
         endereco2_estado_uf: formData.endereco2_estado_uf.trim() || null,
-        endereco2_cep: formData.endereco2_cep.replace(/\D/g, '') || null,
+        endereco2_cep: formData.endereco2_cep.replace(/\D/g, '').substring(0, 8) || null,
         nome_contato_responsavel: formData.nome_contato_responsavel.trim() || null,
         cargo_contato_responsavel: formData.cargo_contato_responsavel.trim() || null,
         email_contato: formData.email_contato.trim() || null,
         telefone_contato: formData.telefone_contato.trim() || null,
         observacoes_contato: formData.observacoes_contato.trim() || null,
         observacoes: formData.observacoes.trim() || null,
-        // user_id and responsavel_cadastro would typically be set by backend/DB or based on logged-in user
       };
       console.log("NovaOrganizacaoPage: Payload para Entidades:", entidadePayload);
 
@@ -358,7 +370,6 @@ export default function NovaOrganizacaoPage() {
           nome_socio: socio.nome_socio,
           qualificacao_socio: socio.qualificacao_socio,
           data_entrada_sociedade: socio.data_entrada_sociedade || null,
-          // observacoes: null // Assuming QSA from API doesn't have observacoes, or add if needed
         }));
         const { error: qsaError } = await supabase.from('QSA').insert(qsaPayload);
         if (qsaError) {
@@ -374,7 +385,11 @@ export default function NovaOrganizacaoPage() {
 
     } catch (error: any) {
       console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização:', JSON.stringify(error, null, 2), error);
-      toast({ title: "Erro ao Cadastrar", description: error.message || "Ocorreu um erro. Verifique o console e as permissões RLS.", variant: "destructive" });
+      if (error.code === '22001') { // Specific error code for value too long
+        toast({ title: "Erro ao Cadastrar", description: "Um dos campos de texto é muito longo para o banco de dados (Ex: CEP ou Código muito extenso). Verifique os dados e tente novamente.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao Cadastrar", description: error.message || "Ocorreu um erro. Verifique o console e as permissões RLS.", variant: "destructive" });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -396,7 +411,7 @@ export default function NovaOrganizacaoPage() {
 
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="informacoes" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs flex-wrap">
+           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs flex-wrap">
             <TabsTrigger value="informacoes"><Info className="mr-1 h-3 w-3" />Informações</TabsTrigger>
             <TabsTrigger value="dadosFiscais"><FileText className="mr-1 h-3 w-3" />Dados Fiscais</TabsTrigger>
             <TabsTrigger value="enderecoPrincipal"><MapPin className="mr-1 h-3 w-3" />End. Principal</TabsTrigger>
@@ -408,7 +423,7 @@ export default function NovaOrganizacaoPage() {
 
           <TabsContent value="informacoes">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Identificação</CardTitle><CardDescription>Preencha ou ajuste os dados básicos da organização.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Informações</CardTitle><CardDescription>Preencha ou ajuste os dados básicos da organização.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="cnpj">CNPJ <span className="text-destructive">*</span></Label>
@@ -447,7 +462,7 @@ export default function NovaOrganizacaoPage() {
           
           <TabsContent value="dadosFiscais">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Dados Fiscais</CardTitle><CardDescription>Informações obtidas automaticamente da API CNPJ ou cadastradas.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Dados Fiscais</CardTitle><CardDescription>Informações obtidas da API CNPJ ou cadastradas.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="space-y-1"><Label htmlFor="data_inicio_atividade">Data Início Atividade</Label><Input id="data_inicio_atividade" value={formData.data_inicio_atividade} onChange={handleChange} name="data_inicio_atividade" type="date" disabled={isLoading} /></div>
@@ -596,3 +611,6 @@ Supabase Integration Notes:
   - Ao submeter, o payload para public."Entidades" incluirá todos os novos campos.
   - Validações de frontend para formatos de CEP, UF, email, telefone.
 */
+
+
+    
