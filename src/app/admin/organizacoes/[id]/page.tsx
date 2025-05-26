@@ -33,6 +33,7 @@ interface QSAItemFromDB {
 interface OrganizacaoDetailed {
   id: string; // Corresponds to id_entidade
   nome: string;
+  nome_fantasia: string | null;
   codigoEntidade: string | null;
   cnpj: string;
   tipoOrganizacaoNome: string | null; 
@@ -72,7 +73,7 @@ interface OrganizacaoDetailed {
   observacoes: string | null;
   membros: Membro[];
   veiculos: VeiculoAssociado[];
-  qsa: QSAItemFromDB[]; // Changed from QSAItemFromAPI
+  qsa: QSAItemFromDB[];
 }
 
 interface Membro {
@@ -87,7 +88,7 @@ interface Membro {
 interface VeiculoAssociado {
   id_veiculo: string;
   placa_atual: string;
-  modelo_nome: string;
+  modelo_nome: string; // This comes from ModelosVeiculo.modelo
   marca: string;
   ano_fabricacao: number | null;
 }
@@ -114,6 +115,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
     .select(`
       id_entidade, 
       nome,
+      nome_fantasia,
       codigo_entidade,
       cnpj,
       telefone,
@@ -160,7 +162,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
         placa_atual,
         marca,
         ano_fabricacao,
-        ModelosVeiculo ( nome_modelo )
+        ModelosVeiculo ( modelo ) 
       )
     `)
     .eq('id_entidade', numericOrgId)
@@ -184,7 +186,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
   const veiculosFormatados: VeiculoAssociado[] = (orgData.Veiculos || []).map((v: any) => ({
     id_veiculo: v.id_veiculo.toString(),
     placa_atual: v.placa_atual,
-    modelo_nome: v.ModelosVeiculo?.nome_modelo || 'N/A',
+    modelo_nome: v.ModelosVeiculo?.modelo || 'N/A', // Corrected from nome_modelo to modelo
     marca: v.marca || 'N/A',
     ano_fabricacao: v.ano_fabricacao,
   }));
@@ -201,6 +203,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
   return {
     id: orgData.id_entidade.toString(),
     nome: orgData.nome,
+    nome_fantasia: orgData.nome_fantasia,
     codigoEntidade: orgData.codigo_entidade,
     cnpj: orgData.cnpj,
     tipoOrganizacaoNome: orgData.TiposEntidade?.nome_tipo || 'N/A',
@@ -411,6 +414,13 @@ export default function OrganizacaoDetailsPage() {
   const handleDeleteOrganizacao = async () => {
       if (!organizacao || !supabase) return;
       console.log(`Excluindo Organização ID: ${organizacao.id}`);
+      // First, delete related QSA entries if not handled by cascade
+      const { error: qsaError } = await supabase.from('QSA').delete().eq('id_entidade', parseInt(organizacao.id));
+      if (qsaError) {
+        console.warn("Erro ao deletar QSA da organização:", qsaError.message);
+        // Potentially stop or notify, depending on desired behavior
+      }
+      
       const { error } = await supabase.from('Entidades').delete().eq('id_entidade', parseInt(organizacao.id));
       if (error) {
         toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
@@ -430,7 +440,7 @@ export default function OrganizacaoDetailsPage() {
     <div className="container mx-auto px-4 py-8 md:py-12">
       <header className="mb-8 md:mb-12">
         <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
-          <Building className="mr-3 h-8 w-8" /> Detalhes da Organização: {organizacao.nome}
+          <Building className="mr-3 h-8 w-8" /> Detalhes da Organização: {organizacao.nome_fantasia || organizacao.nome}
         </h1>
       </header>
 
@@ -439,13 +449,14 @@ export default function OrganizacaoDetailsPage() {
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Info className="mr-2 h-5 w-5 text-primary" /> Informações Gerais</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
-              <InfoItem label="Nome" value={organizacao.nome} icon={Building} />
-              <InfoItem label="Código" value={organizacao.codigoEntidade || "N/A"} icon={Hash} />
+              <InfoItem label="Razão Social" value={organizacao.nome} icon={Building} />
+              <InfoItem label="Nome Fantasia" value={organizacao.nome_fantasia || "N/A"} />
+              <InfoItem label="Código da Entidade" value={organizacao.codigoEntidade || "N/A"} icon={Hash} />
               <InfoItem label="CNPJ" value={organizacao.cnpj} icon={GripVertical} />
               <InfoItem label="Tipo" value={organizacao.tipoOrganizacaoNome || "N/A"} icon={Workflow} />
               <InfoItem label="Telefone Principal" value={organizacao.telefone || "N/A"} icon={Phone} />
               <InfoItem label="E-mail Principal" value={organizacao.email || "N/A"} icon={Mail} />
-              <InfoItem label="Data Cadastro" value={formatDate(organizacao.dataCadastro, "dd/MM/yyyy HH:mm")} icon={CalendarDays} />
+              <InfoItem label="Data Cadastro no Sistema" value={formatDate(organizacao.dataCadastro, "dd/MM/yyyy HH:mm")} icon={CalendarDays} />
             </CardContent>
           </Card>
           
@@ -592,23 +603,29 @@ export default function OrganizacaoDetailsPage() {
 }
 
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
-  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '' && value !== "N/A")) return null;
+  // Do not render if value is truly null/undefined or an effectively empty string, unless it's specifically "N/A"
+  const displayValue = (value === null || value === undefined || (typeof value === 'string' && value.trim() === '' && value !== "N/A"))
+    ? <span className="italic text-muted-foreground">sem informação</span>
+    : value;
+
   return (
     <div className={cn("mb-3", className)}>
       <span className="text-sm font-medium text-muted-foreground flex items-center">
         {Icon && <Icon className="mr-2 h-4 w-4 flex-shrink-0 text-primary/80" />}
         {label}
       </span>
-      <div className="text-foreground mt-0.5">{typeof value === 'string' ? <p>{value}</p> : value}</div>
+      <div className="text-foreground mt-0.5">{typeof displayValue === 'string' ? <p>{displayValue}</p> : displayValue}</div>
     </div>
   );
 };
 
 /* Supabase Integration Notes:
-- `getOrganizacaoDetails`: Fetch Entidade by ID, including direct address fields, TiposEntidade.nome_tipo, QSA, MembrosEntidade (with PessoasFisicas/Entidades names), and Veiculos.
+- `getOrganizacaoDetails`: Fetch Entidade by ID, including direct address fields, TiposEntidade.nome_tipo, QSA, MembrosEntidade (with PessoasFisicas/Entidades names), and Veiculos (with ModelosVeiculo.modelo).
 - `fetchSelectOptions`: Dynamically load PessoasFisicas and Entidades (excluding current) for "Add Member" modal.
 - Add/Edit/Remove Membro: Interact with public."MembrosEntidade".
-- Delete Organizacao: Consider ON DELETE CASCADE or handle related deletions.
+- Delete Organizacao: Ensure ON DELETE CASCADE is set for QSA, MembrosEntidade, Veiculos(id_proprietario_entidade), Seguros(id_titular_entidade), Arquivos(id_entidade_associada) or handle these deletions in a transaction/Edge Function.
 */
+
+    
 
     
