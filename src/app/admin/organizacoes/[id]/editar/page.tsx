@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building, Save, XCircle, MapPin, Info, Briefcase, AlertTriangle, Loader2, Search, Users, DollarSign, FileText, Contact, UserCheck } from 'lucide-react';
+import { Building, Save, XCircle, MapPin, Info, Briefcase, AlertTriangle, Loader2, Search, Users, FileText, Contact, UserCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, isValid } from 'date-fns';
@@ -97,7 +97,7 @@ interface OrganizacaoDataFromDB {
   QSA?: QSAItemFromDB[];
 }
 
-interface BrasilApiResponse {
+interface BrasilApiCepResponse {
   cep: string;
   state: string;
   city: string;
@@ -106,9 +106,9 @@ interface BrasilApiResponse {
   service: string;
 }
 
-const getValueOrDefault = (value: string | null | undefined, defaultValue: string = "sem informação"): string => {
+const getValueOrDefault = (value: string | null | undefined, defaultValueIfNullOrEmpty: string = "sem informação"): string => {
     if (value === null || value === undefined || String(value).trim() === '') {
-        return defaultValue;
+        return defaultValueIfNullOrEmpty;
     }
     return String(value).trim();
 };
@@ -124,11 +124,21 @@ async function getOrganizacaoById(orgId: string): Promise<OrganizacaoDataFromDB 
         return null;
     }
     
+    // Supabase: Fetch Entidade data by ID, including direct address fields, QSA, and all other new columns.
+    // Example: .select('*, QSA(*), TiposEntidade(nome_tipo)')
     const { data: orgData, error: orgError } = await supabase
         .from('Entidades')
-        .select(`*, QSA ( * ) `) 
+        .select(`
+            id_entidade, nome, nome_fantasia, codigo_entidade, cnpj, id_tipo_entidade, telefone, email, data_cadastro,
+            logradouro, numero, complemento, bairro, cep, cidade, estado_uf,
+            endereco2_logradouro, endereco2_numero, endereco2_complemento, endereco2_bairro, endereco2_cidade, endereco2_estado_uf, endereco2_cep,
+            nome_contato_responsavel, cargo_contato_responsavel, email_contato, telefone_contato, observacoes_contato,
+            data_inicio_atividade, porte_empresa, natureza_juridica, cnae_principal, cnae_secundarios, descricao_situacao_cadastral,
+            observacoes,
+            QSA ( * )
+        `) 
         .eq('id_entidade', numericOrgId)
-        .single<OrganizacaoDataFromDB>(); // Explicitly type the expected return
+        .single<OrganizacaoDataFromDB>();
 
     if (orgError) {
         console.error("EditarOrganizacaoPage: Error fetching organization from Supabase:", JSON.stringify(orgError, null, 2));
@@ -169,7 +179,7 @@ async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNP
   }
 }
 
-async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
+async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiCepResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
   if (cleanedCep.length !== 8) return null;
   try {
@@ -179,7 +189,7 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiRespon
       console.error(`EditarOrganizacaoPage: BrasilAPI CEP error: ${response.status} ${response.statusText}. Body: ${errorText}`);
       return null;
     }
-    const data: BrasilApiResponse = await response.json();
+    const data: BrasilApiCepResponse = await response.json();
     return { street: data.street, neighborhood: data.neighborhood, city: data.city, state: data.state, cep: data.cep };
   } catch (error: any) {
     console.error(`EditarOrganizacaoPage: Erro ao buscar endereço do CEP:`, error.message);
@@ -194,7 +204,7 @@ const initialFormData = {
   codigo_entidade: '',
   id_tipo_entidade: '',
   telefone: '',
-  email: '',
+  email: '', // Default to empty string
   logradouro: '',
   numero: '',
   complemento: '',
@@ -228,7 +238,7 @@ export default function EditarOrganizacaoPage() {
   const organizacaoId = params.id as string;
   const { toast } = useToast();
   
-  const [isLoading, setIsLoading] = useState(false); // General loading state for form submission
+  const [isLoading, setIsLoading] = useState(false); 
   const [isFetchingInitialData, setIsFetchingInitialData] = useState(true);
   const [isCnpjLoading, setIsCnpjLoading] = useState(false); 
   const [isCep1Loading, setIsCep1Loading] = useState(false);
@@ -288,7 +298,7 @@ export default function EditarOrganizacaoPage() {
                 email_contato: orgData.email_contato || '',
                 telefone_contato: orgData.telefone_contato || '',
                 observacoes_contato: orgData.observacoes_contato || '',
-                data_inicio_atividade: orgData.data_inicio_atividade ? format(parseISO(orgData.data_inicio_atividade), 'yyyy-MM-dd') : '',
+                data_inicio_atividade: orgData.data_inicio_atividade && isValid(parseISO(orgData.data_inicio_atividade)) ? format(parseISO(orgData.data_inicio_atividade), 'yyyy-MM-dd') : '',
                 porte_empresa: orgData.porte_empresa || '',
                 natureza_juridica: orgData.natureza_juridica || '',
                 cnae_principal: orgData.cnae_principal || '',
@@ -307,7 +317,7 @@ export default function EditarOrganizacaoPage() {
             setOrgFound(false);
             toast({ title: "Erro", description: "Organização não encontrada.", variant: "destructive" });
         }
-        setIsLoading(false); // General loading should be false after initial fetch attempt
+        setIsLoading(false); 
         setIsFetchingInitialData(false);
     };
     fetchInitialPageData();
@@ -317,30 +327,29 @@ export default function EditarOrganizacaoPage() {
     const cnpjValue = event.target.value;
     const cleanedCnpjForAPI = cnpjValue.replace(/\D/g, '');
 
-    // Only fetch if CNPJ changed significantly or was empty before
     if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14) {
       setIsCnpjLoading(true);
       const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpjForAPI);
       if (apiData) {
         setFormData(prev => ({
           ...prev, 
-          nome: apiData.razao_social || prev.nome,
-          nome_fantasia: getValueOrDefault(apiData.nome_fantasia),
+          nome: apiData.razao_social || '',
+          nome_fantasia: getValueOrDefault(apiData.nome_fantasia, prev.nome_fantasia),
           cnpj: apiData.cnpj || cleanedCnpjForAPI,
-          data_inicio_atividade: getValueOrDefault(apiData.data_inicio_atividade),
-          porte_empresa: getValueOrDefault(apiData.porte),
-          natureza_juridica: getValueOrDefault(apiData.natureza_juridica),
-          cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao),
-          descricao_situacao_cadastral: getValueOrDefault(apiData.descricao_situacao_cadastral),
-          logradouro: apiData.logradouro || prev.logradouro,
-          numero: apiData.numero || prev.numero,
-          complemento: apiData.complemento || prev.complemento,
-          bairro: apiData.bairro || prev.bairro,
-          cidade: apiData.municipio || prev.cidade,
-          estado_uf: apiData.uf || prev.estado_uf,
-          cep: (apiData.cep || prev.cep).replace(/\D/g, ''),
+          data_inicio_atividade: getValueOrDefault(apiData.data_inicio_atividade, prev.data_inicio_atividade),
+          porte_empresa: getValueOrDefault(apiData.porte, prev.porte_empresa),
+          natureza_juridica: getValueOrDefault(apiData.natureza_juridica, prev.natureza_juridica),
+          cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao, prev.cnae_principal),
+          descricao_situacao_cadastral: getValueOrDefault(apiData.descricao_situacao_cadastral, prev.descricao_situacao_cadastral),
+          logradouro: apiData.logradouro || '',
+          numero: apiData.numero || '',
+          complemento: apiData.complemento || '',
+          bairro: apiData.bairro || '',
+          cidade: apiData.municipio || '',
+          estado_uf: apiData.uf || '',
+          cep: (apiData.cep || '').replace(/\D/g, ''),
           telefone: getValueOrDefault(apiData.ddd_telefone_1, prev.telefone),
-          email: getValueOrDefault(apiData.email?.toLowerCase(), prev.email),
+          email: apiData.email?.toLowerCase() || '', // Ensure empty string for null/undefined API email
         }));
         setDisplayOnlyApiData(prev => ({
             ...(prev ?? {cnae_secundarios: [], qsa: []}),
@@ -353,7 +362,10 @@ export default function EditarOrganizacaoPage() {
         }));
         toast({ title: "Dados do CNPJ Atualizados!", description: "Campos preenchidos pela BrasilAPI. Verifique e ajuste se necessário." });
       } else {
-        toast({ title: "CNPJ Não Encontrado na API", description: "Verifique o número ou continue com os dados atuais.", variant: "default" });
+        toast({ title: "CNPJ Não Encontrado ou Erro na API", 
+                description: "Verifique o número ou continue com os dados atuais. Consulte o console para detalhes.", 
+                variant: "default",
+                duration: 7000 });
       }
       setIsCnpjLoading(false);
     }
@@ -415,42 +427,42 @@ export default function EditarOrganizacaoPage() {
     try {
       const numericOrgId = parseInt(organizacaoId, 10);
       // Omit rpc call for brevity as it's similar to 'novo' page
-      // const { data: rpcRoleData, error: rpcRoleError } = await supabase.rpc('get_user_role'); ...
 
       const entidadeUpdatePayload = {
         nome: formData.nome,
-        nome_fantasia: formData.nome_fantasia === "sem informação" ? null : formData.nome_fantasia,
+        nome_fantasia: formData.nome_fantasia === "sem informação" ? null : formData.nome_fantasia.trim() || null,
         codigo_entidade: formData.codigo_entidade,
         cnpj: formData.cnpj.replace(/\D/g, ''),
         id_tipo_entidade: parseInt(formData.id_tipo_entidade, 10),
-        telefone: formData.telefone === "sem informação" ? null : formData.telefone,
-        email: formData.email === "sem informação" ? null : formData.email,
+        telefone: formData.telefone === "sem informação" ? null : formData.telefone.trim() || null,
+        email: formData.email.trim() || null, // Send null to DB if email is empty
         data_inicio_atividade: formData.data_inicio_atividade === "sem informação" || !formData.data_inicio_atividade ? null : formData.data_inicio_atividade,
-        porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa,
-        natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica,
-        cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal,
+        porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa.trim() || null,
+        natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica.trim() || null,
+        cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal.trim() || null,
         cnae_secundarios: displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 ? displayOnlyApiData.cnae_secundarios : null, 
-        descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral,
-        logradouro: formData.logradouro || null,
-        numero: formData.numero || null,
-        complemento: formData.complemento || null,
-        bairro: formData.bairro || null,
-        cidade: formData.cidade || null,
-        estado_uf: formData.estado_uf || null,
+        descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral.trim() || null,
+        logradouro: formData.logradouro.trim() || null,
+        numero: formData.numero.trim() || null,
+        complemento: formData.complemento.trim() || null,
+        bairro: formData.bairro.trim() || null,
+        cidade: formData.cidade.trim() || null,
+        estado_uf: formData.estado_uf.trim() || null,
         cep: formData.cep.replace(/\D/g, '') || null,
-        endereco2_logradouro: formData.endereco2_logradouro || null,
-        endereco2_numero: formData.endereco2_numero || null,
-        endereco2_complemento: formData.endereco2_complemento || null,
-        endereco2_bairro: formData.endereco2_bairro || null,
-        endereco2_cidade: formData.endereco2_cidade || null,
-        endereco2_estado_uf: formData.endereco2_estado_uf || null,
+        endereco2_logradouro: formData.endereco2_logradouro.trim() || null,
+        endereco2_numero: formData.endereco2_numero.trim() || null,
+        endereco2_complemento: formData.endereco2_complemento.trim() || null,
+        endereco2_bairro: formData.endereco2_bairro.trim() || null,
+        endereco2_cidade: formData.endereco2_cidade.trim() || null,
+        endereco2_estado_uf: formData.endereco2_estado_uf.trim() || null,
         endereco2_cep: formData.endereco2_cep.replace(/\D/g, '') || null,
-        nome_contato_responsavel: formData.nome_contato_responsavel || null,
-        cargo_contato_responsavel: formData.cargo_contato_responsavel || null,
-        email_contato: formData.email_contato || null,
-        telefone_contato: formData.telefone_contato || null,
-        observacoes_contato: formData.observacoes_contato || null,
-        observacoes: formData.observacoes || null,
+        nome_contato_responsavel: formData.nome_contato_responsavel.trim() || null,
+        cargo_contato_responsavel: formData.cargo_contato_responsavel.trim() || null,
+        email_contato: formData.email_contato.trim() || null,
+        telefone_contato: formData.telefone_contato.trim() || null,
+        observacoes_contato: formData.observacoes_contato.trim() || null,
+        observacoes: formData.observacoes.trim() || null,
+        // user_id and responsavel_cadastro are typically not updated here unless intended
       };
 
       const { error: updateError } = await supabase
@@ -462,27 +474,28 @@ export default function EditarOrganizacaoPage() {
       
       // QSA Management on edit is complex.
       // If QSA data came from the API and is stored in displayOnlyApiData,
-      // and your business logic dictates that API QSA data should replace DB QSA data:
+      // and business logic dictates that API QSA data should replace DB QSA data (or merge):
       if (displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0) {
-        // 1. Delete existing QSA for this id_entidade
+        // Strategy: Delete existing QSA for this id_entidade and insert new ones.
+        // This is simpler than diffing but means manual QSA edits in DB would be lost on CNPJ re-fetch.
+        // For more robust QSA editing, a dedicated QSA management interface might be needed.
+        console.log("EditarOrganizacaoPage: Atualizando QSA para Entidade ID:", numericOrgId);
         const { error: deleteQsaError } = await supabase
             .from('QSA')
             .delete()
             .eq('id_entidade', numericOrgId);
-        if (deleteQsaError) console.warn("Aviso ao deletar QSA antigo:", deleteQsaError.message);
+        if (deleteQsaError) console.warn("EditarOrganizacaoPage: Aviso ao deletar QSA antigo:", deleteQsaError.message);
 
-        // 2. Insert new QSA data
-        const qsaPayload = displayOnlyApiData.qsa.map(socio => ({
+        const qsaPayloadToInsert = displayOnlyApiData.qsa.map(socio => ({
             id_entidade: numericOrgId,
             nome_socio: socio.nome_socio,
             qualificacao_socio: socio.qualificacao_socio,
             data_entrada_sociedade: socio.data_entrada_sociedade || null,
-            // observacoes: (socio as QSAItemFromDB).observacoes || null, // If you allow editing QSA observacoes
+            // observacoes: (socio as QSAItemFromDB).observacoes || null, // If QSA has editable observacoes from form
         }));
-         const { error: insertQsaError } = await supabase.from('QSA').insert(qsaPayload);
-         if (insertQsaError) console.warn("Aviso ao inserir novo QSA:", insertQsaError.message);
+         const { error: insertQsaError } = await supabase.from('QSA').insert(qsaPayloadToInsert);
+         if (insertQsaError) console.warn("EditarOrganizacaoPage: Aviso ao inserir novo QSA:", insertQsaError.message);
       }
-
 
       toast({ title: "Organização Atualizada!", description: "Os dados da organização foram salvos." });
       router.push(`/admin/organizacoes/${numericOrgId}`); 
@@ -540,19 +553,19 @@ export default function EditarOrganizacaoPage() {
               <CardHeader><CardTitle>Identificação</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="cnpj_field">CNPJ <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="cnpj">CNPJ <span className="text-destructive">*</span></Label>
                   <Input 
-                    id="cnpj_field" 
+                    id="cnpj" 
                     name="cnpj" 
                     value={formData.cnpj} 
                     onChange={handleChange}
-                    onBlur={handleCnpjBlur}
+                    onBlur={handleCnpjBlur} // Re-fetch if CNPJ is changed
                     placeholder="00.000.000/0000-00"
                     required 
                     disabled={isLoading || isCnpjLoading || isFetchingInitialData} 
                   />
                   {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-1" />}
-                   <p className="text-xs text-muted-foreground">Alterar o CNPJ e sair do campo pode re-buscar dados da BrasilAPI.</p>
+                   <p className="text-xs text-muted-foreground">Alterar o CNPJ e sair do campo pode re-buscar dados da BrasilAPI, potencialmente sobrescrevendo outras edições manuais.</p>
                 </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2"><Label htmlFor="nome">Nome da Organização (Razão Social) <span className="text-destructive">*</span></Label><Input id="nome" name="nome" value={formData.nome} onChange={handleChange} required disabled={isLoading || isFetchingInitialData} /></div>
@@ -566,7 +579,7 @@ export default function EditarOrganizacaoPage() {
                 </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    <div className="space-y-2"><Label htmlFor="telefone">Telefone Principal</Label><Input id="telefone" name="telefone" type="tel" value={formData.telefone} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
-                   <div className="space-y-2"><Label htmlFor="email">E-mail Principal</Label><Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                   <div className="space-y-2"><Label htmlFor="email">E-mail Principal</Label><Input id="email" name="email" type="email" value={formData.email} placeholder="email@dominio.com" onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
               </CardContent>
             </Card>
@@ -574,7 +587,7 @@ export default function EditarOrganizacaoPage() {
           
           <TabsContent value="dadosFiscais">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Dados da Empresa</CardTitle><CardDescription>Informações obtidas da API CNPJ ou cadastradas.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Dados Fiscais</CardTitle><CardDescription>Informações obtidas da API CNPJ ou cadastradas.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="space-y-1"><Label htmlFor="data_inicio_atividade">Data Início Atividade</Label><Input id="data_inicio_atividade" value={formData.data_inicio_atividade} onChange={handleChange} name="data_inicio_atividade" type="date" disabled={isLoading || isFetchingInitialData} /></div>
@@ -656,7 +669,7 @@ export default function EditarOrganizacaoPage() {
                     <div className="space-y-2"><Label htmlFor="cargo_contato_responsavel">Cargo do Contato</Label><Input id="cargo_contato_responsavel" name="cargo_contato_responsavel" value={formData.cargo_contato_responsavel} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2"><Label htmlFor="email_contato">E-mail de Contato</Label><Input id="email_contato" name="email_contato" type="email" value={formData.email_contato} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-2"><Label htmlFor="email_contato">E-mail de Contato</Label><Input id="email_contato" name="email_contato" type="email" value={formData.email_contato} placeholder="contato@empresa.com" onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                     <div className="space-y-2"><Label htmlFor="telefone_contato">Telefone de Contato</Label><Input id="telefone_contato" name="telefone_contato" type="tel" value={formData.telefone_contato} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
                 <div className="space-y-2"><Label htmlFor="observacoes_contato">Observações sobre Contato</Label><Textarea id="observacoes_contato" name="observacoes_contato" value={formData.observacoes_contato} onChange={handleChange} rows={3} disabled={isLoading || isFetchingInitialData} /></div>
