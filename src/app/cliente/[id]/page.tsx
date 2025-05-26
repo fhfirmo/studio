@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Label } from "@/components/ui/label"; // Keep Label if used by InfoItem
+import { Label as InfoItemLabel } from "@/components/ui/label"; // Renamed to avoid conflict if Label is needed elsewhere
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Keep for CNH modal
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info, Link2, HomeIcon, Briefcase, FileText, CarIcon as Car, Download, Eye, GripVertical, ClipboardList, CheckSquare, PlusCircle } from "lucide-react";
@@ -17,18 +17,19 @@ import Link from "next/link";
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid } from "date-fns";
-import { Input } from '@/components/ui/input'; // Keep for CNH modal
-import { Textarea } from '@/components/ui/textarea'; // Keep for CNH modal
+import { Input } from '@/components/ui/input'; 
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabase';
 
 
 interface CNHData {
-  id_cnh: string;
+  id_cnh?: string; // Optional for creation
   numero_registro: string;
   categoria: string;
-  data_emissao: string;
-  data_validade: string;
-  primeira_habilitacao: string | null;
+  data_emissao: string; // YYYY-MM-DD
+  data_validade: string; // YYYY-MM-DD
+  primeira_habilitacao: string | null; // YYYY-MM-DD
   local_emissao_cidade: string | null;
   local_emissao_uf: string | null;
   observacoes_cnh: string | null;
@@ -69,9 +70,8 @@ interface PessoaFisicaDetailed {
   email: string;
   telefone: string | null;
   dataCadastro: string;
-  tipoRelacao: string;
-  organizacaoVinculada: OrganizacaoVinculada | null;
-  // Endereço direto
+  tipoRelacao: string; // Now direct from PessoasFisicas
+  organizacaoVinculada: OrganizacaoVinculada | null; // Derived from MembrosEntidade
   logradouro: string | null;
   numero: string | null;
   complemento: string | null;
@@ -100,49 +100,125 @@ const brazilianStates = [
 
 
 async function getPessoaFisicaById(id: string): Promise<PessoaFisicaDetailed | null> {
-  console.log(`Fetching PessoaFisica details for ID: ${id} (placeholder - with direct address)`);
-  await new Promise(resolve => setTimeout(resolve, 300));
+  // This function should now fetch from Supabase
+  if (!supabase) {
+    console.error("Supabase client not initialized for getPessoaFisicaById (Details Page)");
+    return null;
+  }
+  console.log(`Fetching PessoaFisica details for ID: ${id} from Supabase (Details Page)`);
   
-  const sampleCnh: CNHData | null = id === "pf_001" || id === "1" || id === "cli_001" ? {
-    id_cnh: "cnh_001", numero_registro: "01234567890", categoria: "AB", data_emissao: "2022-08-15",
-    data_validade: "2027-08-14", primeira_habilitacao: "2010-08-15", local_emissao_cidade: "Cidade Exemplo",
-    local_emissao_uf: "EX", observacoes_cnh: "Nenhuma observação."
-  } : null;
+  const { data: pfData, error: pfError } = await supabase
+    .from('PessoasFisicas')
+    .select(`
+      id_pessoa_fisica,
+      nome_completo,
+      cpf,
+      rg,
+      data_nascimento,
+      email,
+      telefone,
+      tipo_relacao, 
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cep,
+      cidade,
+      estado_uf,
+      observacoes,
+      data_cadastro,
+      CNHs ( * ),
+      MembrosEntidade (
+        Entidades!MembrosEntidade_id_entidade_pai_fkey (
+          id_entidade,
+          nome,
+          cnpj,
+          TiposEntidade ( nome_tipo )
+        )
+      ),
+      Veiculos (
+        id_veiculo,
+        placa_atual,
+        marca,
+        ano_fabricacao,
+        ModelosVeiculo ( nome_modelo )
+      ),
+      Arquivos (
+        id_arquivo,
+        nome_arquivo,
+        tipo_documento,
+        data_upload,
+        caminho_armazenamento
+      )
+    `)
+    .eq('id_pessoa_fisica', parseInt(id, 10))
+    .maybeSingle();
 
-  const sampleDocuments = [
-    { id: "doc_pf1_001", titulo: "Contrato de Associação PF1", tipo: "Contrato", dataUpload: "2024-05-10", url:"#view-doc1", downloadUrl: "#download-doc1" },
-  ];
-  const sampleVehicles = [
-    { id: "vei_pf1_001", placa: "PFA-0001", modelo: "Carro Principal", marca: "Marca X", ano: 2022, linkDetalhes: "/admin/veiculos/vei_pf1_001" },
-  ];
+  if (pfError) { 
+    console.error("Error fetching PessoaFisica details from Supabase:", pfError); 
+    return null; 
+  }
+  if (!pfData) return null;
+  
+  const orgVinculada = pfData.MembrosEntidade && pfData.MembrosEntidade.length > 0 && pfData.MembrosEntidade[0]['Entidades!MembrosEntidade_id_entidade_pai_fkey']
+    ? {
+        id: pfData.MembrosEntidade[0]['Entidades!MembrosEntidade_id_entidade_pai_fkey'].id_entidade.toString(),
+        nome: pfData.MembrosEntidade[0]['Entidades!MembrosEntidade_id_entidade_pai_fkey'].nome,
+        tipoOrganizacao: pfData.MembrosEntidade[0]['Entidades!MembrosEntidade_id_entidade_pai_fkey'].TiposEntidade?.nome_tipo || 'N/A',
+        cnpj: pfData.MembrosEntidade[0]['Entidades!MembrosEntidade_id_entidade_pai_fkey'].cnpj,
+        linkDetalhes: `/admin/organizacoes/${pfData.MembrosEntidade[0]['Entidades!MembrosEntidade_id_entidade_pai_fkey'].id_entidade}`
+      }
+    : null;
 
-  if (id === "pf_001" || id === "1" || id === "cli_001") {
-    return {
-      id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00", rg: "12.345.678-9",
-      dataNascimento: "1985-05-15", email: "joao.sauro@example.com", telefone: "(11) 98765-4321",
-      dataCadastro: "2024-01-15T10:00:00Z", tipoRelacao: "Associado",
-      organizacaoVinculada: { id: "org_001", nome: "Cooperativa Alfa", tipoOrganizacao: "Cooperativa Principal", cnpj: "11.222.333/0001-44", linkDetalhes: "/admin/organizacoes/org_001" },
-      logradouro: "Rua das Palmeiras", numero: "101", complemento: "Apto 10A", bairro: "Centro",
-      cidade: "Cidade Exemplo", estado_uf: "EX", cep: "01001-001",
-      documentos: sampleDocuments, veiculos: sampleVehicles,
-      observacoes: "Cliente antigo e membro ativo da cooperativa.", status: "Ativo", cnh: sampleCnh,
-    };
-  }
-  if (id === "pf_003") {
-     return {
-      id: "pf_003", nomeCompleto: "Carlos Pereira Lima", cpf: "111.222.333-44", rg: "33.444.555-6",
-      dataNascimento: "1990-10-20", email: "carlos.lima@example.com", telefone: "(31) 99887-7665",
-      dataCadastro: "2024-03-10T14:30:00Z", tipoRelacao: "Cliente Geral", organizacaoVinculada: null,
-      logradouro: "Avenida Brasil", numero: "2000", complemento: "Casa 2", bairro: "Jardins",
-      cidade: "Outra Cidade", estado_uf: "OT", cep: "12345-678",
-      documentos: [], veiculos: [], observacoes: "Interessado em seguros veiculares.", status: "Ativo", cnh: null,
-    };
-  }
-  return null;
+  const documentosAssociados = (pfData.Arquivos || []).map(doc => ({
+    id: doc.id_arquivo,
+    titulo: doc.nome_arquivo,
+    tipo: doc.tipo_documento || 'N/A',
+    dataUpload: doc.data_upload,
+    url: supabase.storage.from('documentos_bucket').getPublicUrl(doc.caminho_armazenamento).data.publicUrl, // Adjust bucket name
+    downloadUrl: doc.caminho_armazenamento // For download handler
+  }));
+
+  const veiculosAssociados = (pfData.Veiculos || []).map(vei => ({
+    id: vei.id_veiculo.toString(),
+    placa: vei.placa_atual,
+    modelo: vei.ModelosVeiculo?.nome_modelo || 'N/A',
+    marca: vei.marca || 'N/A',
+    ano: vei.ano_fabricacao || 0,
+    linkDetalhes: `/admin/veiculos/${vei.id_veiculo}`
+  }));
+  
+  const cnh = Array.isArray(pfData.CNHs) ? (pfData.CNHs[0] || null) : pfData.CNHs;
+
+  return {
+    id: pfData.id_pessoa_fisica.toString(),
+    nomeCompleto: pfData.nome_completo,
+    cpf: pfData.cpf,
+    rg: pfData.rg,
+    dataNascimento: pfData.data_nascimento,
+    email: pfData.email || '',
+    telefone: pfData.telefone,
+    dataCadastro: pfData.data_cadastro,
+    tipoRelacao: pfData.tipo_relacao || 'N/A',
+    organizacaoVinculada: orgVinculada,
+    logradouro: pfData.logradouro,
+    numero: pfData.numero,
+    complemento: pfData.complemento,
+    bairro: pfData.bairro,
+    cep: pfData.cep,
+    cidade: pfData.cidade, // Assuming these are now direct, or you need to join/fetch Municipio/Estado names
+    estado_uf: pfData.estado_uf,
+    documentos: documentosAssociados,
+    veiculos: veiculosAssociados,
+    observacoes: pfData.observacoes,
+    status: "Ativo", // Placeholder for status
+    cnh: cnh ? { ...cnh, id_cnh: cnh.id_cnh?.toString() } : null,
+  };
 }
 
+
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
-  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) return null;
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '' && value !== "N/A")) return null;
   return (
     <div className={cn("mb-3", className)}>
       <span className="text-sm font-medium text-muted-foreground flex items-center">
@@ -170,7 +246,8 @@ export default function PessoaFisicaDetailsPage() {
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
   const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create');
   const [cnhFormData, setCnhFormData] = useState<Omit<CNHData, 'id_cnh'>>(initialCnhModalFormData);
-  const [currentCnhOnPage, setCurrentCnhOnPage] = useState<CNHData | null>(null);
+  // currentCnhOnPage stores the CNH currently displayed (fetched from DB or after save)
+  const [currentCnhOnPage, setCurrentCnhOnPage] = useState<CNHData | null>(null); 
 
   useEffect(() => {
     if (pessoaFisicaId) {
@@ -178,12 +255,15 @@ export default function PessoaFisicaDetailsPage() {
       getPessoaFisicaById(pessoaFisicaId)
         .then(data => {
           setPessoaFisica(data);
-          setCurrentCnhOnPage(data?.cnh || null);
+          setCurrentCnhOnPage(data?.cnh || null); // Initialize currentCnhOnPage
         })
-        .catch(console.error)
+        .catch(error => {
+            console.error("Erro ao buscar detalhes da pessoa física:", error);
+            toast({title: "Erro ao Carregar", description: "Não foi possível carregar os detalhes da pessoa física.", variant: "destructive"});
+        })
         .finally(() => setIsLoading(false));
     }
-  }, [pessoaFisicaId]);
+  }, [pessoaFisicaId, toast]); // Added toast to dependencies
 
   const formatDate = (dateString: string | null | undefined, outputFormat = "dd/MM/yyyy") => {
     if (!dateString) return "N/A";
@@ -207,7 +287,7 @@ export default function PessoaFisicaDetailsPage() {
         observacoes_cnh: currentCnhOnPage.observacoes_cnh,
       });
     } else {
-      setCnhFormData(initialCnhModalFormData);
+      setCnhFormData(initialCnhFormData);
     }
     setIsCnhModalOpen(true);
   };
@@ -227,14 +307,24 @@ export default function PessoaFisicaDetailsPage() {
 
   const handleCnhSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!supabase || !pessoaFisica) {
+      toast({ title: "Erro de Configuração", description: "Cliente Supabase ou dados da pessoa física não disponíveis.", variant: "destructive" });
+      return;
+    }
     if (!cnhFormData.numero_registro || !cnhFormData.categoria || !cnhFormData.data_emissao || !cnhFormData.data_validade) {
       toast({ title: "Campos da CNH Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
       return;
     }
     
+    const numericPessoaFisicaId = parseInt(pessoaFisica.id);
+    if (isNaN(numericPessoaFisicaId)) {
+      toast({ title: "Erro Interno", description: "ID da pessoa física inválido.", variant: "destructive" });
+      return;
+    }
+
     const cnhPayload = {
       ...cnhFormData,
-      id_pessoa_fisica: parseInt(pessoaFisicaId) // Certifique-se que pessoaFisicaId é numérico ou ajuste
+      id_pessoa_fisica: numericPessoaFisicaId 
     };
 
     try {
@@ -244,7 +334,7 @@ export default function PessoaFisicaDetailsPage() {
         if (error) throw error;
         savedCnhData = data as CNHData;
       } else if (cnhModalMode === 'edit' && currentCnhOnPage?.id_cnh) {
-        // @ts-ignore - id_pessoa_fisica não precisa ser atualizado
+        // @ts-ignore - id_pessoa_fisica não precisa ser atualizado no update da CNH
         const { id_pessoa_fisica, ...updatePayload } = cnhPayload; 
         const { data, error } = await supabase.from('CNHs').update(updatePayload).eq('id_cnh', currentCnhOnPage.id_cnh).select().single();
         if (error) throw error;
@@ -254,9 +344,7 @@ export default function PessoaFisicaDetailsPage() {
       }
       
       setCurrentCnhOnPage(savedCnhData);
-      if (pessoaFisica) {
-          setPessoaFisica({...pessoaFisica, cnh: savedCnhData });
-      }
+      setPessoaFisica(prevPf => prevPf ? {...prevPf, cnh: savedCnhData } : null);
       setIsCnhModalOpen(false);
       toast({ title: "CNH Salva!", description: `Dados da CNH para ${pessoaFisica?.nomeCompleto} salvos com sucesso.` });
 
@@ -266,15 +354,18 @@ export default function PessoaFisicaDetailsPage() {
     }
   };
   
-  // Placeholder para exclusão
   const handleDeletePessoaFisica = async () => {
-    if (!pessoaFisica) return;
-    console.log(`Excluir Pessoa Física ID: ${pessoaFisica.id} (placeholder)`);
-    // Supabase: DELETE FROM public.PessoasFisicas WHERE id_pessoa_fisica = pessoaFisica.id;
-    // (Considerar ON DELETE CASCADE para CNHs, MembrosEntidade, etc., ou tratar exclusões relacionadas)
-    toast({title: "Exclusão (Simulada)", description: `Pessoa física ${pessoaFisica.nomeCompleto} seria excluída.`});
-    router.push('/admin/clientes'); // Redirect after simulated delete
-  }
+    if (!pessoaFisica || !supabase) return;
+    console.log(`Excluir Pessoa Física ID: ${pessoaFisica.id}`);
+    try {
+      const { error } = await supabase.from('PessoasFisicas').delete().eq('id_pessoa_fisica', pessoaFisica.id);
+      if (error) throw error;
+      toast({title: "Pessoa Física Excluída", description: `${pessoaFisica.nomeCompleto} foi excluído(a) com sucesso.`});
+      router.push('/admin/clientes');
+    } catch (error: any) {
+      toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
+    }
+  };
 
 
   if (isLoading) {
@@ -298,7 +389,7 @@ export default function PessoaFisicaDetailsPage() {
     pessoaFisica.bairro,
     pessoaFisica.cidade ? `${pessoaFisica.cidade} - ${pessoaFisica.estado_uf || ''}` : '',
     pessoaFisica.cep,
-  ].filter(Boolean).join(', ');
+  ].filter(Boolean).join(', ') || "N/A";
 
 
   return (
@@ -430,26 +521,26 @@ export default function PessoaFisicaDetailsPage() {
             <DialogDescription>Preencha os dados da CNH.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCnhSubmit} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
-            <div><Label htmlFor="cnh_numero_registro_modal">Nº Registro <span className="text-destructive">*</span></Label><Input id="cnh_numero_registro_modal" name="numero_registro" value={cnhFormData.numero_registro} onChange={handleCnhFormChange} required /></div>
-            <div><Label htmlFor="cnh_categoria_modal">Categoria <span className="text-destructive">*</span></Label><Input id="cnh_categoria_modal" name="categoria" value={cnhFormData.categoria} onChange={handleCnhFormChange} required placeholder="Ex: AB, B"/></div>
+            <div><InfoItemLabel htmlFor="cnh_numero_registro_modal">Nº Registro <span className="text-destructive">*</span></InfoItemLabel><Input id="cnh_numero_registro_modal" name="numero_registro" value={cnhFormData.numero_registro} onChange={handleCnhFormChange} required /></div>
+            <div><InfoItemLabel htmlFor="cnh_categoria_modal">Categoria <span className="text-destructive">*</span></InfoItemLabel><Input id="cnh_categoria_modal" name="categoria" value={cnhFormData.categoria} onChange={handleCnhFormChange} required placeholder="Ex: AB, B"/></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><Label htmlFor="cnh_data_emissao_modal">Emissão <span className="text-destructive">*</span></Label>
+              <div><InfoItemLabel htmlFor="cnh_data_emissao_modal">Emissão <span className="text-destructive">*</span></InfoItemLabel>
                 <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_emissao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_emissao ? formatDate(cnhFormData.data_emissao) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_emissao ? parseISO(cnhFormData.data_emissao) : undefined} onSelect={(d) => handleCnhDateChange('data_emissao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
               </div>
-              <div><Label htmlFor="cnh_data_validade_modal">Validade <span className="text-destructive">*</span></Label>
+              <div><InfoItemLabel htmlFor="cnh_data_validade_modal">Validade <span className="text-destructive">*</span></InfoItemLabel>
                 <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_validade && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_validade ? formatDate(cnhFormData.data_validade) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_validade ? parseISO(cnhFormData.data_validade) : undefined} onSelect={(d) => handleCnhDateChange('data_validade', d)} captionLayout="dropdown-buttons" fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 15} initialFocus /></PopoverContent></Popover>
               </div>
             </div>
-            <div><Label htmlFor="cnh_primeira_habilitacao_modal">1ª Habilitação</Label>
+            <div><InfoItemLabel htmlFor="cnh_primeira_habilitacao_modal">1ª Habilitação</InfoItemLabel>
               <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.primeira_habilitacao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.primeira_habilitacao ? formatDate(cnhFormData.primeira_habilitacao) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.primeira_habilitacao ? parseISO(cnhFormData.primeira_habilitacao) : undefined} onSelect={(d) => handleCnhDateChange('primeira_habilitacao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><Label htmlFor="cnh_local_emissao_cidade_modal">Cidade Emissão</Label><Input id="cnh_local_emissao_cidade_modal" name="local_emissao_cidade" value={cnhFormData.local_emissao_cidade || ''} onChange={handleCnhFormChange} /></div>
-              <div><Label htmlFor="cnh_local_emissao_uf_modal">UF Emissão</Label>
+              <div><InfoItemLabel htmlFor="cnh_local_emissao_cidade_modal">Cidade Emissão</InfoItemLabel><Input id="cnh_local_emissao_cidade_modal" name="local_emissao_cidade" value={cnhFormData.local_emissao_cidade || ''} onChange={handleCnhFormChange} /></div>
+              <div><InfoItemLabel htmlFor="cnh_local_emissao_uf_modal">UF Emissão</InfoItemLabel>
                 <Select name="local_emissao_uf" value={cnhFormData.local_emissao_uf || ''} onValueChange={(value) => handleCnhSelectChange('local_emissao_uf', value)}><SelectTrigger id="cnh_local_emissao_uf_modal"><SelectValue placeholder="Selecione UF" /></SelectTrigger><SelectContent>{brazilianStates.map(state => (<SelectItem key={state.value} value={state.value}>{state.label}</SelectItem>))}</SelectContent></Select>
               </div>
             </div>
-            <div><Label htmlFor="cnh_observacoes_cnh_modal">Observações CNH</Label><Textarea id="cnh_observacoes_cnh_modal" name="observacoes_cnh" value={cnhFormData.observacoes_cnh || ''} onChange={handleCnhFormChange} rows={3} /></div>
+            <div><InfoItemLabel htmlFor="cnh_observacoes_cnh_modal">Observações CNH</InfoItemLabel><Textarea id="cnh_observacoes_cnh_modal" name="observacoes_cnh" value={cnhFormData.observacoes_cnh || ''} onChange={handleCnhFormChange} rows={3} /></div>
             <DialogFooter>
               <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
               <Button type="submit">{cnhModalMode === 'create' ? 'Salvar CNH' : 'Salvar Alterações'}</Button>
@@ -461,12 +552,11 @@ export default function PessoaFisicaDetailsPage() {
   );
 }
 
-/* Supabase Integration Notes (Refactored Address):
-- Fetch PessoaFisica details by ID from public.PessoasFisicas. Address fields are now direct.
-- JOINs: TiposEntidade (for organizacaoVinculada.tipoOrganizacao), Entidades (via MembrosEntidade or direct FK for organizacaoVinculada.nome, etc).
-- Separate fetches or subqueries for Documentos (Arquivos) and Veiculos associated with this PessoaFisica.
-- CNH: Fetch from public.CNHs where id_pessoa_fisica = current_pf_id.
-- CNH Modal: POST/PUT to public.CNHs.
-- Delete: Ensure ON DELETE CASCADE is set for CNHs and other related records, or handle deletions in a transaction/Edge Function.
+/* Supabase Integration Notes:
+- `getPessoaFisicaById`: Fetch PessoaFisica by ID. JOIN with MembrosEntidade and then Entidades (and TiposEntidade) to get organization details. JOIN CNHs. Fetch related Arquivos and Veiculos.
+- CNH Modal: Create/Update public.CNHs associated with the current PessoaFisica.
+- Delete PessoaFisica: Ensure ON DELETE CASCADE is set for CNHs, MembrosEntidade, Veiculos (proprietario_pessoa_fisica), Seguros (titular_pessoa_fisica), Arquivos (pessoa_fisica_associada) or handle these deletions in a transaction/Edge Function.
 */
 
+    
+  

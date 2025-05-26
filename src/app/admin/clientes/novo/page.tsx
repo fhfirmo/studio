@@ -108,8 +108,8 @@ export default function NovaPessoaFisicaPage() {
     dataNascimento: undefined as Date | undefined,
     email: '',
     telefone: '',
-    tipoRelacao: '',
-    organizacaoVinculadaId: '',
+    tipoRelacao: '', // This will now be a direct column in PessoasFisicas
+    organizacaoVinculadaId: '', // For MembrosEntidade if tipoRelacao requires it
     logradouro: '',
     numero: '',
     complemento: '',
@@ -118,11 +118,11 @@ export default function NovaPessoaFisicaPage() {
     cidade: '',
     estado_uf: '',
     observacoes: '',
-    cnh: null as CNHDataForForm | null,
+    cnh: null as CNHDataForForm | null, // Staged CNH data
   });
 
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
-  const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create');
+  const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create'); // For the CNH modal itself
   const [cnhModalFormData, setCnhModalFormData] = useState<CNHDataForForm>(initialCnhModalFormData);
 
   const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
@@ -159,6 +159,7 @@ export default function NovaPessoaFisicaPage() {
 
 
   useEffect(() => {
+    // If tipoRelacao is 'cliente_geral', clear organizacaoVinculadaId as it's not applicable for MembrosEntidade
     if (formData.tipoRelacao === 'cliente_geral' && formData.organizacaoVinculadaId) {
       setFormData(prev => ({ ...prev, organizacaoVinculadaId: '' }));
     }
@@ -204,8 +205,9 @@ export default function NovaPessoaFisicaPage() {
     setFormData(prev => ({...prev, [name]: date }));
   };
 
+  // CNH Modal Handlers
   const handleOpenCnhModal = () => {
-    if (formData.cnh) {
+    if (formData.cnh) { // If CNH data is already staged in the main form
       setCnhModalMode('edit');
       setCnhModalFormData({ ...formData.cnh });
     } else {
@@ -228,6 +230,7 @@ export default function NovaPessoaFisicaPage() {
      setCnhModalFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // This submit handler for CNH modal only stages data into the main form's 'cnh' field
   const handleCnhSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!cnhModalFormData.numero_registro || !cnhModalFormData.categoria || !cnhModalFormData.data_emissao || !cnhModalFormData.data_validade) {
@@ -265,6 +268,7 @@ export default function NovaPessoaFisicaPage() {
     }
     
     try {
+      // Payload for PessoasFisicas table
       const pessoaFisicaPayload = {
         nome_completo: formData.nomeCompleto,
         cpf: formData.cpf,
@@ -279,8 +283,9 @@ export default function NovaPessoaFisicaPage() {
         cep: formData.cep || null,
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
-        tipo_relacao: formData.tipoRelacao, 
-        observacoes: formData.observacoes,
+        tipo_relacao: formData.tipoRelacao, // Directly storing tipo_relacao
+        observacoes: formData.observacoes, // Assuming you have an observacoes column in PessoasFisicas
+        // data_cadastro is usually handled by DB default
       };
 
       console.log("Cadastrando Pessoa Física com payload:", pessoaFisicaPayload);
@@ -298,6 +303,7 @@ export default function NovaPessoaFisicaPage() {
       }
       console.log("Pessoa Física cadastrada com ID:", newPessoaFisicaId);
 
+      // If CNH data was staged, insert it into CNHs table
       if (formData.cnh) {
         console.log("Cadastrando CNH para Pessoa Física ID:", newPessoaFisicaId, "Payload CNH:", formData.cnh);
         const cnhPayload = {
@@ -316,13 +322,14 @@ export default function NovaPessoaFisicaPage() {
         console.log("CNH cadastrada com sucesso.");
       }
 
+      // If organizacao is required and selected, insert into MembrosEntidade
       if (isOrganizacaoRequired && formData.organizacaoVinculadaId) {
         console.log("Cadastrando vínculo em MembrosEntidade. PessoaFisicaID:", newPessoaFisicaId, "OrganizacaoID:", formData.organizacaoVinculadaId);
         const membroEntidadePayload = {
           id_entidade_pai: parseInt(formData.organizacaoVinculadaId, 10),
           id_membro_pessoa_fisica: newPessoaFisicaId,
           tipo_membro: 'Pessoa Fisica', 
-          funcao_no_membro: formData.tipoRelacao, 
+          funcao_no_membro: formData.tipoRelacao, // Using tipoRelacao from PessoasFisicas as funcao_no_membro
         };
         const { error: membroError } = await supabase.from('MembrosEntidade').insert(membroEntidadePayload);
         if (membroError) throw membroError;
@@ -526,3 +533,4 @@ export default function NovaPessoaFisicaPage() {
 }
 
     
+  
