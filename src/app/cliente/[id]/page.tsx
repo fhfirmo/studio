@@ -1,5 +1,4 @@
 
-// src/app/cliente/[id]/page.tsx
 "use client";
 
 import { useState, useEffect, type FormEvent } from 'react';
@@ -7,30 +6,31 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label"; // Keep Label if used by InfoItem
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Keep for CNH modal
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added AlertDialogTrigger
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { User, Mail, Phone, MapPin, CalendarDays, Edit3, Trash2, AlertTriangle, Building, Info, Link2, HomeIcon, Briefcase, FileText, CarIcon as Car, Download, Eye, GripVertical, ClipboardList, CheckSquare, PlusCircle } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from 'next/navigation'; // Import useParams and useRouter
+import { useParams, useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid } from "date-fns";
-// import { useToast } from "@/hooks/use-toast";
+import { Input } from '@/components/ui/input'; // Keep for CNH modal
+import { Textarea } from '@/components/ui/textarea'; // Keep for CNH modal
+import { useToast } from "@/hooks/use-toast";
+
 
 interface CNHData {
   id_cnh: string;
   numero_registro: string;
   categoria: string;
-  data_emissao: string; // YYYY-MM-DD
-  data_validade: string; // YYYY-MM-DD
-  primeira_habilitacao: string | null; // YYYY-MM-DD
+  data_emissao: string;
+  data_validade: string;
+  primeira_habilitacao: string | null;
   local_emissao_cidade: string | null;
-  local_emissao_uf: string | null; // e.g., "SP"
+  local_emissao_uf: string | null;
   observacoes_cnh: string | null;
 }
 
@@ -60,26 +60,25 @@ interface VeiculoAssociado {
   linkDetalhes: string;
 }
 
-interface PessoaFisica {
+interface PessoaFisicaDetailed {
   id: string;
   nomeCompleto: string;
   cpf: string;
   rg: string | null;
-  dataNascimento: string | null; // YYYY-MM-DD
+  dataNascimento: string | null;
   email: string;
   telefone: string | null;
-  dataCadastro: string; // YYYY-MM-DD
+  dataCadastro: string;
   tipoRelacao: string;
   organizacaoVinculada: OrganizacaoVinculada | null;
-  endereco: {
-    logradouro: string | null;
-    numero: string | null;
-    complemento: string | null;
-    bairro: string | null;
-    municipio: { id: string; nome_municipio: string } | null;
-    estado: { id: string; sigla_estado: string; nome_estado: string } | null;
-    cep: string | null;
-  } | null;
+  // Endereço direto
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cep: string | null;
+  cidade: string | null;
+  estado_uf: string | null;
   documentos: DocumentoAssociado[];
   veiculos: VeiculoAssociado[];
   observacoes: string | null;
@@ -100,16 +99,15 @@ const brazilianStates = [
 ];
 
 
-async function getPessoaFisicaById(id: string): Promise<PessoaFisica | null> {
-  console.log(`Fetching PessoaFisica details for ID: ${id} (placeholder)`);
+async function getPessoaFisicaById(id: string): Promise<PessoaFisicaDetailed | null> {
+  console.log(`Fetching PessoaFisica details for ID: ${id} (placeholder - with direct address)`);
   await new Promise(resolve => setTimeout(resolve, 300));
   
-  const commonAddress = {
-    logradouro: "Rua das Palmeiras", numero: "101", complemento: "Apto 10A", bairro: "Centro",
-    municipio: { id: "mun_1", nome_municipio: "Cidade Exemplo" },
-    estado: { id: "uf_1", sigla_estado: "EX", nome_estado: "Estado Exemplo" },
-    cep: "01001-001",
-  };
+  const sampleCnh: CNHData | null = id === "pf_001" || id === "1" || id === "cli_001" ? {
+    id_cnh: "cnh_001", numero_registro: "01234567890", categoria: "AB", data_emissao: "2022-08-15",
+    data_validade: "2027-08-14", primeira_habilitacao: "2010-08-15", local_emissao_cidade: "Cidade Exemplo",
+    local_emissao_uf: "EX", observacoes_cnh: "Nenhuma observação."
+  } : null;
 
   const sampleDocuments = [
     { id: "doc_pf1_001", titulo: "Contrato de Associação PF1", tipo: "Contrato", dataUpload: "2024-05-10", url:"#view-doc1", downloadUrl: "#download-doc1" },
@@ -117,19 +115,16 @@ async function getPessoaFisicaById(id: string): Promise<PessoaFisica | null> {
   const sampleVehicles = [
     { id: "vei_pf1_001", placa: "PFA-0001", modelo: "Carro Principal", marca: "Marca X", ano: 2022, linkDetalhes: "/admin/veiculos/vei_pf1_001" },
   ];
-  const sampleCnh: CNHData = {
-    id_cnh: "cnh_001", numero_registro: "01234567890", categoria: "AB", data_emissao: "2022-08-15",
-    data_validade: "2027-08-14", primeira_habilitacao: "2010-08-15", local_emissao_cidade: "Cidade Exemplo",
-    local_emissao_uf: "EX", observacoes_cnh: "Nenhuma observação."
-  };
 
   if (id === "pf_001" || id === "1" || id === "cli_001") {
     return {
       id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00", rg: "12.345.678-9",
       dataNascimento: "1985-05-15", email: "joao.sauro@example.com", telefone: "(11) 98765-4321",
-      dataCadastro: "2024-01-15", tipoRelacao: "Associado",
+      dataCadastro: "2024-01-15T10:00:00Z", tipoRelacao: "Associado",
       organizacaoVinculada: { id: "org_001", nome: "Cooperativa Alfa", tipoOrganizacao: "Cooperativa Principal", cnpj: "11.222.333/0001-44", linkDetalhes: "/admin/organizacoes/org_001" },
-      endereco: commonAddress, documentos: sampleDocuments, veiculos: sampleVehicles,
+      logradouro: "Rua das Palmeiras", numero: "101", complemento: "Apto 10A", bairro: "Centro",
+      cidade: "Cidade Exemplo", estado_uf: "EX", cep: "01001-001",
+      documentos: sampleDocuments, veiculos: sampleVehicles,
       observacoes: "Cliente antigo e membro ativo da cooperativa.", status: "Ativo", cnh: sampleCnh,
     };
   }
@@ -137,23 +132,17 @@ async function getPessoaFisicaById(id: string): Promise<PessoaFisica | null> {
      return {
       id: "pf_003", nomeCompleto: "Carlos Pereira Lima", cpf: "111.222.333-44", rg: "33.444.555-6",
       dataNascimento: "1990-10-20", email: "carlos.lima@example.com", telefone: "(31) 99887-7665",
-      dataCadastro: "2024-03-10", tipoRelacao: "Cliente Geral", organizacaoVinculada: null,
-      endereco: { ...commonAddress, logradouro: "Avenida Brasil", numero: "2000", complemento: "Casa 2" },
+      dataCadastro: "2024-03-10T14:30:00Z", tipoRelacao: "Cliente Geral", organizacaoVinculada: null,
+      logradouro: "Avenida Brasil", numero: "2000", complemento: "Casa 2", bairro: "Jardins",
+      cidade: "Outra Cidade", estado_uf: "OT", cep: "12345-678",
       documentos: [], veiculos: [], observacoes: "Interessado em seguros veiculares.", status: "Ativo", cnh: null,
     };
   }
-  const baseId = typeof id === 'string' ? id.slice(-1) : '0';
-  return {
-      id: id, nomeCompleto: `Pessoa Exemplo ${baseId}`, cpf: `000.000.000-0${baseId}`, rg: `00.000.000-${baseId}`,
-      dataNascimento: `199${baseId}-01-01`, email: `pessoa${baseId}@example.com`, telefone: `(XX) XXXXX-XXX${baseId}`,
-      dataCadastro: new Date().toISOString().split('T')[0], tipoRelacao: "Cliente Geral", organizacaoVinculada: null,
-      endereco: commonAddress, documentos: [], veiculos: [], observacoes: "Nenhuma observação adicional.", status: "Pendente", cnh: null,
-  };
+  return null;
 }
 
-
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) return null;
   return (
     <div className={cn("mb-3", className)}>
       <span className="text-sm font-medium text-muted-foreground flex items-center">
@@ -171,16 +160,17 @@ const initialCnhFormData: Omit<CNHData, 'id_cnh'> = {
 };
 
 export default function PessoaFisicaDetailsPage() {
-  // const { toast } = useToast();
-  const paramsHook = useParams(); // Renamed to avoid conflict with function params
+  const paramsHook = useParams();
   const pessoaFisicaId = paramsHook.id as string;
+  const { toast } = useToast();
+  const router = useRouter();
 
-  const [pessoaFisica, setPessoaFisica] = useState<PessoaFisica | null>(null);
+  const [pessoaFisica, setPessoaFisica] = useState<PessoaFisicaDetailed | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
   const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create');
-  const [cnhFormData, setCnhFormData] = useState<Omit<CNHData, 'id_cnh'>>(initialCnhFormData);
-  const [currentCnhOnPage, setCurrentCnhOnPage] = useState<CNHData | null>(null); // To update UI after modal save
+  const [cnhFormData, setCnhFormData] = useState<Omit<CNHData, 'id_cnh'>>(initialCnhModalFormData);
+  const [currentCnhOnPage, setCurrentCnhOnPage] = useState<CNHData | null>(null);
 
   useEffect(() => {
     if (pessoaFisicaId) {
@@ -209,15 +199,15 @@ export default function PessoaFisicaDetailsPage() {
       setCnhFormData({
         numero_registro: currentCnhOnPage.numero_registro,
         categoria: currentCnhOnPage.categoria,
-        data_emissao: currentCnhOnPage.data_emissao, // Keep as YYYY-MM-DD string for input
-        data_validade: currentCnhOnPage.data_validade, // Keep as YYYY-MM-DD string
+        data_emissao: currentCnhOnPage.data_emissao,
+        data_validade: currentCnhOnPage.data_validade,
         primeira_habilitacao: currentCnhOnPage.primeira_habilitacao,
         local_emissao_cidade: currentCnhOnPage.local_emissao_cidade,
         local_emissao_uf: currentCnhOnPage.local_emissao_uf,
         observacoes_cnh: currentCnhOnPage.observacoes_cnh,
       });
     } else {
-      setCnhFormData(initialCnhFormData);
+      setCnhFormData(initialCnhModalFormData);
     }
     setIsCnhModalOpen(true);
   };
@@ -238,30 +228,54 @@ export default function PessoaFisicaDetailsPage() {
   const handleCnhSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!cnhFormData.numero_registro || !cnhFormData.categoria || !cnhFormData.data_emissao || !cnhFormData.data_validade) {
-      // toast({ title: "Campos da CNH Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
-      console.error("Validação CNH: Campos obrigatórios não preenchidos.");
+      toast({ title: "Campos da CNH Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
       return;
     }
-    // Supabase: if cnhModalMode === 'create', POST to public.CNHs with cnhFormData + id_pessoa_fisica.
-    // Supabase: if cnhModalMode === 'edit', PUT/PATCH to public.CNHs with cnhFormData for currentCnhOnPage.id_cnh.
-    console.log("Submitting CNH Data:", { id_pessoa_fisica: pessoaFisica?.id, ...cnhFormData });
-    // toast({ title: "CNH Salva! (Simulado)", description: `Dados da CNH para ${pessoaFisica?.nomeCompleto} salvos.` });
     
-    // Simulate update
-    const newCnhData: CNHData = {
-        id_cnh: currentCnhOnPage?.id_cnh || `cnh_new_${Date.now()}`,
-        ...cnhFormData,
-         primeira_habilitacao: cnhFormData.primeira_habilitacao || null,
-         local_emissao_cidade: cnhFormData.local_emissao_cidade || null,
-         local_emissao_uf: cnhFormData.local_emissao_uf || null,
-         observacoes_cnh: cnhFormData.observacoes_cnh || null,
+    const cnhPayload = {
+      ...cnhFormData,
+      id_pessoa_fisica: parseInt(pessoaFisicaId) // Certifique-se que pessoaFisicaId é numérico ou ajuste
     };
-    setCurrentCnhOnPage(newCnhData); 
-    if (pessoaFisica) {
-        setPessoaFisica({...pessoaFisica, cnh: newCnhData });
+
+    try {
+      let savedCnhData: CNHData;
+      if (cnhModalMode === 'create') {
+        const { data, error } = await supabase.from('CNHs').insert(cnhPayload).select().single();
+        if (error) throw error;
+        savedCnhData = data as CNHData;
+      } else if (cnhModalMode === 'edit' && currentCnhOnPage?.id_cnh) {
+        // @ts-ignore - id_pessoa_fisica não precisa ser atualizado
+        const { id_pessoa_fisica, ...updatePayload } = cnhPayload; 
+        const { data, error } = await supabase.from('CNHs').update(updatePayload).eq('id_cnh', currentCnhOnPage.id_cnh).select().single();
+        if (error) throw error;
+        savedCnhData = data as CNHData;
+      } else {
+        throw new Error("Modo de operação da CNH inválido ou ID da CNH ausente.");
+      }
+      
+      setCurrentCnhOnPage(savedCnhData);
+      if (pessoaFisica) {
+          setPessoaFisica({...pessoaFisica, cnh: savedCnhData });
+      }
+      setIsCnhModalOpen(false);
+      toast({ title: "CNH Salva!", description: `Dados da CNH para ${pessoaFisica?.nomeCompleto} salvos com sucesso.` });
+
+    } catch (error: any) {
+        console.error("Erro ao salvar CNH:", error);
+        toast({ title: "Erro ao Salvar CNH", description: error.message, variant: "destructive" });
     }
-    setIsCnhModalOpen(false);
   };
+  
+  // Placeholder para exclusão
+  const handleDeletePessoaFisica = async () => {
+    if (!pessoaFisica) return;
+    console.log(`Excluir Pessoa Física ID: ${pessoaFisica.id} (placeholder)`);
+    // Supabase: DELETE FROM public.PessoasFisicas WHERE id_pessoa_fisica = pessoaFisica.id;
+    // (Considerar ON DELETE CASCADE para CNHs, MembrosEntidade, etc., ou tratar exclusões relacionadas)
+    toast({title: "Exclusão (Simulada)", description: `Pessoa física ${pessoaFisica.nomeCompleto} seria excluída.`});
+    router.push('/admin/clientes'); // Redirect after simulated delete
+  }
+
 
   if (isLoading) {
     return <div className="container mx-auto px-4 py-12 text-center">Carregando dados...</div>;
@@ -271,12 +285,21 @@ export default function PessoaFisicaDetailsPage() {
       <div className="container mx-auto px-4 py-12 text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
         <h1 className="text-2xl font-bold text-destructive">Pessoa Física não encontrada</h1>
-        <Button asChild className="mt-6"><Link href="/admin/clientes">Voltar</Link></Button>
+        <Button asChild className="mt-6"><Link href="/admin/clientes">Voltar para Lista</Link></Button>
       </div>
     );
   }
 
   const showOrganizacaoVinculada = pessoaFisica.organizacaoVinculada && pessoaFisica.tipoRelacao !== 'Cliente Geral';
+  const fullAddress = [
+    pessoaFisica.logradouro,
+    pessoaFisica.numero,
+    pessoaFisica.complemento,
+    pessoaFisica.bairro,
+    pessoaFisica.cidade ? `${pessoaFisica.cidade} - ${pessoaFisica.estado_uf || ''}` : '',
+    pessoaFisica.cep,
+  ].filter(Boolean).join(', ');
+
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -288,7 +311,6 @@ export default function PessoaFisicaDetailsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Informações Pessoais Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Info className="mr-2 h-5 w-5 text-primary" /> Informações Pessoais</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
@@ -298,12 +320,11 @@ export default function PessoaFisicaDetailsPage() {
               <InfoItem label="Data de Nascimento" value={formatDate(pessoaFisica.dataNascimento)} icon={CalendarDays} />
               <InfoItem label="E-mail" value={pessoaFisica.email} icon={Mail} />
               <InfoItem label="Telefone" value={pessoaFisica.telefone || "N/A"} icon={Phone} />
-              <InfoItem label="Data de Cadastro" value={formatDate(pessoaFisica.dataCadastro)} icon={CalendarDays} />
+              <InfoItem label="Data de Cadastro" value={formatDate(pessoaFisica.dataCadastro, "dd/MM/yyyy HH:mm")} icon={CalendarDays} />
               <InfoItem label="Status" value={<span className={`font-semibold ${pessoaFisica.status === "Ativo" ? "text-green-600" : "text-amber-600"}`}>{pessoaFisica.status}</span>} icon={CheckSquare} />
             </CardContent>
           </Card>
 
-          {/* Dados da CNH Card */}
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center text-xl"><ClipboardList className="mr-2 h-5 w-5 text-primary" /> Dados da CNH</CardTitle>
@@ -324,13 +345,10 @@ export default function PessoaFisicaDetailsPage() {
                         <InfoItem label="Local Emissão" value={`${currentCnhOnPage.local_emissao_cidade || 'N/A'} - ${currentCnhOnPage.local_emissao_uf || 'N/A'}`} />
                         <InfoItem label="Observações CNH" value={currentCnhOnPage.observacoes_cnh} className="sm:col-span-2"/>
                     </div>
-                ) : (
-                    <p className="text-muted-foreground">Nenhuma CNH cadastrada para esta pessoa.</p>
-                )}
+                ) : ( <p className="text-muted-foreground">Nenhuma CNH cadastrada para esta pessoa.</p> )}
             </CardContent>
           </Card>
 
-          {/* Vínculo e Relação Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Link2 className="mr-2 h-5 w-5 text-primary" /> Vínculo e Relação</CardTitle></CardHeader>
             <CardContent>
@@ -350,22 +368,15 @@ export default function PessoaFisicaDetailsPage() {
             </CardContent>
           </Card>
           
-          {/* Endereço Card */}
-          {pessoaFisica.endereco && (
+          {(pessoaFisica.logradouro || pessoaFisica.cidade) && (
             <Card className="shadow-lg">
-              <CardHeader><CardTitle className="flex items-center text-xl"><HomeIcon className="mr-2 h-5 w-5 text-primary" /> Endereço</CardTitle></CardHeader>
-              <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
-                <InfoItem label="Logradouro" value={`${pessoaFisica.endereco.logradouro || ""}${pessoaFisica.endereco.numero ? ', ' + pessoaFisica.endereco.numero : ''}`} />
-                {pessoaFisica.endereco.complemento && <InfoItem label="Complemento" value={pessoaFisica.endereco.complemento} />}
-                <InfoItem label="Bairro" value={pessoaFisica.endereco.bairro || "N/A"} />
-                <InfoItem label="CEP" value={pessoaFisica.endereco.cep || "N/A"} />
-                <InfoItem label="Município" value={pessoaFisica.endereco.municipio?.nome_municipio || "N/A"} />
-                <InfoItem label="Estado" value={pessoaFisica.endereco.estado?.nome_estado || pessoaFisica.endereco.estado?.sigla_estado || "N/A"} />
+              <CardHeader><CardTitle className="flex items-center text-xl"><MapPin className="mr-2 h-5 w-5 text-primary" /> Endereço</CardTitle></CardHeader>
+              <CardContent>
+                 <InfoItem label="Endereço Completo" value={fullAddress} />
               </CardContent>
             </Card>
           )}
 
-          {/* Documentos Associados Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><FileText className="mr-2 h-5 w-5 text-primary" /> Documentos Associados</CardTitle></CardHeader>
             <CardContent>
@@ -377,7 +388,6 @@ export default function PessoaFisicaDetailsPage() {
             </CardContent>
           </Card>
 
-          {/* Veículos Associados Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Car className="mr-2 h-5 w-5 text-primary" /> Veículos Associados</CardTitle></CardHeader>
             <CardContent>
@@ -389,14 +399,12 @@ export default function PessoaFisicaDetailsPage() {
             </CardContent>
           </Card>
           
-          {/* Observações Gerais Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Info className="mr-2 h-5 w-5 text-primary" /> Observações Gerais</CardTitle></CardHeader>
             <CardContent><p className="text-foreground whitespace-pre-wrap">{pessoaFisica.observacoes || "Nenhuma observação."}</p></CardContent>
           </Card>
         </div>
 
-        {/* Coluna Lateral de Ações */}
         <div className="lg:col-span-1 space-y-6">
           <Card className="shadow-md">
             <CardHeader><CardTitle className="text-lg">Ações</CardTitle></CardHeader>
@@ -406,7 +414,7 @@ export default function PessoaFisicaDetailsPage() {
                 <AlertDialogTrigger asChild><Button className="w-full" variant="destructive"><Trash2 className="mr-2 h-4 w-4" /> Excluir Pessoa Física</Button></AlertDialogTrigger>
                 <AlertDialogContent>
                     <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir a pessoa física <strong>{pessoaFisica.nomeCompleto}</strong>? Esta ação é irreversível.</AlertDialogDescription></AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => console.log(`Excluir Pessoa Física ID: ${pessoaFisica.id} (placeholder)`)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Confirmar Exclusão</AlertDialogAction></AlertDialogFooter>
+                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeletePessoaFisica} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Confirmar Exclusão</AlertDialogAction></AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             </CardContent>
@@ -415,34 +423,33 @@ export default function PessoaFisicaDetailsPage() {
         </div>
       </div>
 
-      {/* CNH Management Modal */}
       <Dialog open={isCnhModalOpen} onOpenChange={setIsCnhModalOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{cnhModalMode === 'create' ? 'Cadastrar Nova CNH' : 'Editar CNH'}</DialogTitle>
-            <DialogDescription>Preencha os dados da Carteira Nacional de Habilitação.</DialogDescription>
+            <DialogDescription>Preencha os dados da CNH.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCnhSubmit} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
-            <div><Label htmlFor="cnh_numero_registro">Número de Registro <span className="text-destructive">*</span></Label><Input id="cnh_numero_registro" name="numero_registro" value={cnhFormData.numero_registro} onChange={handleCnhFormChange} required /></div>
-            <div><Label htmlFor="cnh_categoria">Categoria <span className="text-destructive">*</span></Label><Input id="cnh_categoria" name="categoria" value={cnhFormData.categoria} onChange={handleCnhFormChange} required placeholder="Ex: AB, B, C"/></div>
+            <div><Label htmlFor="cnh_numero_registro_modal">Nº Registro <span className="text-destructive">*</span></Label><Input id="cnh_numero_registro_modal" name="numero_registro" value={cnhFormData.numero_registro} onChange={handleCnhFormChange} required /></div>
+            <div><Label htmlFor="cnh_categoria_modal">Categoria <span className="text-destructive">*</span></Label><Input id="cnh_categoria_modal" name="categoria" value={cnhFormData.categoria} onChange={handleCnhFormChange} required placeholder="Ex: AB, B"/></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><Label htmlFor="cnh_data_emissao">Data de Emissão <span className="text-destructive">*</span></Label>
+              <div><Label htmlFor="cnh_data_emissao_modal">Emissão <span className="text-destructive">*</span></Label>
                 <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_emissao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_emissao ? formatDate(cnhFormData.data_emissao) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_emissao ? parseISO(cnhFormData.data_emissao) : undefined} onSelect={(d) => handleCnhDateChange('data_emissao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
               </div>
-              <div><Label htmlFor="cnh_data_validade">Data de Validade <span className="text-destructive">*</span></Label>
+              <div><Label htmlFor="cnh_data_validade_modal">Validade <span className="text-destructive">*</span></Label>
                 <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.data_validade && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.data_validade ? formatDate(cnhFormData.data_validade) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.data_validade ? parseISO(cnhFormData.data_validade) : undefined} onSelect={(d) => handleCnhDateChange('data_validade', d)} captionLayout="dropdown-buttons" fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 15} initialFocus /></PopoverContent></Popover>
               </div>
             </div>
-            <div><Label htmlFor="cnh_primeira_habilitacao">Primeira Habilitação</Label>
+            <div><Label htmlFor="cnh_primeira_habilitacao_modal">1ª Habilitação</Label>
               <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !cnhFormData.primeira_habilitacao && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{cnhFormData.primeira_habilitacao ? formatDate(cnhFormData.primeira_habilitacao) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={cnhFormData.primeira_habilitacao ? parseISO(cnhFormData.primeira_habilitacao) : undefined} onSelect={(d) => handleCnhDateChange('primeira_habilitacao', d)} captionLayout="dropdown-buttons" fromYear={1950} toYear={new Date().getFullYear()} initialFocus /></PopoverContent></Popover>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><Label htmlFor="cnh_local_emissao_cidade">Cidade de Emissão</Label><Input id="cnh_local_emissao_cidade" name="local_emissao_cidade" value={cnhFormData.local_emissao_cidade || ''} onChange={handleCnhFormChange} /></div>
-              <div><Label htmlFor="cnh_local_emissao_uf">UF de Emissão</Label>
-                <Select name="local_emissao_uf" value={cnhFormData.local_emissao_uf || ''} onValueChange={(value) => handleCnhSelectChange('local_emissao_uf', value)}><SelectTrigger id="cnh_local_emissao_uf"><SelectValue placeholder="Selecione UF" /></SelectTrigger><SelectContent>{brazilianStates.map(state => (<SelectItem key={state.value} value={state.value}>{state.label}</SelectItem>))}</SelectContent></Select>
+              <div><Label htmlFor="cnh_local_emissao_cidade_modal">Cidade Emissão</Label><Input id="cnh_local_emissao_cidade_modal" name="local_emissao_cidade" value={cnhFormData.local_emissao_cidade || ''} onChange={handleCnhFormChange} /></div>
+              <div><Label htmlFor="cnh_local_emissao_uf_modal">UF Emissão</Label>
+                <Select name="local_emissao_uf" value={cnhFormData.local_emissao_uf || ''} onValueChange={(value) => handleCnhSelectChange('local_emissao_uf', value)}><SelectTrigger id="cnh_local_emissao_uf_modal"><SelectValue placeholder="Selecione UF" /></SelectTrigger><SelectContent>{brazilianStates.map(state => (<SelectItem key={state.value} value={state.value}>{state.label}</SelectItem>))}</SelectContent></Select>
               </div>
             </div>
-            <div><Label htmlFor="cnh_observacoes_cnh">Observações da CNH</Label><Textarea id="cnh_observacoes_cnh" name="observacoes_cnh" value={cnhFormData.observacoes_cnh || ''} onChange={handleCnhFormChange} rows={3} /></div>
+            <div><Label htmlFor="cnh_observacoes_cnh_modal">Observações CNH</Label><Textarea id="cnh_observacoes_cnh_modal" name="observacoes_cnh" value={cnhFormData.observacoes_cnh || ''} onChange={handleCnhFormChange} rows={3} /></div>
             <DialogFooter>
               <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
               <Button type="submit">{cnhModalMode === 'create' ? 'Salvar CNH' : 'Salvar Alterações'}</Button>
@@ -450,15 +457,16 @@ export default function PessoaFisicaDetailsPage() {
           </form>
         </DialogContent>
       </Dialog>
-      {/* 
-        Supabase Integration Notes:
-        - Fetch PessoaFisica details by ID.
-        - JOINs: TiposEntidade, Entidades (via MembrosEntidade or direct FK), Enderecos, Municipios, Estados.
-        - Separate fetches or subqueries for Documentos (Arquivos) and Veiculos.
-        - Fetch CNH from public.CNHs where id_pessoa_fisica = current_pf_id.
-        - CNH Modal: POST/PUT to public.CNHs.
-      */}
     </div>
   );
 }
+
+/* Supabase Integration Notes (Refactored Address):
+- Fetch PessoaFisica details by ID from public.PessoasFisicas. Address fields are now direct.
+- JOINs: TiposEntidade (for organizacaoVinculada.tipoOrganizacao), Entidades (via MembrosEntidade or direct FK for organizacaoVinculada.nome, etc).
+- Separate fetches or subqueries for Documentos (Arquivos) and Veiculos associated with this PessoaFisica.
+- CNH: Fetch from public.CNHs where id_pessoa_fisica = current_pf_id.
+- CNH Modal: POST/PUT to public.CNHs.
+- Delete: Ensure ON DELETE CASCADE is set for CNHs and other related records, or handle deletions in a transaction/Edge Function.
+*/
 

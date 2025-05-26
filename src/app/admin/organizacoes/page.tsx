@@ -18,20 +18,22 @@ interface OrganizacaoSupabase {
   cnpj: string;
   telefone: string | null;
   TiposEntidade: { nome_tipo: string } | null;
+  // Direct address fields if included in list view query
+  cidade?: string | null;
+  estado_uf?: string | null;
 }
 
 interface OrganizacaoRow {
-  id: number; // Corresponds to id_entidade
+  id: number;
   nome: string;
   tipoOrganizacao: string | null;
   cnpj: string;
   telefone: string | null;
+  localidade?: string | null; // Ex: "Cidade - UF"
 }
 
-const initialOrganizacoes: OrganizacaoRow[] = []; // Start with empty, will be fetched
-
 export default function GerenciamentoOrganizacoesPage() {
-  const [organizacoes, setOrganizacoes] = useState<OrganizacaoRow[]>(initialOrganizacoes);
+  const [organizacoes, setOrganizacoes] = useState<OrganizacaoRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -40,13 +42,13 @@ export default function GerenciamentoOrganizacoesPage() {
 
   const fetchOrganizacoes = async () => {
     if (!supabase) {
-      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
-      setIsLoading(false);
-      setOrganizacoes([]);
-      return;
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setIsLoading(false); setOrganizacoes([]); return;
     }
     setIsLoading(true);
     
+    // Supabase: Fetch from public.Entidades JOIN public.TiposEntidade
+    // Include direct address fields 'cidade' and 'estado_uf' if they are on Entidades table
     let query = supabase
       .from('Entidades')
       .select(`
@@ -54,7 +56,9 @@ export default function GerenciamentoOrganizacoesPage() {
         nome,
         cnpj,
         telefone,
-        TiposEntidade ( nome_tipo )
+        TiposEntidade ( nome_tipo ),
+        cidade, 
+        estado_uf 
       `)
       .order('nome', { ascending: true });
 
@@ -69,12 +73,13 @@ export default function GerenciamentoOrganizacoesPage() {
       toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
       setOrganizacoes([]);
     } else {
-      const formattedData: OrganizacaoRow[] = data.map((org: OrganizacaoSupabase) => ({
+      const formattedData: OrganizacaoRow[] = (data || []).map((org: OrganizacaoSupabase) => ({
         id: org.id_entidade,
         nome: org.nome,
         tipoOrganizacao: org.TiposEntidade?.nome_tipo || 'N/A',
         cnpj: org.cnpj,
         telefone: org.telefone,
+        localidade: (org.cidade && org.estado_uf) ? `${org.cidade} - ${org.estado_uf}` : (org.cidade || org.estado_uf || 'N/A'),
       }));
       setOrganizacoes(formattedData);
     }
@@ -83,11 +88,12 @@ export default function GerenciamentoOrganizacoesPage() {
   
   useEffect(() => {
     fetchOrganizacoes();
-  }, []); // Fetch on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    fetchOrganizacoes(); // Re-fetch with current searchTerm
+    fetchOrganizacoes();
   };
 
   const handleDeleteClick = (organizacao: OrganizacaoRow) => {
@@ -98,6 +104,8 @@ export default function GerenciamentoOrganizacoesPage() {
   const confirmDeleteOrganizacao = async () => {
     if (!organizacaoToDelete || !supabase) return;
     
+    // Supabase: DELETE FROM public.Entidades WHERE id_entidade = organizacaoToDelete.id
+    // Consider ON DELETE CASCADE for related records (MembrosEntidade, Veiculos where it's owner, Seguros where it's titular)
     const { error } = await supabase
       .from('Entidades')
       .delete()
@@ -105,10 +113,10 @@ export default function GerenciamentoOrganizacoesPage() {
 
     if (error) {
       console.error('Falha ao excluir organização:', error.message);
-      toast({ title: "Erro ao Excluir", description: `Falha ao excluir organização: ${error.message}`, variant: "destructive" });
+      toast({ title: "Erro ao Excluir", description: `Falha: ${error.message}`, variant: "destructive" });
     } else {
-      toast({ title: "Organização Excluída!", description: `A organização ${organizacaoToDelete.nome} foi excluída.` });
-      fetchOrganizacoes(); // Refresh the list
+      toast({ title: "Organização Excluída!", description: `${organizacaoToDelete.nome} foi excluída.` });
+      fetchOrganizacoes(); 
     }
     setIsAlertOpen(false);
     setOrganizacaoToDelete(null);
@@ -122,9 +130,7 @@ export default function GerenciamentoOrganizacoesPage() {
             <h1 className="text-3xl md:text-4xl font-bold text-primary flex items-center">
               <Building className="mr-3 h-8 w-8" /> Listagem de Organizações
             </h1>
-            <p className="text-muted-foreground mt-1">
-              Visualize, cadastre, edite e remova organizações do sistema.
-            </p>
+            <p className="text-muted-foreground mt-1">Visualize, cadastre, edite e remova.</p>
           </div>
           <Button asChild className="mt-4 sm:mt-0">
             <Link href="/admin/organizacoes/novo"> 
@@ -135,51 +141,37 @@ export default function GerenciamentoOrganizacoesPage() {
       </header>
 
       <Card className="shadow-lg mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Organizações</CardTitle>
-          <CardDescription>Filtre organizações por nome ou CNPJ.</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar</CardTitle><CardDescription>Filtre por nome ou CNPJ.</CardDescription></CardHeader>
         <CardContent>
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
-            <Input
-              type="text"
-              placeholder="Pesquisar por nome ou CNPJ..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-grow"
-              disabled={isLoading}
-            />
-            <Button type="submit" disabled={isLoading}>
-              <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
-            </Button>
+            <Input type="text" placeholder="Nome ou CNPJ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-grow" disabled={isLoading} />
+            <Button type="submit" disabled={isLoading}><Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}</Button>
           </form>
         </CardContent>
       </Card>
 
       <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Organizações Cadastradas</CardTitle>
-          <CardDescription>
-            Total de {organizacoes.length} organizações no sistema.
-          </CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle>Organizações Cadastradas</CardTitle><CardDescription>Total de {organizacoes.length}.</CardDescription></CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
-                  <TableHead>Nome da Organização</TableHead>
+                  <TableHead>Nome</TableHead>
                   <TableHead className="hidden md:table-cell">Tipo</TableHead>
                   <TableHead className="hidden lg:table-cell">CNPJ</TableHead>
                   <TableHead className="hidden lg:table-cell">Telefone</TableHead>
+                  <TableHead className="hidden md:table-cell">Localidade</TableHead> {/* Added Localidade */}
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center h-24">Carregando...</TableCell></TableRow>
-                ) : organizacoes.length > 0 ? (
+                {isLoading && organizacoes.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center h-24">Carregando...</TableCell></TableRow>
+                ) : !isLoading && organizacoes.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">{searchTerm ? `Nenhuma organização para "${searchTerm}".` : "Nenhuma organização."}</TableCell></TableRow>
+                ) : (
                   organizacoes.map((org) => (
                     <TableRow key={org.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{org.id}</TableCell>
@@ -187,34 +179,14 @@ export default function GerenciamentoOrganizacoesPage() {
                       <TableCell className="hidden md:table-cell">{org.tipoOrganizacao}</TableCell>
                       <TableCell className="hidden lg:table-cell">{org.cnpj}</TableCell>
                       <TableCell className="hidden lg:table-cell">{org.telefone || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{org.localidade || "N/A"}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
-                        <Button variant="ghost" size="sm" asChild aria-label={`Detalhes da organização ${org.nome}`}>
-                           <Link href={`/admin/organizacoes/${org.id}`}>
-                            <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild aria-label={`Editar organização ${org.nome}`}>
-                          <Link href={`/admin/organizacoes/${org.id}/editar`}>
-                            <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteClick(org)}
-                          aria-label={`Excluir organização ${org.nome}`}
-                        >
-                          <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
-                        </Button>
+                        <Button variant="ghost" size="sm" asChild><Link href={`/admin/organizacoes/${org.id}`}><Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span></Link></Button>
+                        <Button variant="outline" size="sm" asChild><Link href={`/admin/organizacoes/${org.id}/editar`}><Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span></Link></Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(org)}><Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span></Button>
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
-                      Nenhuma organização cadastrada no momento.
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -225,21 +197,8 @@ export default function GerenciamentoOrganizacoesPage() {
       {organizacaoToDelete && (
         <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <div className="flex items-center">
-                <AlertTriangle className="h-6 w-6 text-destructive mr-2" />
-                <AlertDialogTitle>Confirmar Exclusão de Organização</AlertDialogTitle>
-              </div>
-              <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir a organização <strong>{organizacaoToDelete.nome}</strong> (ID: {organizacaoToDelete.id})? Esta ação é irreversível.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setOrganizacaoToDelete(null); }}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteOrganizacao} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                Confirmar Exclusão
-              </AlertDialogAction>
-            </AlertDialogFooter>
+            <AlertDialogHeader><div className="flex items-center"><AlertTriangle className="h-6 w-6 text-destructive mr-2" /><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle></div><AlertDialogDescription className="pt-2">Deseja excluir <strong>{organizacaoToDelete.nome}</strong> (ID: {organizacaoToDelete.id})? Esta ação é irreversível.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel onClick={() => { setIsAlertOpen(false); setOrganizacaoToDelete(null); }}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrganizacao} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
@@ -247,3 +206,9 @@ export default function GerenciamentoOrganizacoesPage() {
   );
 }
     
+/* Supabase Integration Notes (Refactored Address):
+- Fetch from public.Entidades. Address fields (cidade, estado_uf) are now direct.
+- JOIN public.TiposEntidade for nome_tipo.
+- Search should filter on nome or cnpj from Entidades.
+- Delete: Consider ON DELETE CASCADE for related records or handle deletions in a transaction.
+*/
