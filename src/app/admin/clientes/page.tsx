@@ -14,19 +14,21 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, isValid } from 'date-fns';
 
+// Interface for data fetched from Supabase
 interface PessoaFisicaSupabase {
   id_pessoa_fisica: number;
   nome_completo: string;
   cpf: string;
   email: string | null;
   telefone: string | null;
-  tipo_relacao: string | null; // Assuming this column exists in PessoasFisicas
-  MembrosEntidade?: { Entidades: { nome_fantasia: string } | null }[] | null;
+  tipo_relacao: string | null; 
   data_cadastro: string;
+  MembrosEntidade?: { Entidades: { nome_fantasia: string } | null }[] | null; // Array for one-to-many through MembrosEntidade
 }
 
+// Interface for data displayed in the table row
 interface PessoaFisicaRow {
-  id: number; // Corresponds to id_pessoa_fisica
+  id: number; 
   nomeCompleto: string;
   cpf: string;
   email: string | null;
@@ -36,9 +38,8 @@ interface PessoaFisicaRow {
   dataCadastro: string;
 }
 
-const initialPessoasFisicasData: PessoaFisicaRow[] = [
-  { id: 1, nomeCompleto: "Carregando...", cpf: "...", email: "...", telefone: "...", tipoRelacao: "...", organizacaoVinculada: "...", dataCadastro: new Date().toISOString() },
-];
+// Initial placeholder data, will be replaced by Supabase data
+const initialPessoasFisicasData: PessoaFisicaRow[] = [];
 
 
 export default function GerenciamentoPessoasFisicasPage() {
@@ -57,6 +58,7 @@ export default function GerenciamentoPessoasFisicasPage() {
       return;
     }
     setIsLoading(true);
+    console.log("GerenciamentoPessoasFisicasPage: Fetching PessoasFisicas, search:", searchTerm);
     
     let query = supabase
       .from('PessoasFisicas')
@@ -78,24 +80,29 @@ export default function GerenciamentoPessoasFisicasPage() {
 
     if (searchTerm) {
       query = query.or(`nome_completo.ilike.%${searchTerm}%,cpf.ilike.%${searchTerm}%`);
-      // Add organization search if needed, might require a more complex query or view
-      // Example: .ilike('MembrosEntidade.Entidades.nome_fantasia', `%${searchTerm}%`) - this is tricky with array results from join
     }
 
     const { data, error } = await query;
 
     if (error) {
-      console.error("Erro ao buscar pessoas físicas:", error);
-      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      console.error("Erro ao buscar pessoas físicas:", JSON.stringify(error, null, 2), error); // Enhanced logging
+      toast({ 
+        title: "Erro ao Buscar Dados", 
+        description: error.message || "Falha ao carregar dados. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.", 
+        variant: "destructive",
+        duration: 7000 
+      });
       setPessoasFisicas([]);
     } else {
-      const formattedData: PessoaFisicaRow[] = data.map((pf: PessoaFisicaSupabase) => ({
+      const formattedData: PessoaFisicaRow[] = (data || []).map((pf: PessoaFisicaSupabase) => ({
         id: pf.id_pessoa_fisica,
         nomeCompleto: pf.nome_completo,
         cpf: pf.cpf,
         email: pf.email,
         telefone: pf.telefone,
         tipoRelacao: pf.tipo_relacao,
+        // Assuming one PessoaFisica is linked to at most one 'Entidade Pai' via MembrosEntidade for display here.
+        // If multiple links are possible and relevant, this mapping might need adjustment.
         organizacaoVinculada: pf.MembrosEntidade && pf.MembrosEntidade.length > 0 && pf.MembrosEntidade[0].Entidades ? pf.MembrosEntidade[0].Entidades.nome_fantasia : null,
         dataCadastro: pf.data_cadastro,
       }));
@@ -106,9 +113,10 @@ export default function GerenciamentoPessoasFisicasPage() {
   
   useEffect(() => {
     fetchPessoasFisicas();
-  }, []); // Initial fetch
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Initial fetch. Search re-triggers via handleSearchSubmit -> fetchPessoasFisicas
 
-  const handleSearch = (event: FormEvent) => {
+  const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
     fetchPessoasFisicas(); // Re-fetch with current searchTerm
   };
@@ -121,6 +129,7 @@ export default function GerenciamentoPessoasFisicasPage() {
   const confirmDeletePessoa = async () => {
     if (!pessoaToDelete || !supabase) return;
     
+    setIsLoading(true);
     console.log(`Attempting to delete Pessoa Física ID: ${pessoaToDelete.id}, Name: ${pessoaToDelete.nome}`);
     const { error } = await supabase
       .from('PessoasFisicas')
@@ -128,12 +137,13 @@ export default function GerenciamentoPessoasFisicasPage() {
       .eq('id_pessoa_fisica', pessoaToDelete.id);
 
     if (error) {
-      console.error('Failed to delete pessoa física:', error.message);
-      toast({ title: "Erro ao Excluir", description: `Falha ao excluir pessoa: ${error.message}`, variant: "destructive" });
+      console.error('Failed to delete pessoa física:', JSON.stringify(error, null, 2), error);
+      toast({ title: "Erro ao Excluir", description: error.message || "Falha ao excluir pessoa. Verifique as permissões (RLS).", variant: "destructive" });
     } else {
       toast({ title: "Pessoa Física Excluída!", description: `A pessoa ${pessoaToDelete.nome} foi excluída com sucesso.` });
       fetchPessoasFisicas(); // Refresh the list
     }
+    setIsLoading(false);
     setIsAlertOpen(false);
     setPessoaToDelete(null);
   };
@@ -188,16 +198,17 @@ export default function GerenciamentoPessoasFisicasPage() {
       <Card className="shadow-lg mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Pessoas Físicas</CardTitle>
-          <CardDescription>Filtre por Nome, CPF ou Organização Vinculada.</CardDescription>
+          <CardDescription>Filtre por Nome Completo ou CPF.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
               placeholder="Pesquisar por Nome Completo ou CPF..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
+              disabled={isLoading}
             />
             <Button type="submit" disabled={isLoading}>
               <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
@@ -230,9 +241,15 @@ export default function GerenciamentoPessoasFisicasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
+                {isLoading && pessoasFisicas.length === 0 ? (
                   <TableRow><TableCell colSpan={9} className="text-center h-24">Carregando...</TableCell></TableRow>
-                ) : pessoasFisicas.length > 0 ? (
+                ) : !isLoading && pessoasFisicas.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
+                      {searchTerm ? `Nenhuma pessoa física encontrada para "${searchTerm}".` : "Nenhuma pessoa física cadastrada."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
                   pessoasFisicas.map((pessoa) => (
                     <TableRow key={pessoa.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{pessoa.id}</TableCell>
@@ -259,18 +276,13 @@ export default function GerenciamentoPessoasFisicasPage() {
                           size="sm"
                           onClick={() => handleDeleteClick(pessoa)}
                           aria-label={`Excluir ${pessoa.nomeCompleto}`}
+                          disabled={isLoading}
                         >
                           <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
-                      Nenhuma pessoa física cadastrada no momento.
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -292,8 +304,8 @@ export default function GerenciamentoPessoasFisicasPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setPessoaToDelete(null); }}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeletePessoa} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                Confirmar Exclusão
+              <AlertDialogAction onClick={confirmDeletePessoa} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
+                {isLoading ? "Excluindo..." : "Confirmar Exclusão"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -302,18 +314,13 @@ export default function GerenciamentoPessoasFisicasPage() {
 
       {/*
         Supabase Integration Notes:
-        - Pessoa Física list will be fetched from public."PessoasFisicas".
+        - Query PessoasFisicas table.
         - To display 'Organização Vinculada':
-          - The query will need to join with 'public.MembrosEntidade' on 'PessoasFisicas.id_pessoa_fisica' = 'MembrosEntidade.id_membro_pessoa_fisica'
-            and then join 'public.MembrosEntidade' with 'public.Entidades' on 'MembrosEntidade.id_entidade_pai' = 'Entidades.id_entidade'
-            to get 'Entidades.nome_fantasia'. This assumes the link is from PessoaFisica as a member TO an EntidadePai.
-          - If a 'tipo_relacao' implies an organization but isn't 'Cliente Geral', and no link exists in MembrosEntidade, special handling might be needed.
-          - A 'tipo_relacao' column is assumed to exist on PessoasFisicas table.
-        - Search functionality will query the PessoasFisicas table and potentially related tables for organization name.
-        - "Cadastrar Nova Pessoa Física" button links to '/admin/clientes/novo'.
-        - "Detalhes" button links to `/cliente/[id]` (public-facing detail page).
-        - "Editar" button links to '/admin/clientes/[id_pessoa_fisica]/editar'.
-        - "Excluir" button will trigger a Supabase API call (DELETE request to 'PessoasFisicas' table).
+          - Perform a LEFT JOIN with 'MembrosEntidade' on 'PessoasFisicas.id_pessoa_fisica' = 'MembrosEntidade.id_membro_pessoa_fisica'.
+          - Then, perform an INNER JOIN from 'MembrosEntidade' to 'Entidades' on 'MembrosEntidade.id_entidade_pai' = 'Entidades.id_entidade' to get 'Entidades.nome_fantasia'.
+          - Supabase select syntax: .select('*, MembrosEntidade!left(Entidades!inner(nome_fantasia))')
+        - Search: Filter on 'nome_completo' or 'cpf' in PessoasFisicas.
+        - RLS: Ensure policies on PessoasFisicas, MembrosEntidade, and Entidades allow the logged-in user (admin/supervisor/operator) to perform SELECT operations.
       */}
     </div>
   );
