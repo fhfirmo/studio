@@ -100,7 +100,7 @@ export default function GerenciamentoPessoasFisicasPage() {
     const { data, error } = await query;
 
     if (error) {
-      const errorMessage = (error && error.message) ? error.message : "Falha ao carregar dados. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.";
+      const errorMessage = error.message || "Falha ao carregar dados. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.";
       console.error("Erro ao buscar pessoas físicas:", JSON.stringify(error, null, 2), error); 
       toast({ 
         title: "Erro ao Buscar Dados", 
@@ -168,10 +168,10 @@ export default function GerenciamentoPessoasFisicasPage() {
     try {
         const date = parseISO(dateString);
         if (isValid(date)) {
-            if (dateString.length === 10) { // YYYY-MM-DD
-                 return format(date, "dd/MM/yyyy");
+            if (dateString.includes('T')) { // Full timestamp
+                 return format(date, "dd/MM/yyyy HH:mm");
             }
-            return format(date, "dd/MM/yyyy HH:mm"); // Full timestamp
+            return format(date, "dd/MM/yyyy"); // Date only
         }
         return "Data inválida";
     } catch (e) {
@@ -334,7 +334,6 @@ export default function GerenciamentoPessoasFisicasPage() {
   );
 }
     
-  
 // Supabase Integration RLS Notes:
 // - SELECT on public."PessoasFisicas":
 //   - Admins/Supervisors/Operators should be able to read all (or based on their scope if applicable).
@@ -348,4 +347,4 @@ export default function GerenciamentoPessoasFisicasPage() {
 //     or handle these deletions explicitly if cascade is not set.
 // - Ensure `public.get_user_role()` function correctly returns the role of the currently authenticated user.
 // - If any of these RLS are not met, the query may return empty data or an error (sometimes an empty error object {} if permissions are restrictive).
-```
+    
