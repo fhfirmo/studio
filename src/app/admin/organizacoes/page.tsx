@@ -77,10 +77,8 @@ export default function GerenciamentoOrganizacoesPage() {
       query = query.ilike('porte_empresa', `%${filterPorte}%`);
     }
     if (filterCnae) {
-      // Assuming cnae_principal is a string. If it's a code, adjust filter logic.
       query = query.ilike('cnae_principal', `%${filterCnae}%`); 
     }
-
 
     const { data, error } = await query;
 
@@ -123,6 +121,21 @@ export default function GerenciamentoOrganizacoesPage() {
   const confirmDeleteOrganizacao = async () => {
     if (!organizacaoToDelete || !supabase) return;
     setIsLoading(true);
+    
+    // First, delete related QSA entries (if ON DELETE CASCADE is not set on FK)
+    // This step might be skippable if your DB handles cascade deletes for QSA.
+    const { error: qsaError } = await supabase
+        .from('QSA')
+        .delete()
+        .eq('id_entidade', organizacaoToDelete.id);
+
+    if (qsaError) {
+        console.error('Falha ao excluir QSA da organização:', JSON.stringify(qsaError, null, 2));
+        toast({ title: "Erro ao Excluir QSA", description: `Falha: ${qsaError.message || 'Erro desconhecido'}.`, variant: "destructive" });
+        // Decide if you want to proceed with Entidade deletion or stop
+    }
+
+    // Then delete the Entidade itself
     const { error } = await supabase
       .from('Entidades')
       .delete()
@@ -130,7 +143,7 @@ export default function GerenciamentoOrganizacoesPage() {
 
     if (error) {
       console.error('Falha ao excluir organização:', JSON.stringify(error, null, 2));
-      toast({ title: "Erro ao Excluir", description: `Falha: ${error.message || 'Erro desconhecido'}. Verifique RLS e dependências.`, variant: "destructive" });
+      toast({ title: "Erro ao Excluir Organização", description: `Falha: ${error.message || 'Erro desconhecido'}. Verifique RLS e dependências.`, variant: "destructive" });
     } else {
       toast({ title: "Organização Excluída!", description: `${organizacaoToDelete.nome} foi excluída.` });
       fetchOrganizacoes(); 
@@ -225,7 +238,7 @@ export default function GerenciamentoOrganizacoesPage() {
       {organizacaoToDelete && (
         <AlertDialog open={isAlertOpen} onOpenChange={(open) => { if (!isLoading) setIsAlertOpen(open); }}>
           <AlertDialogContent>
-            <AlertDialogHeader><div className="flex items-center"><AlertTriangle className="h-6 w-6 text-destructive mr-2" /><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle></div><AlertDialogDescription className="pt-2">Deseja excluir <strong>{organizacaoToDelete.nome}</strong> (ID: {organizacaoToDelete.id})? Esta ação é irreversível.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogHeader><div className="flex items-center"><AlertTriangle className="h-6 w-6 text-destructive mr-2" /><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle></div><AlertDialogDescription className="pt-2">Deseja excluir <strong>{organizacaoToDelete.nome}</strong> (ID: {organizacaoToDelete.id})? Esta ação é irreversível e também removerá os QSA associados.</AlertDialogDescription></AlertDialogHeader>
             <AlertDialogFooter><AlertDialogCancel onClick={() => { setIsAlertOpen(false); setOrganizacaoToDelete(null); }} disabled={isLoading}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrganizacao} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>Confirmar</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -240,6 +253,7 @@ export default function GerenciamentoOrganizacoesPage() {
 - QSA data is related via public."QSA" table.
 - CNPJ API integration is for auto-filling on create/edit.
 - Ensure RLS allows reads from Entidades, TiposEntidade, and QSA as needed by the user's role.
+- When deleting an Entidade, ensure related QSA records are also deleted (either by DB cascade or explicitly in the delete function).
 */
-      
+
     

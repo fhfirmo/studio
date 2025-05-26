@@ -66,20 +66,20 @@ interface OrganizacaoDetailed {
   porte_empresa?: string | null;
   natureza_juridica?: string | null;
   cnae_principal?: string | null;
-  cnae_secundarios?: { codigo: string, descricao: string }[] | null;
+  cnae_secundarios?: { codigo: number, descricao: string }[] | null;
   descricao_situacao_cadastral?: string | null;
   
   observacoes: string | null;
   membros: Membro[];
   veiculos: VeiculoAssociado[];
-  qsa: QSAItemFromDB[];
+  qsa: QSAItemFromDB[]; // Changed from QSAItemFromAPI
 }
 
 interface Membro {
   id_membro_entidade: string;
   id_membro_original: string; 
   nome: string;
-  tipo: 'Pessoa Física' | 'Pessoa Jurídica';
+  tipo: 'Pessoa Fisica' | 'Pessoa Juridica'; // Matches DB ENUM
   funcao: string;
   dataAssociacao: string | null;
 }
@@ -92,14 +92,9 @@ interface VeiculoAssociado {
   ano_fabricacao: number | null;
 }
 
-const placeholderPessoasFisicas = [ // For "Add Member" modal
-    { value: "pf_1", label: "João da Silva (123.456.789-00)" },
-    { value: "pf_2", label: "Maria Oliveira (987.654.321-99)" },
-];
-const placeholderOutrasEntidades = [ // For "Add Member" modal
-    { value: "org_101", label: "Filial ABC (11.111.111/0001-11)" },
-    { value: "org_102", label: "Parceiro XYZ (22.222.222/0001-22)" },
-];
+// Placeholder for select options in Add Member modal
+const initialPessoasFisicasOptions: {value: string, label: string}[] = [];
+const initialOutrasEntidadesOptions: {value: string, label: string}[] = [];
 
 
 async function getOrganizacaoDetails(organizacaoId: string): Promise<OrganizacaoDetailed | null> {
@@ -117,7 +112,39 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
   const { data: orgData, error: orgError } = await supabase
     .from('Entidades')
     .select(`
-      *, 
+      id_entidade, 
+      nome,
+      codigo_entidade,
+      cnpj,
+      telefone,
+      email,
+      data_cadastro,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      estado_uf,
+      cep,
+      endereco2_logradouro,
+      endereco2_numero,
+      endereco2_complemento,
+      endereco2_bairro,
+      endereco2_cidade,
+      endereco2_estado_uf,
+      endereco2_cep,
+      nome_contato_responsavel,
+      cargo_contato_responsavel,
+      email_contato,
+      telefone_contato,
+      observacoes_contato,
+      data_inicio_atividade,
+      porte_empresa,
+      natureza_juridica,
+      cnae_principal,
+      cnae_secundarios,
+      descricao_situacao_cadastral,
+      observacoes,
       TiposEntidade ( nome_tipo ),
       QSA ( * ),
       MembrosEntidade!MembrosEntidade_id_entidade_pai_fkey (
@@ -149,7 +176,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
     id_membro_entidade: m.id_membro_entidade.toString(),
     id_membro_original: (m.PessoasFisicas?.id_pessoa_fisica || m.Entidades?.id_entidade)?.toString() || 'N/A_MEMBER_ID',
     nome: m.PessoasFisicas?.nome_completo || m.Entidades?.nome || 'Membro Desconhecido',
-    tipo: m.tipo_membro === 'Pessoa Fisica' ? 'Pessoa Física' : 'Pessoa Jurídica',
+    tipo: m.tipo_membro, // Direct from DB
     funcao: m.funcao_no_membro || 'N/A',
     dataAssociacao: m.data_associacao,
   }));
@@ -164,6 +191,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
   
   const qsaFormatado: QSAItemFromDB[] = (orgData.QSA || []).map((q: any) => ({
       id_qsa: q.id_qsa,
+      id_entidade: q.id_entidade,
       nome_socio: q.nome_socio,
       qualificacao_socio: q.qualificacao_socio,
       data_entrada_sociedade: q.data_entrada_sociedade,
@@ -202,7 +230,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
     porte_empresa: orgData.porte_empresa,
     natureza_juridica: orgData.natureza_juridica,
     cnae_principal: orgData.cnae_principal,
-    cnae_secundarios: orgData.cnae_secundarios as any [] || null, 
+    cnae_secundarios: orgData.cnae_secundarios as {codigo: number, descricao: string}[] || null, 
     descricao_situacao_cadastral: orgData.descricao_situacao_cadastral,
     observacoes: orgData.observacoes,
     membros: membrosFormatados,
@@ -222,7 +250,7 @@ export default function OrganizacaoDetailsPage() {
   
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [addMemberFormData, setAddMemberFormData] = useState({
-    tipoMembro: 'pessoa_fisica' as 'pessoa_fisica' | 'pessoa_juridica',
+    tipoMembro: 'Pessoa Fisica' as 'Pessoa Fisica' | 'Pessoa Juridica',
     membroId: '', 
     funcao: '',
     dataAssociacao: new Date() as Date | undefined,
@@ -235,8 +263,8 @@ export default function OrganizacaoDetailsPage() {
   
   const [memberToRemove, setMemberToRemove] = useState<Membro | null>(null);
   const [isRemoveMemberModalOpen, setIsRemoveMemberModalOpen] = useState(false);
-  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<{value: string, label: string}[]>(placeholderPessoasFisicas);
-  const [availableOutrasEntidades, setAvailableOutrasEntidades] = useState<{value: string, label: string}[]>(placeholderOutrasEntidades);
+  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<{value: string, label: string}[]>(initialPessoasFisicasOptions);
+  const [availableOutrasEntidades, setAvailableOutrasEntidades] = useState<{value: string, label: string}[]>(initialOutrasEntidadesOptions);
 
   const fetchSelectOptions = async () => {
     if (!supabase) return;
@@ -288,7 +316,7 @@ export default function OrganizacaoDetailsPage() {
   };
 
   const handleAddMemberSelectChange = (name: string, value: string) => {
-    setAddMemberFormData(prev => ({ ...prev, [name]: value }));
+    setAddMemberFormData(prev => ({ ...prev, [name]: value as 'Pessoa Fisica' | 'Pessoa Juridica' }));
     if (name === "tipoMembro") setAddMemberFormData(prev => ({ ...prev, membroId: '' }));
   };
   
@@ -305,9 +333,9 @@ export default function OrganizacaoDetailsPage() {
     
     const payload = {
       id_entidade_pai: parseInt(organizacao.id),
-      id_membro_pessoa_fisica: addMemberFormData.tipoMembro === 'pessoa_fisica' ? parseInt(addMemberFormData.membroId) : null,
-      id_membro_entidade_juridica: addMemberFormData.tipoMembro === 'pessoa_juridica' ? parseInt(addMemberFormData.membroId) : null,
-      tipo_membro: addMemberFormData.tipoMembro === 'pessoa_fisica' ? 'Pessoa Fisica' : 'Pessoa Juridica',
+      id_membro_pessoa_fisica: addMemberFormData.tipoMembro === 'Pessoa Fisica' ? parseInt(addMemberFormData.membroId) : null,
+      id_membro_entidade_juridica: addMemberFormData.tipoMembro === 'Pessoa Juridica' ? parseInt(addMemberFormData.membroId) : null,
+      tipo_membro: addMemberFormData.tipoMembro,
       funcao_no_membro: addMemberFormData.funcao || null,
       data_associacao: addMemberFormData.dataAssociacao ? format(addMemberFormData.dataAssociacao, "yyyy-MM-dd") : null,
     };
@@ -320,7 +348,7 @@ export default function OrganizacaoDetailsPage() {
     } else {
       toast({ title: "Sucesso!", description: "Membro vinculado à organização."});
       setIsAddMemberModalOpen(false);
-      setAddMemberFormData({ tipoMembro: 'pessoa_fisica', membroId: '', funcao: '', dataAssociacao: new Date() });
+      setAddMemberFormData({ tipoMembro: 'Pessoa Fisica', membroId: '', funcao: '', dataAssociacao: new Date() });
       refreshOrganizacaoDetails();
     }
   };
@@ -345,13 +373,13 @@ export default function OrganizacaoDetailsPage() {
   
   const handleEditVinculoSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!supabase) return;
+    if (!supabase || !editVinculoFormData.id_membro_entidade) return;
     const payload = {
       funcao_no_membro: editVinculoFormData.funcao || null,
       data_associacao: editVinculoFormData.dataAssociacao ? format(editVinculoFormData.dataAssociacao, "yyyy-MM-dd") : null,
     };
     console.log("Atualizando Vínculo ID:", editVinculoFormData.id_membro_entidade, "com:", payload);
-    const { error } = await supabase.from('MembrosEntidade').update(payload).eq('id_membro_entidade', editVinculoFormData.id_membro_entidade);
+    const { error } = await supabase.from('MembrosEntidade').update(payload).eq('id_membro_entidade', parseInt(editVinculoFormData.id_membro_entidade));
     if (error) {
       toast({ title: "Erro ao Atualizar", description: error.message, variant: "destructive" });
     } else {
@@ -369,7 +397,7 @@ export default function OrganizacaoDetailsPage() {
   const handleConfirmRemoveMember = async () => {
     if (!memberToRemove || !supabase) return;
     console.log("Removendo vínculo ID:", memberToRemove.id_membro_entidade);
-    const { error } = await supabase.from('MembrosEntidade').delete().eq('id_membro_entidade', memberToRemove.id_membro_entidade);
+    const { error } = await supabase.from('MembrosEntidade').delete().eq('id_membro_entidade', parseInt(memberToRemove.id_membro_entidade));
     if (error) {
       toast({ title: "Erro ao Remover", description: error.message, variant: "destructive" });
     } else {
@@ -383,7 +411,7 @@ export default function OrganizacaoDetailsPage() {
   const handleDeleteOrganizacao = async () => {
       if (!organizacao || !supabase) return;
       console.log(`Excluindo Organização ID: ${organizacao.id}`);
-      const { error } = await supabase.from('Entidades').delete().eq('id_entidade', organizacao.id);
+      const { error } = await supabase.from('Entidades').delete().eq('id_entidade', parseInt(organizacao.id));
       if (error) {
         toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
       } else {
@@ -422,7 +450,7 @@ export default function OrganizacaoDetailsPage() {
           </Card>
           
           <Card className="shadow-lg">
-            <CardHeader><CardTitle className="flex items-center text-xl"><FileText className="mr-2 h-5 w-5 text-primary" /> Dados da Empresa (API)</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center text-xl"><FileText className="mr-2 h-5 w-5 text-primary" /> Dados da Empresa</CardTitle></CardHeader>
              <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
                 <InfoItem label="Data Início Atividade" value={formatDate(organizacao.data_inicio_atividade)} />
                 <InfoItem label="Porte" value={organizacao.porte_empresa || "N/A"} />
@@ -431,10 +459,12 @@ export default function OrganizacaoDetailsPage() {
                 <InfoItem label="CNAE Principal" value={organizacao.cnae_principal || "N/A"} className="sm:col-span-2 lg:col-span-3"/>
                 {organizacao.cnae_secundarios && organizacao.cnae_secundarios.length > 0 && (
                     <div className="sm:col-span-2 lg:col-span-3 space-y-1">
-                        <InfoItemLabel>CNAEs Secundários</InfoItemLabel>
-                        <ul className="list-disc list-inside pl-4 text-sm text-muted-foreground bg-muted/10 p-2 rounded-md max-h-32 overflow-y-auto">
-                            {organizacao.cnae_secundarios.map(cnae => <li key={cnae.codigo}>{cnae.codigo} - {cnae.descricao}</li>)}
-                        </ul>
+                        <InfoItemLabel className="text-sm font-medium text-muted-foreground">CNAEs Secundários</InfoItemLabel>
+                        <div className="border rounded-md p-3 bg-muted/30 max-h-32 overflow-y-auto">
+                          <ul className="list-disc list-inside pl-4 text-sm text-foreground">
+                              {organizacao.cnae_secundarios.map(cnae => <li key={cnae.codigo}>{cnae.codigo} - {cnae.descricao}</li>)}
+                          </ul>
+                        </div>
                     </div>
                 )}
             </CardContent>
@@ -467,9 +497,11 @@ export default function OrganizacaoDetailsPage() {
             <CardHeader><CardTitle className="flex items-center text-xl"><Users className="mr-2 h-5 w-5 text-primary" /> Quadro de Sócios e Administradores (QSA)</CardTitle></CardHeader>
             <CardContent>
               {organizacao.qsa && organizacao.qsa.length > 0 ? (
-                <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Qualificação</TableHead><TableHead className="hidden md:table-cell">Data Entrada</TableHead></TableRow></TableHeader>
-                  <TableBody>{organizacao.qsa.map(q => (<TableRow key={q.id_qsa || q.nome_socio}><TableCell className="font-medium">{q.nome_socio}</TableCell><TableCell>{q.qualificacao_socio}</TableCell><TableCell className="hidden md:table-cell">{formatDate(q.data_entrada_sociedade)}</TableCell></TableRow>))}</TableBody>
-                </Table>
+                <div className="overflow-x-auto max-h-80 border rounded-md">
+                    <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Qualificação</TableHead><TableHead className="hidden md:table-cell">Data Entrada</TableHead></TableRow></TableHeader>
+                    <TableBody>{organizacao.qsa.map(q => (<TableRow key={q.id_qsa || q.nome_socio} className="hover:bg-muted/20"><TableCell className="font-medium">{q.nome_socio}</TableCell><TableCell>{q.qualificacao_socio}</TableCell><TableCell className="hidden md:table-cell">{formatDate(q.data_entrada_sociedade)}</TableCell></TableRow>))}</TableBody>
+                    </Table>
+                </div>
               ) : (<p className="text-muted-foreground text-center py-4">Nenhum QSA informado.</p>)}
             </CardContent>
           </Card>
@@ -481,9 +513,11 @@ export default function OrganizacaoDetailsPage() {
             </CardHeader>
             <CardContent>
               {organizacao.membros && organizacao.membros.length > 0 ? (
-                <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead className="hidden sm:table-cell">Tipo</TableHead><TableHead>Função</TableHead><TableHead className="hidden md:table-cell">Data Associação</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                  <TableBody>{organizacao.membros.map(m => (<TableRow key={m.id_membro_entidade}><TableCell className="font-medium">{m.nome}</TableCell><TableCell className="hidden sm:table-cell">{m.tipo}</TableCell><TableCell>{m.funcao}</TableCell><TableCell className="hidden md:table-cell">{formatDate(m.dataAssociacao)}</TableCell><TableCell className="text-right space-x-1"><Button variant="ghost" size="icon" asChild><Link href={m.tipo === 'Pessoa Física' ? `/cliente/${m.id_membro_original}` : `/admin/organizacoes/${m.id_membro_original}`}><Info className="h-4 w-4" /></Link></Button><Button variant="ghost" size="icon" onClick={() => openEditVinculoModal(m)}><Edit3 className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => openRemoveMemberModal(m)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>))}</TableBody>
-                </Table>
+                <div className="overflow-x-auto max-h-80 border rounded-md">
+                    <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead className="hidden sm:table-cell">Tipo</TableHead><TableHead>Função</TableHead><TableHead className="hidden md:table-cell">Data Associação</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>{organizacao.membros.map(m => (<TableRow key={m.id_membro_entidade} className="hover:bg-muted/20"><TableCell className="font-medium">{m.nome}</TableCell><TableCell className="hidden sm:table-cell">{m.tipo}</TableCell><TableCell>{m.funcao}</TableCell><TableCell className="hidden md:table-cell">{formatDate(m.dataAssociacao)}</TableCell><TableCell className="text-right space-x-1"><Button variant="ghost" size="icon" asChild><Link href={m.tipo === 'Pessoa Fisica' ? `/cliente/${m.id_membro_original}` : `/admin/organizacoes/${m.id_membro_original}`}><Info className="h-4 w-4" /></Link></Button><Button variant="ghost" size="icon" onClick={() => openEditVinculoModal(m)}><Edit3 className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => openRemoveMemberModal(m)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>))}</TableBody>
+                    </Table>
+                </div>
               ) : (<p className="text-muted-foreground text-center py-4">Nenhum membro vinculado.</p>)}
             </CardContent>
           </Card>
@@ -492,9 +526,11 @@ export default function OrganizacaoDetailsPage() {
             <CardHeader><CardTitle className="flex items-center text-xl"><Car className="mr-2 h-5 w-5 text-primary" /> Veículos Associados</CardTitle></CardHeader>
             <CardContent>
               {organizacao.veiculos && organizacao.veiculos.length > 0 ? (
-                 <Table><TableHeader><TableRow><TableHead>Placa</TableHead><TableHead>Modelo</TableHead><TableHead className="hidden sm:table-cell">Marca</TableHead><TableHead className="hidden md:table-cell text-right">Ano</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                  <TableBody>{organizacao.veiculos.map(v => (<TableRow key={v.id_veiculo}><TableCell className="font-medium">{v.placa_atual}</TableCell><TableCell>{v.modelo_nome}</TableCell><TableCell className="hidden sm:table-cell">{v.marca}</TableCell><TableCell className="hidden md:table-cell text-right">{v.ano_fabricacao || 'N/A'}</TableCell><TableCell className="text-right"><Button variant="outline" size="sm" asChild><Link href={`/admin/veiculos/${v.id_veiculo}`}>Detalhes</Link></Button></TableCell></TableRow>))}</TableBody>
-                </Table>
+                <div className="overflow-x-auto max-h-80 border rounded-md">
+                    <Table><TableHeader><TableRow><TableHead>Placa</TableHead><TableHead>Modelo</TableHead><TableHead className="hidden sm:table-cell">Marca</TableHead><TableHead className="hidden md:table-cell text-right">Ano</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>{organizacao.veiculos.map(v => (<TableRow key={v.id_veiculo} className="hover:bg-muted/20"><TableCell className="font-medium">{v.placa_atual}</TableCell><TableCell>{v.modelo_nome}</TableCell><TableCell className="hidden sm:table-cell">{v.marca}</TableCell><TableCell className="hidden md:table-cell text-right">{v.ano_fabricacao || 'N/A'}</TableCell><TableCell className="text-right"><Button variant="outline" size="sm" asChild><Link href={`/admin/veiculos/${v.id_veiculo}`}>Detalhes</Link></Button></TableCell></TableRow>))}</TableBody>
+                    </Table>
+                </div>
               ) : (<p className="text-muted-foreground text-center py-4">Nenhum veículo associado.</p>)}
             </CardContent>
           </Card>
@@ -524,11 +560,11 @@ export default function OrganizacaoDetailsPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Adicionar Membro</DialogTitle><DialogDescription>Vincule uma Pessoa Física ou Jurídica.</DialogDescription></DialogHeader>
           <form onSubmit={handleAddMemberSubmit} className="space-y-4 py-2">
-            <div><InfoItemLabel htmlFor="tipoMembro">Tipo de Membro</InfoItemLabel><Select name="tipoMembro" value={addMemberFormData.tipoMembro} onValueChange={(v) => handleAddMemberSelectChange('tipoMembro', v as any)}><SelectTrigger id="tipoMembro"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pessoa_fisica">Pessoa Física</SelectItem><SelectItem value="pessoa_juridica">Pessoa Jurídica</SelectItem></SelectContent></Select></div>
-            <div><InfoItemLabel htmlFor="membroId">{addMemberFormData.tipoMembro === 'pessoa_fisica' ? 'Pessoa Física' : 'Organização'}</InfoItemLabel>
+            <div><InfoItemLabel htmlFor="tipoMembro">Tipo de Membro</InfoItemLabel><Select name="tipoMembro" value={addMemberFormData.tipoMembro} onValueChange={(v) => handleAddMemberSelectChange('tipoMembro', v as any)}><SelectTrigger id="tipoMembro"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Pessoa Fisica">Pessoa Física</SelectItem><SelectItem value="Pessoa Juridica">Pessoa Jurídica</SelectItem></SelectContent></Select></div>
+            <div><InfoItemLabel htmlFor="membroId">{addMemberFormData.tipoMembro === 'Pessoa Fisica' ? 'Pessoa Física' : 'Organização'}</InfoItemLabel>
               <Select name="membroId" value={addMemberFormData.membroId} onValueChange={(v) => handleAddMemberSelectChange('membroId', v)}><SelectTrigger id="membroId"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  {(addMemberFormData.tipoMembro === 'pessoa_fisica' ? availablePessoasFisicas : availableOutrasEntidades).map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                  {(addMemberFormData.tipoMembro === 'Pessoa Fisica' ? availablePessoasFisicas : availableOutrasEntidades).map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -569,10 +605,10 @@ const InfoItem = ({ label, value, icon: Icon, className }: { label: string, valu
 };
 
 /* Supabase Integration Notes:
-- `getOrganizacaoDetails`: Fetch Entidade by ID, including direct address fields, TipoEntidade.nome_tipo, QSA, MembrosEntidade (with PessoasFisicas/Entidades names), and Veiculos.
+- `getOrganizacaoDetails`: Fetch Entidade by ID, including direct address fields, TiposEntidade.nome_tipo, QSA, MembrosEntidade (with PessoasFisicas/Entidades names), and Veiculos.
 - `fetchSelectOptions`: Dynamically load PessoasFisicas and Entidades (excluding current) for "Add Member" modal.
 - Add/Edit/Remove Membro: Interact with public."MembrosEntidade".
 - Delete Organizacao: Consider ON DELETE CASCADE or handle related deletions.
 */
-      
+
     

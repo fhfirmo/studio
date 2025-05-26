@@ -20,35 +20,35 @@ interface TipoEntidadeOption {
   label: string;
 }
 
-interface QSAItem {
+interface QSAItemFromAPI {
   nome_socio: string;
   qualificacao_socio: string;
   data_entrada_sociedade?: string | null;
 }
 
-// Placeholder for data structure from CNPJ API
 interface CNPJApiResponse {
-  nome: string;
-  // email: string; // Typically not from CNPJ root, might be in QSA or specific contact
-  // telefone: string; // Same as email
-  cnpj: string;
-  data_inicio_atividade: string; // YYYY-MM-DD
-  porte_empresa: string;
-  natureza_juridica: string;
-  cnae_principal: string;
-  cnae_secundarios: { codigo: string, descricao: string }[];
-  descricao_situacao_cadastral: string;
-  logradouro: string;
-  numero: string;
-  complemento: string;
-  bairro: string;
-  cidade: string;
-  estado_uf: string;
-  cep: string;
-  qsa: QSAItem[];
+  razao_social?: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+  data_inicio_atividade?: string;
+  porte?: string; // API field name might differ, e.g., 'porte' or 'descricao_porte'
+  natureza_juridica?: string;
+  cnae_fiscal_descricao?: string; // Main CNAE description
+  cnaes_secundarios?: { codigo: number; descricao: string }[];
+  descricao_situacao_cadastral?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  municipio?: string; // API field name for city
+  uf?: string;       // API field name for state
+  cep?: string;
+  ddd_telefone_1?: string;
+  email?: string;
+  qsa?: QSAItemFromAPI[];
 }
 
-// Placeholder for BrasilAPI (CEP for Endereco 2)
+// For CEP API
 interface BrasilApiResponse {
   cep: string;
   state: string;
@@ -58,70 +58,70 @@ interface BrasilApiResponse {
   service: string;
 }
 
-// Placeholder function to simulate CNPJ API call
-async function fetchOrganizacaoDataFromCNPJAPI(cnpj: string): Promise<CNPJApiResponse | null> {
-  const cleanedCnpj = cnpj.replace(/\D/g, '');
-  if (cleanedCnpj.length !== 14) {
+async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNPJApiResponse | null> {
+  const apiUrl = `https://brasilapi.com.br/api/cnpj/v1/${cleanedCnpj}`;
+  console.log("NovaOrganizacaoPage: URL da API CNPJ:", apiUrl);
+
+  try {
+    const response = await fetch(apiUrl);
+    console.log(`NovaOrganizacaoPage: CNPJ API response status: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      console.error(`NovaOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}`);
+      try {
+        const errorBody = await response.text(); // Attempt to get error body
+        console.error(`NovaOrganizacaoPage: CNPJ API error response body:`, errorBody);
+      } catch (e) {
+        console.error(`NovaOrganizacaoPage: Não foi possível ler o corpo da resposta de erro da API CNPJ:`, e);
+      }
+      return null;
+    }
+
+    const rawTextResponse = await response.text(); // Get raw text first
+    console.log('NovaOrganizacaoPage: CNPJ API raw text response (before JSON.parse):', rawTextResponse);
+
+    try {
+      const data: CNPJApiResponse = JSON.parse(rawTextResponse); // Manually parse
+      console.log('NovaOrganizacaoPage: CNPJ API response data (parsed JSON):', data);
+      return data;
+    } catch (jsonError) {
+      console.error('NovaOrganizacaoPage: Erro ao processar JSON da API CNPJ:', jsonError);
+      console.error('NovaOrganizacaoPage: Raw text response that failed to parse:', rawTextResponse);
+      return null;
+    }
+
+  } catch (error) {
+    console.error("NovaOrganizacaoPage: Erro ao buscar dados do CNPJ (fetch/network):", error);
     return null;
   }
-  console.log("NovaOrganizacaoPage: Chamando API CNPJ para:", cleanedCnpj);
-  await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
-
-  // Example success response
-  if (cleanedCnpj === "00000000000000" || cleanedCnpj.startsWith("1111")) { // Test CNPJ
-    return {
-      nome: "Empresa Exemplo API LTDA",
-      cnpj: cnpj, // return formatted or cleaned as needed by form
-      data_inicio_atividade: "2005-01-10",
-      porte_empresa: "ME - Microempresa",
-      natureza_juridica: "206-2 - Sociedade Empresária Limitada",
-      cnae_principal: "6201501 - Desenvolvimento de programas de computador sob encomenda",
-      cnae_secundarios: [{ codigo: "6204000", descricao: "Consultoria em tecnologia da informação" }],
-      descricao_situacao_cadastral: "ATIVA",
-      logradouro: "AV PRINCIPAL API",
-      numero: "123",
-      complemento: "SALA 101",
-      bairro: "CENTRO API",
-      cidade: "CIDADE API",
-      estado_uf: "UF",
-      cep: "12345000",
-      qsa: [
-        { nome_socio: "Socio Admin Um API", qualificacao_socio: "Sócio-Administrador", data_entrada_sociedade: "2005-01-10" },
-        { nome_socio: "Socio Dois API", qualificacao_socio: "Sócio" },
-      ],
-    };
-  }
-  return null; // CNPJ not found
 }
 
-async function fetchAddressFromCEP(cep: string, addressPrefix: 'endereco2_' | '' = ''): Promise<Partial<BrasilApiResponse> | null> {
+async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
   if (cleanedCep.length !== 8) return null;
 
-  console.log(`NovaOrganizacaoPage: Chamando BrasilAPI para CEP (${addressPrefix}):`, cleanedCep);
+  console.log(`NovaOrganizacaoPage: Chamando BrasilAPI para CEP:`, cleanedCep);
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
     if (!response.ok) {
-      console.error(`NovaOrganizacaoPage: BrasilAPI CEP error (${addressPrefix}): ${response.status} ${response.statusText}`);
+      console.error(`NovaOrganizacaoPage: BrasilAPI CEP error: ${response.status} ${response.statusText}`);
       return null;
     }
     const data: BrasilApiResponse = await response.json();
     return { street: data.street, neighborhood: data.neighborhood, city: data.city, state: data.state, cep: data.cep };
   } catch (error) {
-    console.error(`NovaOrganizacaoPage: Erro ao buscar endereço do CEP (${addressPrefix}):`, error);
+    console.error(`NovaOrganizacaoPage: Erro ao buscar endereço do CEP:`, error);
     return null;
   }
 }
 
 const initialFormData = {
   cnpj: '',
-  nome: '', // Will be auto-filled
+  nome: '',
   codigo_entidade: '',
   id_tipo_entidade: '',
-  telefone: '', // From API or manual
-  email: '',    // From API or manual
-
-  // Address 1 (from CNPJ API, potentially editable)
+  telefone: '',
+  email: '',
   logradouro: '',
   numero: '',
   complemento: '',
@@ -129,8 +129,6 @@ const initialFormData = {
   cidade: '',
   estado_uf: '',
   cep: '',
-
-  // Address 2 (Manual + CEP API)
   endereco2_logradouro: '',
   endereco2_numero: '',
   endereco2_complemento: '',
@@ -138,39 +136,31 @@ const initialFormData = {
   endereco2_cidade: '',
   endereco2_estado_uf: '',
   endereco2_cep: '',
-
-  // Contact Info (Manual)
   nome_contato_responsavel: '',
   cargo_contato_responsavel: '',
   email_contato: '',
   telefone_contato: '',
   observacoes_contato: '',
-
-  // Economic/Tax Info (from CNPJ API - display only or for record)
   data_inicio_atividade: '',
   porte_empresa: '',
   natureza_juridica: '',
   cnae_principal: '',
   descricao_situacao_cadastral: '',
-  // cnae_secundarios will be stored in displayOnlyApiData
-
-  observacoes: '', // General observations for the Entidade
-  // data_cadastro is handled by DB
+  observacoes: '',
 };
-
 
 export default function NovaOrganizacaoPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isCnpjLoading, setIsCnpjLoading] = useState(false);
-  const [isCep1Loading, setIsCep1Loading] = useState(false);
-  const [isCep2Loading, setIsCep2Loading] = useState(false);
+  const [isCep1Loading, setIsCep1Loading] = useState(false); // For primary address
+  const [isCep2Loading, setIsCep2Loading] = useState(false); // For secondary address
   const [formData, setFormData] = useState(initialFormData);
   const [tiposEntidadeOptions, setTiposEntidadeOptions] = useState<TipoEntidadeOption[]>([]);
   const [displayOnlyApiData, setDisplayOnlyApiData] = useState<{
-    cnae_secundarios: { codigo: string, descricao: string }[],
-    qsa: QSAItem[]
+    cnae_secundarios: { codigo: number; descricao: string }[],
+    qsa: QSAItemFromAPI[]
   } | null>(null);
 
   useEffect(() => {
@@ -189,43 +179,49 @@ export default function NovaOrganizacaoPage() {
 
   const handleCnpjBlur = async (event: FocusEvent<HTMLInputElement>) => {
     const cnpjValue = event.target.value;
-    if (cnpjValue && cnpjValue.replace(/\D/g, '').length === 14) {
+    console.log("NovaOrganizacaoPage: handleCnpjBlur triggered with CNPJ:", cnpjValue);
+    const cleanedCnpjForAPI = cnpjValue.replace(/\D/g, '');
+
+    if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14) {
       setIsCnpjLoading(true);
-      try {
-        // Replace with your actual CNPJ API call logic
-        const apiData = await fetchOrganizacaoDataFromCNPJAPI(cnpjValue); 
-        if (apiData) {
-          setFormData(prev => ({
-            ...prev,
-            nome: apiData.nome,
-            cnpj: apiData.cnpj, 
-            data_inicio_atividade: apiData.data_inicio_atividade,
-            porte_empresa: apiData.porte_empresa,
-            natureza_juridica: apiData.natureza_juridica,
-            cnae_principal: apiData.cnae_principal,
-            descricao_situacao_cadastral: apiData.descricao_situacao_cadastral,
-            logradouro: apiData.logradouro,
-            numero: apiData.numero,
-            complemento: apiData.complemento,
-            bairro: apiData.bairro,
-            cidade: apiData.cidade,
-            estado_uf: apiData.estado_uf,
-            cep: apiData.cep.replace(/\D/g, ''),
-          }));
-          setDisplayOnlyApiData({
-            cnae_secundarios: apiData.cnae_secundarios,
-            qsa: apiData.qsa,
-          });
-          toast({ title: "Dados do CNPJ Encontrados!", description: "Campos preenchidos automaticamente." });
-        } else {
-          toast({ title: "CNPJ Não Encontrado", description: "Verifique o CNPJ ou preencha os dados manualmente.", variant: "default" });
-        }
-      } catch (error) {
-        console.error("Erro ao buscar dados do CNPJ:", error);
-        toast({ title: "Erro na API CNPJ", description: "Não foi possível obter os dados da empresa.", variant: "destructive" });
-      } finally {
-        setIsCnpjLoading(false);
+      console.log("NovaOrganizacaoPage: CNPJ limpo para API:", cleanedCnpjForAPI);
+      const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpjForAPI);
+      if (apiData) {
+        setFormData(prev => ({
+          ...prev,
+          nome: apiData.razao_social || '',
+          cnpj: apiData.cnpj || cleanedCnpjForAPI,
+          data_inicio_atividade: apiData.data_inicio_atividade || '',
+          porte_empresa: apiData.porte || '',
+          natureza_juridica: apiData.natureza_juridica || '',
+          cnae_principal: apiData.cnae_fiscal_descricao || '',
+          descricao_situacao_cadastral: apiData.descricao_situacao_cadastral || '',
+          logradouro: apiData.logradouro || '',
+          numero: apiData.numero || '',
+          complemento: apiData.complemento || '',
+          bairro: apiData.bairro || '',
+          cidade: apiData.municipio || '',
+          estado_uf: apiData.uf || '',
+          cep: (apiData.cep || '').replace(/\D/g, ''),
+          telefone: apiData.ddd_telefone_1 || '',
+          email: apiData.email || '',
+        }));
+        setDisplayOnlyApiData({
+          cnae_secundarios: apiData.cnaes_secundarios || [],
+          qsa: apiData.qsa || [],
+        });
+        toast({ title: "Dados do CNPJ Encontrados!", description: "Campos preenchidos automaticamente pela BrasilAPI." });
+      } else {
+        toast({
+          title: "CNPJ Não Encontrado ou Erro na API",
+          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro ao consultar a API. Verifique o número digitado e tente novamente. Consulte o console para mais detalhes do erro.",
+          variant: "default",
+          duration: 7000,
+        });
       }
+      setIsCnpjLoading(false);
+    } else if (cnpjValue) {
+        toast({ title: "CNPJ Inválido", description: "Por favor, insira um CNPJ com 14 dígitos.", variant: "default" });
     }
   };
   
@@ -237,16 +233,15 @@ export default function NovaOrganizacaoPage() {
     if (cepValue && cepValue.replace(/\D/g, '').length === 8) {
       setIsLoadingCep(true);
       try {
-        const address = await fetchAddressFromCEP(cepValue); // Using the existing BrasilAPI function
+        const address = await fetchAddressFromCEP(cepValue); 
         if (address) {
           setFormData(prev => ({
             ...prev,
-            [`${prefix}logradouro`]: address.street || '',
-            [`${prefix}bairro`]: address.neighborhood || '',
-            [`${prefix}cidade`]: address.city || '',
-            [`${prefix}estado_uf`]: address.state || '',
-            // Keep existing CEP if API doesn't return one, or use API's one
-            [`${prefix}cep`]: address.cep?.replace(/\D/g, '') || cepValue.replace(/\D/g, ''), 
+            [`${prefix}logradouro`]: address.street || prev[`${prefix}logradouro`],
+            [`${prefix}bairro`]: address.neighborhood || prev[`${prefix}bairro`],
+            [`${prefix}cidade`]: address.city || prev[`${prefix}cidade`],
+            [`${prefix}estado_uf`]: address.state || prev[`${prefix}estado_uf`],
+            [`${prefix}cep`]: (address.cep || cepValue).replace(/\D/g, ''),
           }));
           toast({ title: `Endereço ${addressNumber} Encontrado!`, description: "Campos de endereço preenchidos." });
         } else {
@@ -260,7 +255,6 @@ export default function NovaOrganizacaoPage() {
       }
     }
   };
-
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -279,23 +273,21 @@ export default function NovaOrganizacaoPage() {
     }
     setIsLoading(true);
 
-    // Client-side validation (placeholder)
-    // TODO: Implement comprehensive validation using Zod/RHF
     if (!formData.cnpj || !formData.nome || !formData.codigo_entidade || !formData.id_tipo_entidade) {
       toast({ title: "Campos Obrigatórios", description: "CNPJ, Nome, Código da Entidade e Tipo de Organização são obrigatórios.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
-
+    
     try {
       const { data: rpcRoleData, error: rpcRoleError } = await supabase.rpc('get_user_role');
       if (rpcRoleError || !['admin', 'supervisor', 'operator'].includes(rpcRoleData)) {
-          toast({ title: "Permissão Negada", description: "Você não tem permissão para criar organizações.", variant: "destructive" });
+          toast({ title: "Permissão Negada", description: `Você não tem permissão para criar organizações. Papel detectado: ${rpcRoleData || 'N/A'}.`, variant: "destructive" });
           setIsLoading(false); return;
       }
+      console.log("NovaOrganizacaoPage: Papel do usuário para criação:", rpcRoleData);
 
       const entidadePayload = {
-        // From form / API
         nome: formData.nome,
         cnpj: formData.cnpj.replace(/\D/g, ''),
         codigo_entidade: formData.codigo_entidade,
@@ -308,8 +300,6 @@ export default function NovaOrganizacaoPage() {
         cnae_principal: formData.cnae_principal || null,
         cnae_secundarios: displayOnlyApiData?.cnae_secundarios || null,
         descricao_situacao_cadastral: formData.descricao_situacao_cadastral || null,
-        
-        // Address 1
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
         complemento: formData.complemento || null,
@@ -317,8 +307,6 @@ export default function NovaOrganizacaoPage() {
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
         cep: formData.cep.replace(/\D/g, '') || null,
-
-        // Address 2
         endereco2_logradouro: formData.endereco2_logradouro || null,
         endereco2_numero: formData.endereco2_numero || null,
         endereco2_complemento: formData.endereco2_complemento || null,
@@ -326,14 +314,11 @@ export default function NovaOrganizacaoPage() {
         endereco2_cidade: formData.endereco2_cidade || null,
         endereco2_estado_uf: formData.endereco2_estado_uf || null,
         endereco2_cep: formData.endereco2_cep.replace(/\D/g, '') || null,
-
-        // Contact Info
         nome_contato_responsavel: formData.nome_contato_responsavel || null,
         cargo_contato_responsavel: formData.cargo_contato_responsavel || null,
         email_contato: formData.email_contato || null,
         telefone_contato: formData.telefone_contato || null,
         observacoes_contato: formData.observacoes_contato || null,
-        
         observacoes: formData.observacoes || null,
       };
       console.log("NovaOrganizacaoPage: Payload para Entidades:", entidadePayload);
@@ -341,12 +326,14 @@ export default function NovaOrganizacaoPage() {
       const { data: insertedEntidade, error: insertError } = await supabase
         .from('Entidades')
         .insert([entidadePayload])
-        .select('id_entidade') // Select only the ID or necessary fields
+        .select('id_entidade')
         .single();
 
       if (insertError) throw insertError;
+      console.log("NovaOrganizacaoPage: Entidade inserida com ID:", insertedEntidade?.id_entidade);
 
       if (displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0 && insertedEntidade?.id_entidade) {
+        console.log("NovaOrganizacaoPage: Inserindo QSA para Entidade ID:", insertedEntidade.id_entidade);
         const qsaPayload = displayOnlyApiData.qsa.map(socio => ({
           id_entidade: insertedEntidade.id_entidade,
           nome_socio: socio.nome_socio,
@@ -355,8 +342,10 @@ export default function NovaOrganizacaoPage() {
         }));
         const { error: qsaError } = await supabase.from('QSA').insert(qsaPayload);
         if (qsaError) {
-          console.warn("Erro ao salvar QSA, mas entidade principal foi criada:", qsaError);
+          console.warn("NovaOrganizacaoPage: Erro ao salvar QSA, mas entidade principal foi criada:", JSON.stringify(qsaError, null, 2));
           toast({ title: "Entidade Criada com Aviso", description: "A organização foi salva, mas houve um erro ao salvar os dados do QSA.", variant: "default" });
+        } else {
+          console.log("NovaOrganizacaoPage: QSA inserido com sucesso.");
         }
       }
       
@@ -407,13 +396,13 @@ export default function NovaOrganizacaoPage() {
                 />
                 {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
               </div>
-              <p className="text-xs text-muted-foreground">Digite o CNPJ e os campos serão preenchidos automaticamente se encontrado.</p>
+              <p className="text-xs text-muted-foreground">Digite o CNPJ e os campos serão preenchidos automaticamente se encontrado na BrasilAPI.</p>
             </div>
           </CardContent>
         </Card>
 
         <Tabs defaultValue="infoBasicas" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs flex-wrap">
             <TabsTrigger value="infoBasicas"><Info className="mr-1 h-3 w-3" />Básicas</TabsTrigger>
             <TabsTrigger value="dadosApi"><FileText className="mr-1 h-3 w-3" />Dados API</TabsTrigger>
             <TabsTrigger value="enderecoPrincipal"><MapPin className="mr-1 h-3 w-3" />End. Principal</TabsTrigger>
@@ -425,7 +414,7 @@ export default function NovaOrganizacaoPage() {
 
           <TabsContent value="infoBasicas">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Identificação (Pós-Busca CNPJ)</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Identificação</CardTitle><CardDescription>Preencha ou ajuste os dados básicos da organização.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2"><Label htmlFor="nome">Nome da Organização <span className="text-destructive">*</span></Label><Input id="nome" name="nome" value={formData.nome} onChange={handleChange} required disabled={isLoading} /></div>
@@ -456,9 +445,11 @@ export default function NovaOrganizacaoPage() {
                 {displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 && (
                     <div className="space-y-2">
                         <Label>CNAEs Secundários (informativo)</Label>
-                        <ul className="list-disc list-inside pl-4 text-sm text-muted-foreground bg-muted/30 p-3 rounded-md max-h-40 overflow-y-auto">
-                            {displayOnlyApiData.cnae_secundarios.map(cnae => <li key={cnae.codigo}>{cnae.codigo} - {cnae.descricao}</li>)}
-                        </ul>
+                        <div className="border rounded-md p-3 bg-muted/30 max-h-40 overflow-y-auto">
+                            <ul className="list-disc list-inside pl-4 text-sm text-muted-foreground">
+                                {displayOnlyApiData.cnae_secundarios.map(cnae => <li key={cnae.codigo}>{cnae.codigo} - {cnae.descricao}</li>)}
+                            </ul>
+                        </div>
                     </div>
                 )}
               </CardContent>
@@ -467,7 +458,7 @@ export default function NovaOrganizacaoPage() {
 
           <TabsContent value="enderecoPrincipal">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Endereço Principal</CardTitle><CardDescription>Pode ser auto-preenchido pela API CNPJ ou API de CEP. Ajuste se necessário.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Endereço Principal</CardTitle><CardDescription>Pode ser auto-preenchido pela API CNPJ. Ajuste se necessário ou use a busca por CEP.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                  <div className="space-y-2">
                   <Label htmlFor="cep">CEP</Label>
@@ -492,24 +483,24 @@ export default function NovaOrganizacaoPage() {
 
           <TabsContent value="enderecoAdicional">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Endereço Adicional/Correspondência (Manual)</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Endereço Adicional/Correspondência (Opcional)</CardTitle><CardDescription>Use a busca por CEP para preenchimento automático.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                  <div className="space-y-2">
-                  <Label htmlFor="endereco2_cep">CEP (Endereço 2)</Label>
+                  <Label htmlFor="endereco2_cep">CEP (Endereço Adicional)</Label>
                   <div className="flex items-center gap-2">
                     <Input id="endereco2_cep" name="endereco2_cep" value={formData.endereco2_cep} onChange={handleChange} onBlur={(e) => handleCepBlur(e, 2)} placeholder="00000-000" disabled={isLoading || isCep2Loading} />
                      {isCep2Loading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2 md:col-span-2"><Label htmlFor="endereco2_logradouro">Logradouro (Endereço 2)</Label><Input id="endereco2_logradouro" name="endereco2_logradouro" value={formData.endereco2_logradouro} onChange={handleChange} disabled={isLoading} /></div>
-                  <div className="space-y-2"><Label htmlFor="endereco2_numero">Número (Endereço 2)</Label><Input id="endereco2_numero" name="endereco2_numero" value={formData.endereco2_numero} onChange={handleChange} disabled={isLoading} /></div>
+                  <div className="space-y-2 md:col-span-2"><Label htmlFor="endereco2_logradouro">Logradouro (Endereço Adicional)</Label><Input id="endereco2_logradouro" name="endereco2_logradouro" value={formData.endereco2_logradouro} onChange={handleChange} disabled={isLoading} /></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_numero">Número (Endereço Adicional)</Label><Input id="endereco2_numero" name="endereco2_numero" value={formData.endereco2_numero} onChange={handleChange} disabled={isLoading} /></div>
                 </div>
-                <div className="space-y-2"><Label htmlFor="endereco2_complemento">Complemento (Endereço 2)</Label><Input id="endereco2_complemento" name="endereco2_complemento" value={formData.endereco2_complemento} onChange={handleChange} disabled={isLoading} /></div>
+                <div className="space-y-2"><Label htmlFor="endereco2_complemento">Complemento (Endereço Adicional)</Label><Input id="endereco2_complemento" name="endereco2_complemento" value={formData.endereco2_complemento} onChange={handleChange} disabled={isLoading} /></div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> 
-                  <div className="space-y-2"><Label htmlFor="endereco2_bairro">Bairro (Endereço 2)</Label><Input id="endereco2_bairro" name="endereco2_bairro" value={formData.endereco2_bairro} onChange={handleChange} disabled={isLoading}/></div>
-                  <div className="space-y-2"><Label htmlFor="endereco2_cidade">Cidade (Endereço 2)</Label><Input id="endereco2_cidade" name="endereco2_cidade" value={formData.endereco2_cidade} onChange={handleChange} disabled={isLoading}/></div>
-                  <div className="space-y-2"><Label htmlFor="endereco2_estado_uf">UF (Endereço 2)</Label><Input id="endereco2_estado_uf" name="endereco2_estado_uf" value={formData.endereco2_estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_bairro">Bairro (Endereço Adicional)</Label><Input id="endereco2_bairro" name="endereco2_bairro" value={formData.endereco2_bairro} onChange={handleChange} disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_cidade">Cidade (Endereço Adicional)</Label><Input id="endereco2_cidade" name="endereco2_cidade" value={formData.endereco2_cidade} onChange={handleChange} disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_estado_uf">UF (Endereço Adicional)</Label><Input id="endereco2_estado_uf" name="endereco2_estado_uf" value={formData.endereco2_estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading}/></div>
                 </div>
               </CardContent>
             </Card>
@@ -534,16 +525,16 @@ export default function NovaOrganizacaoPage() {
 
           <TabsContent value="qsa">
             <Card className="shadow-lg">
-              <CardHeader><CardTitle>Quadro de Sócios e Administradores (QSA - API)</CardTitle><CardDescription>Estes dados são obtidos pela API do CNPJ e são apenas para visualização aqui.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Quadro de Sócios e Administradores (QSA - Retorno API)</CardTitle><CardDescription>Estes dados são obtidos pela API do CNPJ e são apenas para visualização aqui. Serão salvos na tabela QSA ao cadastrar a organização.</CardDescription></CardHeader>
               <CardContent>
                 {isCnpjLoading && <p className="text-muted-foreground">Buscando dados do QSA...</p>}
                 {!isCnpjLoading && displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0 ? (
-                  <div className="overflow-x-auto max-h-80">
+                  <div className="overflow-x-auto max-h-80 border rounded-md">
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b"><th className="p-2 text-left font-medium">Nome Sócio/Administrador</th><th className="p-2 text-left font-medium">Qualificação</th><th className="p-2 text-left font-medium">Data Entrada</th></tr></thead>
+                      <thead className="bg-muted/50"><tr className="border-b"><th className="p-2 text-left font-medium">Nome Sócio/Administrador</th><th className="p-2 text-left font-medium">Qualificação</th><th className="p-2 text-left font-medium hidden sm:table-cell">Data Entrada</th></tr></thead>
                       <tbody>
                         {displayOnlyApiData.qsa.map((socio, index) => (
-                          <tr key={index} className="border-b"><td className="p-2">{socio.nome_socio}</td><td className="p-2">{socio.qualificacao_socio}</td><td className="p-2">{socio.data_entrada_sociedade || 'N/A'}</td></tr>
+                          <tr key={index} className="border-b last:border-b-0 hover:bg-muted/20"><td className="p-2">{socio.nome_socio}</td><td className="p-2">{socio.qualificacao_socio}</td><td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade || 'N/A'}</td></tr>
                         ))}
                       </tbody>
                     </table>
@@ -579,13 +570,13 @@ Supabase Integration Notes:
 - Novos campos de contato: nome_contato_responsavel, cargo_contato_responsavel, email_contato, telefone_contato, observacoes_contato.
 - Tabela "QSA" será populada com dados da API CNPJ, vinculada a "id_entidade".
 - Frontend:
-  - Ao digitar CNPJ, chamar API CNPJ (placeholder `fetchOrganizacaoDataFromCNPJAPI`).
+  - Ao digitar CNPJ, chamar API CNPJ (real `fetchOrganizacaoDataFromCNPJAPI`).
   - Preencher campos do formulário com dados da API (nome, endereço principal, dados econômicos).
   - QSA da API é exibido. Ao salvar, precisa inserir em public."QSA" (idealmente em transação via Edge Function ou após o insert da Entidade).
   - Endereço 2 usa API de CEP (BrasilAPI).
   - Campos de contato são manuais.
   - Ao submeter, o payload para public."Entidades" incluirá todos os novos campos.
-  - Validações de frontend para formatos de CEP, UF, email, telefone (usar Zod/RHF).
+  - Validações de frontend para formatos de CEP, UF, email, telefone.
 */
-      
+
     
