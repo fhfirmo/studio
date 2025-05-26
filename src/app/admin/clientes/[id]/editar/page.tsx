@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
 interface CNHData {
-  id_cnh?: string; // Optional for new CNH, present if editing existing
+  id_cnh?: string;
   numero_registro: string;
   categoria: string;
   data_emissao: string; // YYYY-MM-DD
@@ -63,7 +63,7 @@ const brazilianStates = [
 ];
 
 interface PessoaFisicaDataFromDB {
-  id_pessoa_fisica: string; // Use id_pessoa_fisica to match Supabase typically
+  id_pessoa_fisica: string;
   nome_completo: string;
   cpf: string;
   rg?: string | null;
@@ -78,13 +78,13 @@ interface PessoaFisicaDataFromDB {
   cep?: string | null;
   cidade?: string | null;
   estado_uf?: string | null;
-  observacoes?: string | null;
+  observacoes?: string | null; // Ensure this is part of the interface
   data_cadastro?: string; // YYYY-MM-DD or full timestamp
-  // For related data, we'd fetch these via joins or separate queries
-  MembrosEntidade?: { id_entidade_pai: number }[] | null; // Array for one-to-many
-  CNHs?: CNHData | null; // Expecting a single CNH or null
+  MembrosEntidade?: { id_entidade_pai: number }[] | null;
+  CNHs?: CNHData | null;
 }
 
+// Placeholder: Replace with actual Supabase call
 async function getPessoaFisicaById(id: string): Promise<PessoaFisicaDataFromDB | null> {
   if (!supabase) {
     console.error("Supabase client not initialized for getPessoaFisicaById");
@@ -92,43 +92,52 @@ async function getPessoaFisicaById(id: string): Promise<PessoaFisicaDataFromDB |
   }
   console.log(`Fetching PessoaFisica data for ID: ${id} from Supabase`);
   
-  const { data: pfData, error: pfError } = await supabase
-    .from('PessoasFisicas')
-    .select(`
-      id_pessoa_fisica,
-      nome_completo,
-      cpf,
-      rg,
-      data_nascimento,
-      email,
-      telefone,
-      tipo_relacao,
-      logradouro,
-      numero,
-      complemento,
-      bairro,
-      cep,
-      cidade,
-      estado_uf,
-      observacoes,
-      data_cadastro,
-      MembrosEntidade ( id_entidade_pai ),
-      CNHs ( id_cnh, numero_registro, categoria, data_emissao, data_validade, primeira_habilitacao, local_emissao_cidade, local_emissao_uf, observacoes_cnh )
-    `)
-    .eq('id_pessoa_fisica', parseInt(id, 10)) // Assuming id from URL is string, convert to int for DB
-    .maybeSingle(); // Use maybeSingle as CNHs might be a one-to-one mapped as an object by Supabase if set up right
+  // Supabase: Fetch from public.PessoasFisicas JOIN public.MembrosEntidade JOIN public.CNHs
+  // Example:
+  // const { data: pfData, error: pfError } = await supabase
+  //   .from('PessoasFisicas')
+  //   .select(`
+  //     *,
+  //     MembrosEntidade ( id_entidade_pai ),
+  //     CNHs ( * )
+  //   `)
+  //   .eq('id_pessoa_fisica', parseInt(id, 10)) // Assuming id is numeric in DB
+  //   .maybeSingle();
+  // if (pfError) { console.error("Error fetching PessoaFisica from Supabase:", pfError); return null; }
+  // if (!pfData) return null;
+  // const cnh = Array.isArray(pfData.CNHs) ? (pfData.CNHs[0] || null) : pfData.CNHs;
+  // return { ...pfData, CNHs: cnh } as PessoaFisicaDataFromDB;
 
-  if (pfError) {
-    console.error("Error fetching PessoaFisica from Supabase:", pfError);
-    return null;
+  // Placeholder data for now
+  if (id === "1" || id === "pf_001" || id === "cli_001") {
+    return {
+      id_pessoa_fisica: id,
+      nome_completo: "João da Silva Sauro Edit",
+      cpf: "123.456.789-00",
+      rg: "12.345.678-X",
+      data_nascimento: "1990-05-15",
+      email: "joao.edit@example.com",
+      telefone: "(11) 99999-8888",
+      tipo_relacao: "associado",
+      MembrosEntidade: [{ id_entidade_pai: 1 }],
+      logradouro: "Rua das Palmeiras Edit",
+      numero: "123",
+      complemento: "Apto 101",
+      bairro: "Centro Edit",
+      cep: "01001-000",
+      cidade: "São Paulo",
+      estado_uf: "SP",
+      observacoes: "Cliente VIP, necessita de atenção especial. Gosta de café expresso.", // Sample observacoes
+      data_cadastro: "2023-01-10T10:00:00Z",
+      CNHs: { 
+        id_cnh: 'cnh_edit_001', numero_registro: '0987654321', categoria: 'AB', data_emissao: '2021-01-01', data_validade: '2026-01-01',
+        primeira_habilitacao: '2009-01-01', local_emissao_cidade: 'São Paulo', local_emissao_uf: 'SP', observacoes_cnh: 'CNH sem restrições.'
+      }
+    };
   }
-  if (!pfData) return null;
-
-  // If CNHs is an array from a one-to-many, take the first one. If it's already an object or null, this is fine.
-  const cnh = Array.isArray(pfData.CNHs) ? (pfData.CNHs[0] || null) : pfData.CNHs;
-
-  return { ...pfData, CNHs: cnh } as PessoaFisicaDataFromDB;
+  return null;
 }
+
 
 interface BrasilApiResponse {
   cep: string;
@@ -171,13 +180,13 @@ export default function EditarPessoaFisicaPage() {
     nomeCompleto: '', cpf: '', rg: '', dataNascimento: undefined as Date | undefined, email: '', 
     telefone: '', tipoRelacao: '', organizacaoVinculadaId: '', 
     logradouro: '', numero: '', complemento: '', bairro: '', cep: '', cidade: '', estado_uf: '', 
-    observacoes: '',
+    observacoes: '', // Ensure observacoes is in formData
   });
   
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
   const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create');
   const [cnhFormData, setCnhFormData] = useState<CNHData>(initialCnhFormData);
-  const [currentDbCnh, setCurrentDbCnh] = useState<CNHData | null>(null); // Stores CNH fetched from DB
+  const [currentDbCnh, setCurrentDbCnh] = useState<CNHData | null>(null);
 
   const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
 
@@ -203,7 +212,7 @@ export default function EditarPessoaFisicaPage() {
               cep: data.cep || '', 
               cidade: data.cidade || '', 
               estado_uf: data.estado_uf || '',
-              observacoes: data.observacoes || '',
+              observacoes: data.observacoes || '', // Populate observacoes
             });
             if (data.data_cadastro) {
                setDataCadastroDisplay(format(parseISO(data.data_cadastro), "dd/MM/yyyy HH:mm"));
@@ -311,7 +320,7 @@ export default function EditarPessoaFisicaPage() {
         data_validade: cnhFormData.data_validade ? format(parseISO(cnhFormData.data_validade), "yyyy-MM-dd") : null,
         primeira_habilitacao: cnhFormData.primeira_habilitacao ? format(parseISO(cnhFormData.primeira_habilitacao), "yyyy-MM-dd") : null,
         local_emissao_cidade: cnhFormData.local_emissao_cidade || null,
-        local_emissao_estado_uf: cnhFormData.local_emissao_uf || null, // Corrected field name
+        local_emissao_estado_uf: cnhFormData.local_emissao_uf || null,
         observacoes_cnh: cnhFormData.observacoes_cnh || null,
     };
 
@@ -358,13 +367,11 @@ export default function EditarPessoaFisicaPage() {
     }
     
     try {
-      // 1. Update PessoasFisicas table
       const pessoaFisicaUpdatePayload = {
         nome_completo: formData.nomeCompleto,
         cpf: formData.cpf,
         rg: formData.rg || null,
         data_nascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
-        // email: formData.email, // Email usually not updatable as it's an identifier for auth.users
         telefone: formData.telefone || null,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
@@ -374,7 +381,7 @@ export default function EditarPessoaFisicaPage() {
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
         tipo_relacao: formData.tipoRelacao,
-        observacoes: formData.observacoes,
+        observacoes: formData.observacoes, // Include observacoes in payload
       };
 
       const { error: pfError } = await supabase
@@ -384,12 +391,6 @@ export default function EditarPessoaFisicaPage() {
 
       if (pfError) throw pfError;
       console.log("Pessoa Física atualizada com sucesso.");
-
-      // 2. Manage MembrosEntidade link
-      //    If tipoRelacao changed or organizacaoVinculadaId changed
-      //    This logic might be complex: delete old link, insert new, or update existing.
-      //    For simplicity: Upsert based on id_entidade_pai and id_membro_pessoa_fisica.
-      //    If tipo_relacao is 'cliente_geral', ensure no link exists.
       
       const numericPessoaFisicaId = parseInt(pessoaFisicaId);
 
@@ -403,16 +404,14 @@ export default function EditarPessoaFisicaPage() {
             tipo_membro: 'Pessoa Fisica',
             funcao_no_membro: formData.tipoRelacao 
           }, { 
-            onConflict: 'id_entidade_pai, id_membro_pessoa_fisica' // Adjust if your unique constraint is different
+            onConflict: 'id_entidade_pai, id_membro_pessoa_fisica'
           });
          if (membroError) {
             console.warn("Aviso/Erro ao atualizar MembrosEntidade:", membroError.message);
-            // Don't throw, allow PF update to succeed, but log warning
          } else {
             console.log("Vínculo MembrosEntidade atualizado/inserido com sucesso.");
          }
       } else {
-        // If 'cliente_geral' or no organization selected, remove any existing link.
         const { error: deleteMembroError } = await supabase
           .from('MembrosEntidade')
           .delete()
@@ -423,7 +422,6 @@ export default function EditarPessoaFisicaPage() {
             console.log("Vínculo MembrosEntidade verificado/removido com sucesso (se existia).");
         }
       }
-      // CNH data is managed via its own modal and separate Supabase calls (handleCnhSubmit).
 
       toast({ title: "Pessoa Física Atualizada!", description: "Os dados foram salvos com sucesso." });
       router.push('/admin/clientes'); 
@@ -497,7 +495,6 @@ export default function EditarPessoaFisicaPage() {
                     <Select name="tipoRelacao" value={formData.tipoRelacao} onValueChange={(value) => handleSelectChange('tipoRelacao', value)} required><SelectTrigger id="tipoRelacao"><Link2 className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{tiposRelacao.map(tipo => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent></Select>
                   </div>
                   {isOrganizacaoRequired && (<div className="space-y-2"><Label htmlFor="organizacaoVinculadaId">Organização <span className="text-destructive">*</span></Label>
-                        {/* Supabase: Options for this select should be loaded from public.Entidades */}
                         <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId || ''} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}><SelectTrigger id="organizacaoVinculadaId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{organizacoesDisponiveis.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))}</SelectContent></Select>
                     </div>)}
               </CardContent>
@@ -555,8 +552,12 @@ export default function EditarPessoaFisicaPage() {
           </TabsContent>
 
           <TabsContent value="outrasInfo">
-            <Card className="shadow-lg"><CardHeader><CardTitle>Outras Informações</CardTitle></CardHeader>
-              <CardContent className="space-y-2"><Label htmlFor="observacoes">Observações</Label><Textarea id="observacoes" name="observacoes" value={formData.observacoes || ''} onChange={handleChange} rows={6}/></CardContent>
+            <Card className="shadow-lg">
+              <CardHeader><CardTitle>Outras Informações</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                <Label htmlFor="observacoes">Observações</Label>
+                <Textarea id="observacoes" name="observacoes" value={formData.observacoes || ''} onChange={handleChange} rows={6}/>
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
@@ -609,19 +610,14 @@ export default function EditarPessoaFisicaPage() {
 }
 
 /* Supabase Integration Notes:
-- PessoaFisica Data Fetching (useEffect): Fetch from public.PessoasFisicas. Also fetch related data:
-  - CNHs: LEFT JOIN or separate query to get CNH data for this id_pessoa_fisica.
-  - MembrosEntidade: LEFT JOIN or separate query to find id_entidade_pai if a link exists.
+- PessoaFisica Data Fetching (useEffect): Fetch from public.PessoasFisicas.
+  - Also fetch related data: CNHs (LEFT JOIN or separate query), MembrosEntidade (for id_entidade_pai).
 - Main Form Submission (handleSubmit):
-  - Update PessoasFisicas table with main form data.
-  - Manage MembrosEntidade link:
-    - If tipoRelacao is 'cliente_geral', DELETE any existing link for this id_pessoa_fisica.
-    - If tipoRelacao is not 'cliente_geral' and an organizacaoVinculadaId is set, UPSERT into MembrosEntidade.
-    - If organizacaoVinculadaId is cleared, DELETE any existing link.
+  - Update PessoasFisicas table with main form data (including direct address and 'observacoes').
+  - Manage MembrosEntidade link (upsert/delete).
 - CNH Modal Submission (handleCnhSubmit):
-  - If creating: INSERT into CNHs with id_pessoa_fisica.
-  - If editing: UPDATE CNHs where id_cnh = currentDbCnh.id_cnh.
-- Dynamic selects (Organização Vinculada) need to fetch data from public.Entidades.
+  - INSERT or UPDATE public.CNHs.
+- Dynamic selects (Organização Vinculada): Fetch from public.Entidades.
 */
 
     
