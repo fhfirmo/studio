@@ -44,11 +44,10 @@ const tiposRelacao = [
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
-const organizacoesDisponiveis = [ // Placeholder - Fetch from Supabase
-  { value: "1", label: "Cooperativa Alfa (Exemplo ID 1)" },
-  { value: "2", label: "Associação Beta (Exemplo ID 2)" },
-  { value: "3", label: "Empresa Gama (Exemplo ID 3)" },
-];
+interface OrganizacaoOption {
+  value: string;
+  label: string;
+}
 
 const brazilianStates = [
   { value: "AC", label: "Acre" }, { value: "AL", label: "Alagoas" }, { value: "AP", label: "Amapá" },
@@ -78,64 +77,38 @@ interface PessoaFisicaDataFromDB {
   cep?: string | null;
   cidade?: string | null;
   estado_uf?: string | null;
-  observacoes?: string | null; // Ensure this is part of the interface
+  observacoes?: string | null; 
   data_cadastro?: string; // YYYY-MM-DD or full timestamp
   MembrosEntidade?: { id_entidade_pai: number }[] | null;
   CNHs?: CNHData | null;
 }
 
-// Placeholder: Replace with actual Supabase call
+
 async function getPessoaFisicaById(id: string): Promise<PessoaFisicaDataFromDB | null> {
-  if (!supabase) {
+   if (!supabase) {
     console.error("Supabase client not initialized for getPessoaFisicaById");
     return null;
   }
   console.log(`Fetching PessoaFisica data for ID: ${id} from Supabase`);
   
-  // Supabase: Fetch from public.PessoasFisicas JOIN public.MembrosEntidade JOIN public.CNHs
-  // Example:
-  // const { data: pfData, error: pfError } = await supabase
-  //   .from('PessoasFisicas')
-  //   .select(`
-  //     *,
-  //     MembrosEntidade ( id_entidade_pai ),
-  //     CNHs ( * )
-  //   `)
-  //   .eq('id_pessoa_fisica', parseInt(id, 10)) // Assuming id is numeric in DB
-  //   .maybeSingle();
-  // if (pfError) { console.error("Error fetching PessoaFisica from Supabase:", pfError); return null; }
-  // if (!pfData) return null;
-  // const cnh = Array.isArray(pfData.CNHs) ? (pfData.CNHs[0] || null) : pfData.CNHs;
-  // return { ...pfData, CNHs: cnh } as PessoaFisicaDataFromDB;
+  const { data: pfData, error: pfError } = await supabase
+    .from('PessoasFisicas')
+    .select(`
+      *,
+      MembrosEntidade ( id_entidade_pai ),
+      CNHs ( * )
+    `)
+    .eq('id_pessoa_fisica', parseInt(id, 10)) 
+    .maybeSingle();
 
-  // Placeholder data for now
-  if (id === "1" || id === "pf_001" || id === "cli_001") {
-    return {
-      id_pessoa_fisica: id,
-      nome_completo: "João da Silva Sauro Edit",
-      cpf: "123.456.789-00",
-      rg: "12.345.678-X",
-      data_nascimento: "1990-05-15",
-      email: "joao.edit@example.com",
-      telefone: "(11) 99999-8888",
-      tipo_relacao: "associado",
-      MembrosEntidade: [{ id_entidade_pai: 1 }],
-      logradouro: "Rua das Palmeiras Edit",
-      numero: "123",
-      complemento: "Apto 101",
-      bairro: "Centro Edit",
-      cep: "01001-000",
-      cidade: "São Paulo",
-      estado_uf: "SP",
-      observacoes: "Cliente VIP, necessita de atenção especial. Gosta de café expresso.", // Sample observacoes
-      data_cadastro: "2023-01-10T10:00:00Z",
-      CNHs: { 
-        id_cnh: 'cnh_edit_001', numero_registro: '0987654321', categoria: 'AB', data_emissao: '2021-01-01', data_validade: '2026-01-01',
-        primeira_habilitacao: '2009-01-01', local_emissao_cidade: 'São Paulo', local_emissao_uf: 'SP', observacoes_cnh: 'CNH sem restrições.'
-      }
-    };
+  if (pfError) { 
+    console.error("Error fetching PessoaFisica from Supabase:", pfError); 
+    return null; 
   }
-  return null;
+  if (!pfData) return null;
+
+  const cnh = Array.isArray(pfData.CNHs) ? (pfData.CNHs[0] || null) : pfData.CNHs;
+  return { ...pfData, CNHs: cnh } as PessoaFisicaDataFromDB;
 }
 
 
@@ -175,12 +148,15 @@ export default function EditarPessoaFisicaPage() {
   const [isCepLoading, setIsCepLoading] = useState(false);
   const [pessoaFisicaFound, setPessoaFisicaFound] = useState<boolean | null>(null);
   const [dataCadastroDisplay, setDataCadastroDisplay] = useState<string | null>(null);
+  const [organizacoesOptions, setOrganizacoesOptions] = useState<OrganizacaoOption[]>([]);
+  const [isLoadingOrganizacoes, setIsLoadingOrganizacoes] = useState(true);
+
 
   const [formData, setFormData] = useState({
     nomeCompleto: '', cpf: '', rg: '', dataNascimento: undefined as Date | undefined, email: '', 
     telefone: '', tipoRelacao: '', organizacaoVinculadaId: '', 
     logradouro: '', numero: '', complemento: '', bairro: '', cep: '', cidade: '', estado_uf: '', 
-    observacoes: '', // Ensure observacoes is in formData
+    observacoes: '',
   });
   
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
@@ -191,46 +167,73 @@ export default function EditarPessoaFisicaPage() {
   const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
 
   useEffect(() => {
-    if (pessoaFisicaId) {
-      setIsLoading(true);
-      getPessoaFisicaById(pessoaFisicaId)
-        .then(data => {
-          if (data) {
-            setFormData({
-              nomeCompleto: data.nome_completo || '', 
-              cpf: data.cpf || '', 
-              rg: data.rg || '',
-              dataNascimento: data.data_nascimento && isValid(parseISO(data.data_nascimento)) ? parseISO(data.data_nascimento) : undefined,
-              email: data.email || '', 
-              telefone: data.telefone || '', 
-              tipoRelacao: data.tipo_relacao || '',
-              organizacaoVinculadaId: data.MembrosEntidade && data.MembrosEntidade.length > 0 ? data.MembrosEntidade[0].id_entidade_pai.toString() : '',
-              logradouro: data.logradouro || '', 
-              numero: data.numero || '', 
-              complemento: data.complemento || '',
-              bairro: data.bairro || '', 
-              cep: data.cep || '', 
-              cidade: data.cidade || '', 
-              estado_uf: data.estado_uf || '',
-              observacoes: data.observacoes || '', // Populate observacoes
-            });
-            if (data.data_cadastro) {
-               setDataCadastroDisplay(format(parseISO(data.data_cadastro), "dd/MM/yyyy HH:mm"));
+    const fetchInitialData = async () => {
+        if (pessoaFisicaId) {
+            setIsLoading(true);
+            
+            // Fetch PessoasFisicas data
+            try {
+                const data = await getPessoaFisicaById(pessoaFisicaId);
+                if (data) {
+                    setFormData({
+                    nomeCompleto: data.nome_completo || '', 
+                    cpf: data.cpf || '', 
+                    rg: data.rg || '',
+                    dataNascimento: data.data_nascimento && isValid(parseISO(data.data_nascimento)) ? parseISO(data.data_nascimento) : undefined,
+                    email: data.email || '', 
+                    telefone: data.telefone || '', 
+                    tipoRelacao: data.tipo_relacao || '',
+                    organizacaoVinculadaId: data.MembrosEntidade && data.MembrosEntidade.length > 0 ? data.MembrosEntidade[0].id_entidade_pai.toString() : '',
+                    logradouro: data.logradouro || '', 
+                    numero: data.numero || '', 
+                    complemento: data.complemento || '',
+                    bairro: data.bairro || '', 
+                    cep: data.cep || '', 
+                    cidade: data.cidade || '', 
+                    estado_uf: data.estado_uf || '',
+                    observacoes: data.observacoes || '', 
+                    });
+                    if (data.data_cadastro) {
+                    setDataCadastroDisplay(format(parseISO(data.data_cadastro), "dd/MM/yyyy HH:mm"));
+                    }
+                    setCurrentDbCnh(data.CNHs || null);
+                    setPessoaFisicaFound(true);
+                } else { 
+                    setPessoaFisicaFound(false);
+                    toast({ title: "Pessoa Física não encontrada", variant: "destructive"});
+                }
+            } catch (err: any) {
+                console.error("Failed to fetch data:", err); 
+                setPessoaFisicaFound(false); 
+                toast({ title: "Erro ao carregar dados", description: err.message, variant: "destructive"});
             }
-            setCurrentDbCnh(data.CNHs || null);
-            setPessoaFisicaFound(true);
-          } else { 
-            setPessoaFisicaFound(false);
-            toast({ title: "Pessoa Física não encontrada", variant: "destructive"});
-          }
-        })
-        .catch(err => { 
-          console.error("Failed to fetch data:", err); 
-          setPessoaFisicaFound(false); 
-          toast({ title: "Erro ao carregar dados", description: err.message, variant: "destructive"});
-        })
-        .finally(() => setIsLoading(false));
-    }
+
+            // Fetch Organizações for select
+            if (supabase) {
+                setIsLoadingOrganizacoes(true);
+                const { data: orgsData, error: orgsError } = await supabase
+                    .from('Entidades')
+                    .select('id_entidade, nome')
+                    .order('nome', { ascending: true });
+
+                if (orgsError) {
+                    console.error("Erro ao buscar organizações:", orgsError);
+                    toast({ title: "Erro ao Carregar Organizações", description: orgsError.message, variant: "destructive" });
+                    setOrganizacoesOptions([]);
+                } else if (orgsData) {
+                    setOrganizacoesOptions(
+                    orgsData.map(org => ({
+                        value: org.id_entidade.toString(),
+                        label: org.nome,
+                    }))
+                    );
+                }
+                setIsLoadingOrganizacoes(false);
+            }
+            setIsLoading(false);
+        }
+    };
+    fetchInitialData();
   }, [pessoaFisicaId, toast]);
   
   useEffect(() => {
@@ -320,7 +323,7 @@ export default function EditarPessoaFisicaPage() {
         data_validade: cnhFormData.data_validade ? format(parseISO(cnhFormData.data_validade), "yyyy-MM-dd") : null,
         primeira_habilitacao: cnhFormData.primeira_habilitacao ? format(parseISO(cnhFormData.primeira_habilitacao), "yyyy-MM-dd") : null,
         local_emissao_cidade: cnhFormData.local_emissao_cidade || null,
-        local_emissao_estado_uf: cnhFormData.local_emissao_uf || null,
+        local_emissao_uf: cnhFormData.local_emissao_uf || null, // Corrected field name
         observacoes_cnh: cnhFormData.observacoes_cnh || null,
     };
 
@@ -332,8 +335,7 @@ export default function EditarPessoaFisicaPage() {
         savedCnhData = data as CNHData;
         toast({ title: "CNH Cadastrada!", description: "Dados da CNH salvos com sucesso." });
       } else if (cnhModalMode === 'edit' && currentDbCnh?.id_cnh) {
-        // @ts-ignore - id_pessoa_fisica não precisa ser atualizado no payload de update da CNH
-        const { id_pessoa_fisica, ...updatePayload } = cnhPayload;
+        const { id_pessoa_fisica, ...updatePayload } = cnhPayload; // id_pessoa_fisica should not be in the update payload for CNHs table itself
         const { data, error } = await supabase.from('CNHs').update(updatePayload).eq('id_cnh', currentDbCnh.id_cnh).select().single();
         if (error) throw error;
         savedCnhData = data as CNHData;
@@ -372,6 +374,7 @@ export default function EditarPessoaFisicaPage() {
         cpf: formData.cpf,
         rg: formData.rg || null,
         data_nascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
+        email: formData.email, // Assuming email is identifier and not changed here, or handled separately
         telefone: formData.telefone || null,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
@@ -381,7 +384,7 @@ export default function EditarPessoaFisicaPage() {
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
         tipo_relacao: formData.tipoRelacao,
-        observacoes: formData.observacoes, // Include observacoes in payload
+        observacoes: formData.observacoes,
       };
 
       const { error: pfError } = await supabase
@@ -404,14 +407,16 @@ export default function EditarPessoaFisicaPage() {
             tipo_membro: 'Pessoa Fisica',
             funcao_no_membro: formData.tipoRelacao 
           }, { 
-            onConflict: 'id_entidade_pai, id_membro_pessoa_fisica'
+            onConflict: 'id_entidade_pai,id_membro_pessoa_fisica' // Ensure this matches your unique constraint
           });
          if (membroError) {
             console.warn("Aviso/Erro ao atualizar MembrosEntidade:", membroError.message);
+            // Potentially throw membroError if it's critical
          } else {
             console.log("Vínculo MembrosEntidade atualizado/inserido com sucesso.");
          }
       } else {
+        // If tipoRelacao is 'cliente_geral' or no organizacaoVinculadaId, attempt to remove any existing link.
         const { error: deleteMembroError } = await supabase
           .from('MembrosEntidade')
           .delete()
@@ -495,7 +500,25 @@ export default function EditarPessoaFisicaPage() {
                     <Select name="tipoRelacao" value={formData.tipoRelacao} onValueChange={(value) => handleSelectChange('tipoRelacao', value)} required><SelectTrigger id="tipoRelacao"><Link2 className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{tiposRelacao.map(tipo => (<SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>))}</SelectContent></Select>
                   </div>
                   {isOrganizacaoRequired && (<div className="space-y-2"><Label htmlFor="organizacaoVinculadaId">Organização <span className="text-destructive">*</span></Label>
-                        <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId || ''} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}><SelectTrigger id="organizacaoVinculadaId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{organizacoesDisponiveis.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))}</SelectContent></Select>
+                        <Select 
+                          name="organizacaoVinculadaId" 
+                          value={formData.organizacaoVinculadaId || ''} 
+                          onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} 
+                          required={isOrganizacaoRequired}
+                          disabled={isLoadingOrganizacoes}
+                        >
+                          <SelectTrigger id="organizacaoVinculadaId">
+                            <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <SelectValue placeholder={isLoadingOrganizacoes ? "Carregando..." : "Selecione"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {organizacoesOptions.length > 0 ? (
+                              organizacoesOptions.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))
+                            ): (
+                              <SelectItem value="none" disabled>Nenhuma organização encontrada</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
                     </div>)}
               </CardContent>
             </Card>
@@ -608,16 +631,5 @@ export default function EditarPessoaFisicaPage() {
     </div>
   );
 }
-
-/* Supabase Integration Notes:
-- PessoaFisica Data Fetching (useEffect): Fetch from public.PessoasFisicas.
-  - Also fetch related data: CNHs (LEFT JOIN or separate query), MembrosEntidade (for id_entidade_pai).
-- Main Form Submission (handleSubmit):
-  - Update PessoasFisicas table with main form data (including direct address and 'observacoes').
-  - Manage MembrosEntidade link (upsert/delete).
-- CNH Modal Submission (handleCnhSubmit):
-  - INSERT or UPDATE public.CNHs.
-- Dynamic selects (Organização Vinculada): Fetch from public.Entidades.
-*/
 
     

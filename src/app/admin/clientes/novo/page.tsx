@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
-// Interface for CNH Data collected in the modal (without id_cnh, as it's for creation within PF form)
 interface CNHDataForForm {
   numero_registro: string;
   categoria: string;
@@ -44,11 +43,10 @@ const tiposRelacao = [
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
-const organizacoesDisponiveis = [ // Placeholder - Fetch from Supabase
-  { value: "1", label: "Cooperativa Alfa (Exemplo ID 1)" },
-  { value: "2", label: "Associação Beta (Exemplo ID 2)" },
-  { value: "3", label: "Empresa Gama (Exemplo ID 3)" },
-];
+interface OrganizacaoOption {
+  value: string;
+  label: string;
+}
 
 const brazilianStates = [
   { value: "AC", label: "Acre" }, { value: "AL", label: "Alagoas" }, { value: "AP", label: "Amapá" },
@@ -73,10 +71,7 @@ interface BrasilApiResponse {
 
 async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
-  if (cleanedCep.length !== 8) {
-    // This check is usually done before calling, but good to have defensively
-    return null;
-  }
+  if (cleanedCep.length !== 8) return null;
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
     if (!response.ok) {
@@ -89,7 +84,7 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiRespon
       neighborhood: data.neighborhood,
       city: data.city,
       state: data.state,
-      cep: data.cep, // API returns formatted CEP
+      cep: data.cep,
     };
   } catch (error) {
     console.error("Error fetching address from CEP:", error);
@@ -102,6 +97,9 @@ export default function NovaPessoaFisicaPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isCepLoading, setIsCepLoading] = useState(false);
+  const [organizacoesOptions, setOrganizacoesOptions] = useState<OrganizacaoOption[]>([]);
+  const [isLoadingOrganizacoes, setIsLoadingOrganizacoes] = useState(true);
+
 
   const [formData, setFormData] = useState({
     nomeCompleto: '',
@@ -120,7 +118,7 @@ export default function NovaPessoaFisicaPage() {
     cidade: '',
     estado_uf: '',
     observacoes: '',
-    cnh: null as CNHDataForForm | null, // Staged CNH data
+    cnh: null as CNHDataForForm | null,
   });
 
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
@@ -128,6 +126,37 @@ export default function NovaPessoaFisicaPage() {
   const [cnhModalFormData, setCnhModalFormData] = useState<CNHDataForForm>(initialCnhModalFormData);
 
   const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
+
+  useEffect(() => {
+    const fetchOrganizacoes = async () => {
+      if (!supabase) {
+        toast({ title: "Erro de Configuração", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+        setIsLoadingOrganizacoes(false);
+        return;
+      }
+      setIsLoadingOrganizacoes(true);
+      const { data, error } = await supabase
+        .from('Entidades')
+        .select('id_entidade, nome')
+        .order('nome', { ascending: true });
+
+      if (error) {
+        console.error("Erro ao buscar organizações:", error);
+        toast({ title: "Erro ao Carregar Organizações", description: error.message, variant: "destructive" });
+        setOrganizacoesOptions([]);
+      } else {
+        setOrganizacoesOptions(
+          data.map(org => ({
+            value: org.id_entidade.toString(),
+            label: org.nome,
+          }))
+        );
+      }
+      setIsLoadingOrganizacoes(false);
+    };
+    fetchOrganizacoes();
+  }, [toast]);
+
 
   useEffect(() => {
     if (formData.tipoRelacao === 'cliente_geral' && formData.organizacaoVinculadaId) {
@@ -148,8 +177,6 @@ export default function NovaPessoaFisicaPage() {
             bairro: address.neighborhood || '',
             cidade: address.city || '',
             estado_uf: address.state || '',
-            // Optionally update CEP if API returns a formatted one, or keep user's input
-            // cep: address.cep || cepValue, 
           }));
           toast({ title: "Endereço Encontrado!", description: "Campos de endereço preenchidos." });
         } else {
@@ -178,7 +205,7 @@ export default function NovaPessoaFisicaPage() {
   };
 
   const handleOpenCnhModal = () => {
-    if (formData.cnh) { // If CNH data is already staged
+    if (formData.cnh) {
       setCnhModalMode('edit');
       setCnhModalFormData({ ...formData.cnh });
     } else {
@@ -207,7 +234,6 @@ export default function NovaPessoaFisicaPage() {
       toast({ title: "CNH: Campos Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
       return;
     }
-    // Stage the CNH data into the main form's state
     setFormData(prev => ({ ...prev, cnh: { ...cnhModalFormData } }));
     setIsCnhModalOpen(false);
     toast({ title: "Dados da CNH Adicionados!", description: "As informações da CNH foram preparadas e serão salvas com o formulário principal." });
@@ -239,7 +265,6 @@ export default function NovaPessoaFisicaPage() {
     }
     
     try {
-      // Payload for PessoasFisicas (includes direct address fields)
       const pessoaFisicaPayload = {
         nome_completo: formData.nomeCompleto,
         cpf: formData.cpf,
@@ -256,7 +281,6 @@ export default function NovaPessoaFisicaPage() {
         estado_uf: formData.estado_uf || null,
         tipo_relacao: formData.tipoRelacao, 
         observacoes: formData.observacoes,
-        // id_endereco is no longer used.
       };
 
       console.log("Cadastrando Pessoa Física com payload:", pessoaFisicaPayload);
@@ -274,7 +298,6 @@ export default function NovaPessoaFisicaPage() {
       }
       console.log("Pessoa Física cadastrada com ID:", newPessoaFisicaId);
 
-      // If CNH data was staged, insert it into public.CNHs
       if (formData.cnh) {
         console.log("Cadastrando CNH para Pessoa Física ID:", newPessoaFisicaId, "Payload CNH:", formData.cnh);
         const cnhPayload = {
@@ -285,7 +308,7 @@ export default function NovaPessoaFisicaPage() {
           data_validade: formData.cnh.data_validade ? format(parseISO(formData.cnh.data_validade), "yyyy-MM-dd") : null,
           primeira_habilitacao: formData.cnh.primeira_habilitacao ? format(parseISO(formData.cnh.primeira_habilitacao), "yyyy-MM-dd") : null,
           local_emissao_cidade: formData.cnh.local_emissao_cidade || null,
-          local_emissao_estado_uf: formData.cnh.local_emissao_uf || null, // Corrected field name
+          local_emissao_uf: formData.cnh.local_emissao_uf || null, 
           observacoes_cnh: formData.cnh.observacoes_cnh || null,
         };
         const { error: cnhError } = await supabase.from('CNHs').insert(cnhPayload);
@@ -293,15 +316,13 @@ export default function NovaPessoaFisicaPage() {
         console.log("CNH cadastrada com sucesso.");
       }
 
-      // If linked to an organization, insert into public.MembrosEntidade
       if (isOrganizacaoRequired && formData.organizacaoVinculadaId) {
         console.log("Cadastrando vínculo em MembrosEntidade. PessoaFisicaID:", newPessoaFisicaId, "OrganizacaoID:", formData.organizacaoVinculadaId);
         const membroEntidadePayload = {
           id_entidade_pai: parseInt(formData.organizacaoVinculadaId, 10),
           id_membro_pessoa_fisica: newPessoaFisicaId,
-          tipo_membro: 'Pessoa Fisica', // Matches your CHECK constraint
-          funcao_no_membro: formData.tipoRelacao, // Using tipoRelacao as funcao_no_membro
-          // data_associacao defaults to CURRENT_DATE in DB
+          tipo_membro: 'Pessoa Fisica', 
+          funcao_no_membro: formData.tipoRelacao, 
         };
         const { error: membroError } = await supabase.from('MembrosEntidade').insert(membroEntidadePayload);
         if (membroError) throw membroError;
@@ -374,8 +395,25 @@ export default function NovaPessoaFisicaPage() {
                   </div>
                   {isOrganizacaoRequired && (
                     <div className="space-y-2"><Label htmlFor="organizacaoVinculadaId">Organização Vinculada <span className="text-destructive">*</span></Label>
-                        {/* Supabase: Options for this select should be loaded from public.Entidades */}
-                        <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}><SelectTrigger id="organizacaoVinculadaId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{organizacoesDisponiveis.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))}</SelectContent></Select>
+                        <Select 
+                          name="organizacaoVinculadaId" 
+                          value={formData.organizacaoVinculadaId} 
+                          onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} 
+                          required={isOrganizacaoRequired}
+                          disabled={isLoadingOrganizacoes}
+                        >
+                          <SelectTrigger id="organizacaoVinculadaId">
+                            <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <SelectValue placeholder={isLoadingOrganizacoes ? "Carregando..." : "Selecione"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {organizacoesOptions.length > 0 ? (
+                              organizacoesOptions.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))
+                            ) : (
+                              <SelectItem value="none" disabled>Nenhuma organização encontrada</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
                     </div>
                   )}
               </CardContent>
@@ -423,6 +461,9 @@ export default function NovaPessoaFisicaPage() {
                         <p><strong>Categoria:</strong> {formData.cnh.categoria}</p>
                         <p><strong>Emissão:</strong> {formatDateForDisplay(formData.cnh.data_emissao)}</p>
                         <p><strong>Validade:</strong> {formatDateForDisplay(formData.cnh.data_validade)}</p>
+                         {formData.cnh.primeira_habilitacao && <p><strong>1ª Habilitação:</strong> {formatDateForDisplay(formData.cnh.primeira_habilitacao)}</p>}
+                        {(formData.cnh.local_emissao_cidade || formData.cnh.local_emissao_uf) && <p><strong>Local Emissão:</strong> {`${formData.cnh.local_emissao_cidade || ''} ${formData.cnh.local_emissao_uf || ''}`.trim()}</p>}
+                         {formData.cnh.observacoes_cnh && <p className="sm:col-span-2"><strong>Observações CNH:</strong> {formData.cnh.observacoes_cnh}</p>}
                     </div>
                 ) : (<p className="text-muted-foreground">Nenhuma CNH informada. Clique em "Adicionar CNH" para incluir os dados.</p>)}
               </CardContent>
@@ -443,7 +484,6 @@ export default function NovaPessoaFisicaPage() {
         </CardFooter>
       </form>
 
-      {/* CNH Modal */}
       <Dialog open={isCnhModalOpen} onOpenChange={setIsCnhModalOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -484,18 +524,5 @@ export default function NovaPessoaFisicaPage() {
     </div>
   );
 }
-
-/* Supabase Integration Notes:
-- When submitting the main form (handleSubmit):
-  1. Insert into PessoasFisicas.
-  2. Get the new id_pessoa_fisica.
-  3. If formData.cnh exists, insert into CNHs using the new id_pessoa_fisica.
-  4. If isOrganizacaoRequired and formData.organizacaoVinculadaId exists, insert into MembrosEntidade.
-  - This sequence should ideally be a transaction (e.g., using a Supabase Edge Function).
-- Dynamic selects (Organizações Vinculadas) need to fetch data from Supabase.
-- RLS policies on all tables must permit these inserts for the logged-in user role.
-- Ensure `local_emissao_estado_uf` in CNH payload matches DB column name.
-*/
-    
 
     
