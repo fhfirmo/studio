@@ -14,13 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
-import { UserPlus, Save, XCircle, HomeIcon, InfoIcon, Users, Briefcase, Link2, CalendarDays, ClipboardList, Edit3 as EditIcon, PlusCircle, MapPin } from 'lucide-react';
+import { UserPlus, Save, XCircle, InfoIcon, Users, Briefcase, Link2, CalendarDays, ClipboardList, Edit3 as EditIcon, PlusCircle, MapPin, Loader2 } from 'lucide-react';
 import { format, parseISO, isValid } from "date-fns";
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
-// Placeholder para dados de CNH no formulário
+// Interface for CNH Data collected in the modal (without id_cnh, as it's for creation within PF form)
 interface CNHDataForForm {
   numero_registro: string;
   categoria: string;
@@ -44,43 +44,58 @@ const tiposRelacao = [
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
-// Placeholder: Em uma aplicação real, carregar de public."Entidades"
-const organizacoesDisponiveis = [
+const organizacoesDisponiveis = [ // Placeholder - Fetch from Supabase
   { value: "1", label: "Cooperativa Alfa (Exemplo ID 1)" },
   { value: "2", label: "Associação Beta (Exemplo ID 2)" },
   { value: "3", label: "Empresa Gama (Exemplo ID 3)" },
 ];
 
-// Placeholder for CEP API call
-async function fetchAddressFromCEP(cep: string): Promise<any | null> {
-  if (cep.replace(/\D/g, '').length !== 8) {
-    toast({ title: "CEP Inválido", description: "Por favor, insira um CEP com 8 dígitos.", variant: "destructive" });
-    return null;
-  }
-  console.log(`Simulating API call for CEP: ${cep}`);
-  await new Promise(resolve => setTimeout(resolve, 700));
-  // Example successful response
-  if (cep.startsWith("01001")) {
-    return {
-      logradouro: "Avenida Paulista",
-      bairro: "Bela Vista",
-      cidade: "São Paulo",
-      estado_uf: "SP",
-      cep: "01001-000", // Assuming API returns formatted CEP
-    };
-  } else if (cep.startsWith("12345")) {
-     return {
-      logradouro: "Rua dos Testes",
-      bairro: "Vila Nova",
-      cidade: "Campinas",
-      estado_uf: "SP",
-      cep: "12345-678",
-    };
-  }
-  toast({ title: "CEP Não Encontrado", description: "Não foi possível encontrar o endereço para este CEP.", variant: "default" });
-  return null;
+const brazilianStates = [
+  { value: "AC", label: "Acre" }, { value: "AL", label: "Alagoas" }, { value: "AP", label: "Amapá" },
+  { value: "AM", label: "Amazonas" }, { value: "BA", label: "Bahia" }, { value: "CE", label: "Ceará" },
+  { value: "DF", label: "Distrito Federal" }, { value: "ES", label: "Espírito Santo" }, { value: "GO", label: "Goiás" },
+  { value: "MA", label: "Maranhão" }, { value: "MT", label: "Mato Grosso" }, { value: "MS", label: "Mato Grosso do Sul" },
+  { value: "MG", label: "Minas Gerais" }, { value: "PA", label: "Pará" }, { value: "PB", label: "Paraíba" },
+  { value: "PR", label: "Paraná" }, { value: "PE", label: "Pernambuco" }, { value: "PI", label: "Piauí" },
+  { value: "RJ", label: "Rio de Janeiro" }, { value: "RN", label: "Rio Grande do Norte" }, { value: "RS", label: "Rio Grande do Sul" },
+  { value: "RO", label: "Rondônia" }, { value: "RR", label: "Roraima" }, { value: "SC", label: "Santa Catarina" },
+  { value: "SP", label: "São Paulo" }, { value: "SE", label: "Sergipe" }, { value: "TO", label: "Tocantins" }
+];
+
+interface BrasilApiResponse {
+  cep: string;
+  state: string;
+  city: string;
+  neighborhood: string;
+  street: string;
+  service: string;
 }
 
+async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
+  const cleanedCep = cep.replace(/\D/g, '');
+  if (cleanedCep.length !== 8) {
+    // This check is usually done before calling, but good to have defensively
+    return null;
+  }
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
+    if (!response.ok) {
+      console.error(`BrasilAPI CEP error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    const data: BrasilApiResponse = await response.json();
+    return {
+      street: data.street,
+      neighborhood: data.neighborhood,
+      city: data.city,
+      state: data.state,
+      cep: data.cep, // API returns formatted CEP
+    };
+  } catch (error) {
+    console.error("Error fetching address from CEP:", error);
+    return null;
+  }
+}
 
 export default function NovaPessoaFisicaPage() {
   const router = useRouter();
@@ -97,7 +112,6 @@ export default function NovaPessoaFisicaPage() {
     telefone: '',
     tipoRelacao: '',
     organizacaoVinculadaId: '',
-    // Endereço direto na PessoaFisica
     logradouro: '',
     numero: '',
     complemento: '',
@@ -106,7 +120,7 @@ export default function NovaPessoaFisicaPage() {
     cidade: '',
     estado_uf: '',
     observacoes: '',
-    cnh: null as CNHDataForForm | null,
+    cnh: null as CNHDataForForm | null, // Staged CNH data
   });
 
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
@@ -130,14 +144,16 @@ export default function NovaPessoaFisicaPage() {
         if (address) {
           setFormData(prev => ({
             ...prev,
-            logradouro: address.logradouro || '',
-            bairro: address.bairro || '',
-            cidade: address.cidade || '',
-            estado_uf: address.estado_uf || '',
-            // Não sobrescrever o CEP que o usuário digitou, a menos que a API retorne um formatado
+            logradouro: address.street || '',
+            bairro: address.neighborhood || '',
+            cidade: address.city || '',
+            estado_uf: address.state || '',
+            // Optionally update CEP if API returns a formatted one, or keep user's input
             // cep: address.cep || cepValue, 
           }));
-          toast({ title: "Endereço Encontrado!", description: "Campos de endereço preenchidos automaticamente." });
+          toast({ title: "Endereço Encontrado!", description: "Campos de endereço preenchidos." });
+        } else {
+          toast({ title: "CEP Não Encontrado", description: "Verifique o CEP ou preencha o endereço manualmente.", variant: "default" });
         }
       } catch (error) {
         console.error("Erro ao buscar CEP:", error);
@@ -162,7 +178,7 @@ export default function NovaPessoaFisicaPage() {
   };
 
   const handleOpenCnhModal = () => {
-    if (formData.cnh) {
+    if (formData.cnh) { // If CNH data is already staged
       setCnhModalMode('edit');
       setCnhModalFormData({ ...formData.cnh });
     } else {
@@ -191,9 +207,10 @@ export default function NovaPessoaFisicaPage() {
       toast({ title: "CNH: Campos Obrigatórios", description: "Número, Categoria, Emissão e Validade são obrigatórios.", variant: "destructive" });
       return;
     }
+    // Stage the CNH data into the main form's state
     setFormData(prev => ({ ...prev, cnh: { ...cnhModalFormData } }));
     setIsCnhModalOpen(false);
-    toast({ title: "Dados da CNH Preparados!", description: "As informações da CNH foram adicionadas ao formulário principal." });
+    toast({ title: "Dados da CNH Adicionados!", description: "As informações da CNH foram preparadas e serão salvas com o formulário principal." });
   };
   
   function formatDateForDisplay(dateString: string | null | undefined): string {
@@ -222,7 +239,7 @@ export default function NovaPessoaFisicaPage() {
     }
     
     try {
-      // Os campos de endereço agora fazem parte direta do payload de PessoasFisicas
+      // Payload for PessoasFisicas (includes direct address fields)
       const pessoaFisicaPayload = {
         nome_completo: formData.nomeCompleto,
         cpf: formData.cpf,
@@ -237,11 +254,12 @@ export default function NovaPessoaFisicaPage() {
         cep: formData.cep || null,
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
-        // Assumindo que tipo_relacao e observacoes são colunas diretas em PessoasFisicas
-        tipo_relacao: formData.tipoRelacao, // Você precisará adicionar esta coluna a PessoasFisicas se não existir
-        observacoes: formData.observacoes, // Você precisará adicionar esta coluna a PessoasFisicas se não existir
+        tipo_relacao: formData.tipoRelacao, 
+        observacoes: formData.observacoes,
+        // id_endereco is no longer used.
       };
 
+      console.log("Cadastrando Pessoa Física com payload:", pessoaFisicaPayload);
       const { data: pessoaFisicaData, error: pessoaFisicaError } = await supabase
         .from('PessoasFisicas')
         .insert(pessoaFisicaPayload)
@@ -254,8 +272,11 @@ export default function NovaPessoaFisicaPage() {
       if (!newPessoaFisicaId) {
         throw new Error("Falha ao obter ID da nova pessoa física.");
       }
+      console.log("Pessoa Física cadastrada com ID:", newPessoaFisicaId);
 
+      // If CNH data was staged, insert it into public.CNHs
       if (formData.cnh) {
+        console.log("Cadastrando CNH para Pessoa Física ID:", newPessoaFisicaId, "Payload CNH:", formData.cnh);
         const cnhPayload = {
           id_pessoa_fisica: newPessoaFisicaId,
           numero_registro: formData.cnh.numero_registro,
@@ -264,22 +285,27 @@ export default function NovaPessoaFisicaPage() {
           data_validade: formData.cnh.data_validade ? format(parseISO(formData.cnh.data_validade), "yyyy-MM-dd") : null,
           primeira_habilitacao: formData.cnh.primeira_habilitacao ? format(parseISO(formData.cnh.primeira_habilitacao), "yyyy-MM-dd") : null,
           local_emissao_cidade: formData.cnh.local_emissao_cidade || null,
-          local_emissao_estado_uf: formData.cnh.local_emissao_uf || null,
+          local_emissao_estado_uf: formData.cnh.local_emissao_uf || null, // Corrected field name
           observacoes_cnh: formData.cnh.observacoes_cnh || null,
         };
         const { error: cnhError } = await supabase.from('CNHs').insert(cnhPayload);
         if (cnhError) throw cnhError;
+        console.log("CNH cadastrada com sucesso.");
       }
 
+      // If linked to an organization, insert into public.MembrosEntidade
       if (isOrganizacaoRequired && formData.organizacaoVinculadaId) {
+        console.log("Cadastrando vínculo em MembrosEntidade. PessoaFisicaID:", newPessoaFisicaId, "OrganizacaoID:", formData.organizacaoVinculadaId);
         const membroEntidadePayload = {
           id_entidade_pai: parseInt(formData.organizacaoVinculadaId, 10),
           id_membro_pessoa_fisica: newPessoaFisicaId,
-          tipo_membro: 'Pessoa Fisica',
-          funcao_no_membro: formData.tipoRelacao,
+          tipo_membro: 'Pessoa Fisica', // Matches your CHECK constraint
+          funcao_no_membro: formData.tipoRelacao, // Using tipoRelacao as funcao_no_membro
+          // data_associacao defaults to CURRENT_DATE in DB
         };
         const { error: membroError } = await supabase.from('MembrosEntidade').insert(membroEntidadePayload);
         if (membroError) throw membroError;
+        console.log("Vínculo MembrosEntidade cadastrado com sucesso.");
       }
       
       toast({ title: "Pessoa Física Cadastrada!", description: `${formData.nomeCompleto} foi adicionado com sucesso.` });
@@ -311,7 +337,7 @@ export default function NovaPessoaFisicaPage() {
         <Tabs defaultValue="infoPessoais" className="w-full">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
             <TabsTrigger value="infoPessoais"><Users className="mr-2 h-4 w-4" />Info Pessoais</TabsTrigger>
-            <TabsTrigger value="vinculo"><Link2 className="mr-2 h-4 w-4" />Vínculo</TabsTrigger>
+            <TabsTrigger value="vinculo"><Link2 className="mr-2 h-4 w-4" />Vínculo e Relação</TabsTrigger>
             <TabsTrigger value="endereco"><MapPin className="mr-2 h-4 w-4" />Endereço</TabsTrigger>
             <TabsTrigger value="cnh"><ClipboardList className="mr-2 h-4 w-4" />CNH</TabsTrigger>
             <TabsTrigger value="outrasInfo"><InfoIcon className="mr-2 h-4 w-4" />Outras Info</TabsTrigger>
@@ -348,6 +374,7 @@ export default function NovaPessoaFisicaPage() {
                   </div>
                   {isOrganizacaoRequired && (
                     <div className="space-y-2"><Label htmlFor="organizacaoVinculadaId">Organização Vinculada <span className="text-destructive">*</span></Label>
+                        {/* Supabase: Options for this select should be loaded from public.Entidades */}
                         <Select name="organizacaoVinculadaId" value={formData.organizacaoVinculadaId} onValueChange={(value) => handleSelectChange('organizacaoVinculadaId', value)} required={isOrganizacaoRequired}><SelectTrigger id="organizacaoVinculadaId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{organizacoesDisponiveis.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))}</SelectContent></Select>
                     </div>
                   )}
@@ -386,7 +413,7 @@ export default function NovaPessoaFisicaPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div><CardTitle>Dados da CNH (Opcional)</CardTitle></div>
                 <Button type="button" variant="outline" onClick={handleOpenCnhModal}>
-                  {formData.cnh ? <><EditIcon className="mr-2 h-4 w-4"/>Editar CNH</> : <><PlusCircle className="mr-2 h-4 w-4"/>Adicionar CNH</>}
+                  {formData.cnh ? <><EditIcon className="mr-2 h-4 w-4"/>Editar CNH Informada</> : <><PlusCircle className="mr-2 h-4 w-4"/>Adicionar CNH</>}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -397,7 +424,7 @@ export default function NovaPessoaFisicaPage() {
                         <p><strong>Emissão:</strong> {formatDateForDisplay(formData.cnh.data_emissao)}</p>
                         <p><strong>Validade:</strong> {formatDateForDisplay(formData.cnh.data_validade)}</p>
                     </div>
-                ) : (<p className="text-muted-foreground">Nenhuma CNH informada.</p>)}
+                ) : (<p className="text-muted-foreground">Nenhuma CNH informada. Clique em "Adicionar CNH" para incluir os dados.</p>)}
               </CardContent>
             </Card>
           </TabsContent>
@@ -439,12 +466,17 @@ export default function NovaPessoaFisicaPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><Label htmlFor="cnh_local_emissao_cidade_modal">Cidade Emissão</Label><Input id="cnh_local_emissao_cidade_modal" name="local_emissao_cidade" value={cnhModalFormData.local_emissao_cidade || ''} onChange={handleCnhFormChange} /></div>
-              <div><Label htmlFor="cnh_local_emissao_uf_modal">UF Emissão</Label><Input id="cnh_local_emissao_uf_modal" name="local_emissao_uf" value={cnhModalFormData.local_emissao_uf || ''} onChange={handleCnhFormChange} maxLength={2} placeholder="Ex: SP"/></div>
+              <div><Label htmlFor="cnh_local_emissao_uf_modal">UF Emissão</Label>
+                <Select name="local_emissao_uf" value={cnhModalFormData.local_emissao_uf || ''} onValueChange={(value) => handleCnhSelectChange('local_emissao_uf', value)}>
+                  <SelectTrigger id="cnh_local_emissao_uf_modal"><SelectValue placeholder="UF" /></SelectTrigger>
+                  <SelectContent>{brazilianStates.map(state => (<SelectItem key={state.value} value={state.value}>{state.label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
             </div>
             <div><Label htmlFor="cnh_observacoes_cnh_modal">Observações CNH</Label><Textarea id="cnh_observacoes_cnh_modal" name="observacoes_cnh" value={cnhModalFormData.observacoes_cnh || ''} onChange={handleCnhFormChange} rows={3} /></div>
             <DialogFooter>
               <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-              <Button type="submit">{cnhModalMode === 'create' ? 'Adicionar CNH' : 'Atualizar CNH'}</Button>
+              <Button type="submit">{cnhModalMode === 'create' ? 'Adicionar CNH ao Formulário' : 'Atualizar CNH no Formulário'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -454,29 +486,16 @@ export default function NovaPessoaFisicaPage() {
 }
 
 /* Supabase Integration Notes:
-- PessoaFisica table will now have direct address columns: logradouro, numero, complemento, bairro, cep, cidade, estado_uf.
-- Remove any logic related to creating/updating a separate Enderecos table.
-- When inserting/updating PessoasFisicas, these address fields are part of the main payload.
-- For CEP API:
-  - Implement the actual API call in fetchAddressFromCEP.
-  - Consider adding a loading spinner while CEP is being fetched.
-  - Handle API errors gracefully.
-- Ensure RLS policies for PessoasFisicas allow writing these new address columns.
-- Backend should handle getting/creating id_municipio and id_estado if your PessoasFisicas table still uses FKs to these (though the prompt implies direct storage of cidade and estado_uf).
-- Ensure PessoasFisicas table has 'tipo_relacao' and 'observacoes' columns if they are to be saved directly.
+- When submitting the main form (handleSubmit):
+  1. Insert into PessoasFisicas.
+  2. Get the new id_pessoa_fisica.
+  3. If formData.cnh exists, insert into CNHs using the new id_pessoa_fisica.
+  4. If isOrganizacaoRequired and formData.organizacaoVinculadaId exists, insert into MembrosEntidade.
+  - This sequence should ideally be a transaction (e.g., using a Supabase Edge Function).
+- Dynamic selects (Organizações Vinculadas) need to fetch data from Supabase.
+- RLS policies on all tables must permit these inserts for the logged-in user role.
+- Ensure `local_emissao_estado_uf` in CNH payload matches DB column name.
 */
-/*
--- Example PessoasFisicas table modification (conceptual, adapt to your exact needs):
-ALTER TABLE public."PessoasFisicas"
-  DROP COLUMN IF EXISTS id_endereco, -- if it was an FK
-  ADD COLUMN IF NOT EXISTS logradouro VARCHAR(100),
-  ADD COLUMN IF NOT EXISTS numero VARCHAR(20),
-  ADD COLUMN IF NOT EXISTS complemento VARCHAR(50),
-  ADD COLUMN IF NOT EXISTS bairro VARCHAR(50),
-  ADD COLUMN IF NOT EXISTS cep VARCHAR(10),
-  ADD COLUMN IF NOT EXISTS cidade VARCHAR(100), -- Replaces id_municipio FK
-  ADD COLUMN IF NOT EXISTS estado_uf VARCHAR(2), -- Replaces id_estado FK
-  ADD COLUMN IF NOT EXISTS tipo_relacao VARCHAR(50), -- Add if not present
-  ADD COLUMN IF NOT EXISTS observacoes TEXT; -- Add if not present
-*/
+    
+
     
