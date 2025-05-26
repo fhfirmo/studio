@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Building, Save, XCircle, MapPin, Info, Briefcase, Loader2, Search, Users, DollarSign, FileText, Contact, UserCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
+import { format, parseISO } from 'date-fns';
 
 interface TipoEntidadeOption {
   value: string;
@@ -33,6 +34,7 @@ interface CNPJApiResponse {
   data_inicio_atividade?: string;
   porte?: string;
   natureza_juridica?: string;
+  cnae_fiscal?: number;
   cnae_fiscal_descricao?: string;
   cnaes_secundarios?: { codigo: number; descricao: string }[];
   descricao_situacao_cadastral?: string;
@@ -40,8 +42,8 @@ interface CNPJApiResponse {
   numero?: string;
   complemento?: string;
   bairro?: string;
-  municipio?: string;
-  uf?: string;
+  municipio?: string; // Ou 'city' dependendo da API
+  uf?: string; // Ou 'state'
   cep?: string;
   ddd_telefone_1?: string;
   email?: string;
@@ -57,35 +59,41 @@ interface BrasilApiResponse { // For CEP API
   service: string;
 }
 
+const getValueOrDefault = (value: string | null | undefined, defaultValue: string = "sem informação"): string => {
+    if (value === null || value === undefined || String(value).trim() === '') {
+        return defaultValue;
+    }
+    return String(value).trim();
+};
+
+
 async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNPJApiResponse | null> {
   const apiUrl = `https://brasilapi.com.br/api/cnpj/v1/${cleanedCnpj}`;
+  console.log("NovaOrganizacaoPage: Chamando API CNPJ para (cleaned):", cleanedCnpj);
   console.log("NovaOrganizacaoPage: URL da API CNPJ:", apiUrl);
 
   try {
     const response = await fetch(apiUrl);
+    const rawTextResponse = await response.text(); // Get raw text first for logging
     console.log(`NovaOrganizacaoPage: CNPJ API response status: ${response.status} ${response.statusText}`);
-
+    
     if (!response.ok) {
-      const errorBody = await response.text().catch(() => "Corpo da resposta de erro não pôde ser lido.");
-      console.error(`NovaOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}. Corpo: ${errorBody}`);
+      console.error(`NovaOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}. Corpo: ${rawTextResponse}`);
       return null;
     }
-
-    const rawTextResponse = await response.text();
-    console.log('NovaOrganizacaoPage: CNPJ API raw text response (before JSON.parse):', rawTextResponse);
-
+    
+    console.log('NovaOrganizacaoPage: CNPJ API response data (raw text):', rawTextResponse);
     try {
       const data: CNPJApiResponse = JSON.parse(rawTextResponse);
       console.log('NovaOrganizacaoPage: CNPJ API response data (parsed JSON):', data);
       return data;
     } catch (jsonError: any) {
-      console.error('NovaOrganizacaoPage: Erro ao processar JSON da API CNPJ:', jsonError.message);
-      console.error('NovaOrganizacaoPage: Raw text response that failed to parse:', rawTextResponse);
+      console.error('NovaOrganizacaoPage: Erro ao processar JSON da API CNPJ:', jsonError.message, 'Raw text:', rawTextResponse);
       return null;
     }
 
   } catch (error: any) {
-    console.error("NovaOrganizacaoPage: Erro ao buscar dados do CNPJ (fetch/network):", error.message);
+    console.error("NovaOrganizacaoPage: Erro ao buscar dados do CNPJ (fetch/network):", error.message, error);
     return null;
   }
 }
@@ -162,6 +170,7 @@ export default function NovaOrganizacaoPage() {
   useEffect(() => {
     const fetchTiposEntidade = async () => {
       if (!supabase) return;
+      // TODO: Implement RLS for TiposEntidade if needed by non-admin roles.
       const { data, error } = await supabase.from('TiposEntidade').select('id_tipo_entidade, nome_tipo').order('nome_tipo');
       if (error) {
         console.error("Erro ao buscar tipos de entidade:", error);
@@ -175,22 +184,22 @@ export default function NovaOrganizacaoPage() {
 
   const handleCnpjBlur = async (event: FocusEvent<HTMLInputElement>) => {
     const cnpjValue = event.target.value;
-    const cleanedCnpjForAPI = cnpjValue.replace(/\D/g, '');
+    const cleanedCnpj = cnpjValue.replace(/\D/g, '');
 
-    if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14) {
+    if (cleanedCnpj && cleanedCnpj.length === 14) {
       setIsCnpjLoading(true);
-      const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpjForAPI);
+      const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj);
       if (apiData) {
         setFormData(prev => ({
           ...prev,
           nome: apiData.razao_social || '',
-          nome_fantasia: apiData.nome_fantasia || '',
-          cnpj: apiData.cnpj || cleanedCnpjForAPI, // Use cleanedCNPJ from API to ensure it's just numbers
-          data_inicio_atividade: apiData.data_inicio_atividade || '',
-          porte_empresa: apiData.porte || '',
-          natureza_juridica: apiData.natureza_juridica || '',
-          cnae_principal: apiData.cnae_fiscal_descricao || '',
-          descricao_situacao_cadastral: apiData.descricao_situacao_cadastral || '',
+          nome_fantasia: getValueOrDefault(apiData.nome_fantasia),
+          cnpj: apiData.cnpj || cleanedCnpj,
+          data_inicio_atividade: apiData.data_inicio_atividade || "sem informação",
+          porte_empresa: getValueOrDefault(apiData.porte),
+          natureza_juridica: getValueOrDefault(apiData.natureza_juridica),
+          cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao),
+          descricao_situacao_cadastral: getValueOrDefault(apiData.descricao_situacao_cadastral),
           logradouro: apiData.logradouro || '',
           numero: apiData.numero || '',
           complemento: apiData.complemento || '',
@@ -198,8 +207,8 @@ export default function NovaOrganizacaoPage() {
           cidade: apiData.municipio || '',
           estado_uf: apiData.uf || '',
           cep: (apiData.cep || '').replace(/\D/g, ''),
-          telefone: apiData.ddd_telefone_1 || '',
-          email: apiData.email || '',
+          telefone: getValueOrDefault(apiData.ddd_telefone_1),
+          email: getValueOrDefault(apiData.email),
         }));
         setDisplayOnlyApiData({
           cnae_secundarios: apiData.cnaes_secundarios || [],
@@ -209,7 +218,7 @@ export default function NovaOrganizacaoPage() {
       } else {
         toast({
           title: "CNPJ Não Encontrado ou Erro na API",
-          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro ao consultar. Verifique o número ou preencha manualmente. Consulte o console para mais detalhes.",
+          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro ao consultar a API. Verifique o número digitado e tente novamente. Consulte o console para mais detalhes do erro.",
           variant: "default",
           duration: 7000,
         });
@@ -292,18 +301,18 @@ export default function NovaOrganizacaoPage() {
 
       const entidadePayload = {
         nome: formData.nome,
-        nome_fantasia: formData.nome_fantasia || null,
+        nome_fantasia: formData.nome_fantasia === "sem informação" ? null : formData.nome_fantasia,
         cnpj: formData.cnpj.replace(/\D/g, ''),
         codigo_entidade: formData.codigo_entidade,
         id_tipo_entidade: parseInt(formData.id_tipo_entidade, 10),
-        telefone: formData.telefone || null,
-        email: formData.email || null,
-        data_inicio_atividade: formData.data_inicio_atividade || null,
-        porte_empresa: formData.porte_empresa || null,
-        natureza_juridica: formData.natureza_juridica || null,
-        cnae_principal: formData.cnae_principal || null,
+        telefone: formData.telefone === "sem informação" ? null : formData.telefone,
+        email: formData.email === "sem informação" ? null : formData.email,
+        data_inicio_atividade: formData.data_inicio_atividade === "sem informação" || !formData.data_inicio_atividade ? null : formData.data_inicio_atividade,
+        porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa,
+        natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica,
+        cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal,
         cnae_secundarios: displayOnlyApiData?.cnae_secundarios || null,
-        descricao_situacao_cadastral: formData.descricao_situacao_cadastral || null,
+        descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
         complemento: formData.complemento || null,
@@ -335,21 +344,22 @@ export default function NovaOrganizacaoPage() {
         .single();
 
       if (insertError) throw insertError;
-      console.log("NovaOrganizacaoPage: Entidade inserida com ID:", insertedEntidade?.id_entidade);
+      const newEntidadeId = insertedEntidade?.id_entidade;
+      if (!newEntidadeId) throw new Error("Falha ao obter ID da nova entidade.");
+      console.log("NovaOrganizacaoPage: Entidade inserida com ID:", newEntidadeId);
 
-      if (displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0 && insertedEntidade?.id_entidade) {
-        console.log("NovaOrganizacaoPage: Inserindo QSA para Entidade ID:", insertedEntidade.id_entidade);
+      if (displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0) {
+        console.log("NovaOrganizacaoPage: Inserindo QSA para Entidade ID:", newEntidadeId);
         const qsaPayload = displayOnlyApiData.qsa.map(socio => ({
-          id_entidade: insertedEntidade.id_entidade,
+          id_entidade: newEntidadeId,
           nome_socio: socio.nome_socio,
           qualificacao_socio: socio.qualificacao_socio,
           data_entrada_sociedade: socio.data_entrada_sociedade || null,
-          // observacoes: QSA from API doesn't have observacoes, so it's null here by default
         }));
         const { error: qsaError } = await supabase.from('QSA').insert(qsaPayload);
         if (qsaError) {
           console.warn("NovaOrganizacaoPage: Erro ao salvar QSA, mas entidade principal foi criada:", JSON.stringify(qsaError, null, 2));
-          toast({ title: "Entidade Criada com Aviso", description: "A organização foi salva, mas houve um erro ao salvar os dados do QSA.", variant: "default" });
+          toast({ title: "Entidade Criada com Aviso", description: `A organização foi salva, mas houve um erro ao salvar os dados do QSA: ${qsaError.message}`, variant: "default" });
         } else {
           console.log("NovaOrganizacaoPage: QSA inserido com sucesso.");
         }
@@ -359,7 +369,7 @@ export default function NovaOrganizacaoPage() {
       router.push('/admin/organizacoes');
 
     } catch (error: any) {
-      console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização:', JSON.stringify(error, null, 2), error);
+      console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização:', error, JSON.stringify(error, null, 2));
       const defaultMessage = "Ocorreu um erro. Verifique o console e as permissões RLS.";
       toast({ title: "Erro ao Cadastrar", description: error.message || defaultMessage, variant: "destructive", duration: 10000 });
     } finally {
@@ -543,7 +553,11 @@ export default function NovaOrganizacaoPage() {
                       <thead className="bg-muted/50"><tr className="border-b"><th className="p-2 text-left font-medium">Nome Sócio/Administrador</th><th className="p-2 text-left font-medium">Qualificação</th><th className="p-2 text-left font-medium hidden sm:table-cell">Data Entrada</th></tr></thead>
                       <tbody>
                         {displayOnlyApiData.qsa.map((socio, index) => (
-                          <tr key={index} className="border-b last:border-b-0 hover:bg-muted/20"><td className="p-2">{socio.nome_socio}</td><td className="p-2">{socio.qualificacao_socio}</td><td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade || 'N/A'}</td></tr>
+                          <tr key={index} className="border-b last:border-b-0 hover:bg-muted/20">
+                            <td className="p-2">{socio.nome_socio}</td>
+                            <td className="p-2">{socio.qualificacao_socio}</td>
+                            <td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade ? format(parseISO(socio.data_entrada_sociedade), 'dd/MM/yyyy') : <span className="italic text-muted-foreground">sem informação</span>}</td>
+                          </tr>
                         ))}
                       </tbody>
                     </table>
@@ -582,10 +596,9 @@ Supabase Integration Notes:
   - Ao digitar CNPJ, chamar API CNPJ (real `fetchOrganizacaoDataFromCNPJAPI`).
   - Preencher campos do formulário com dados da API (nome, endereço principal, dados econômicos).
   - QSA da API é exibido. Ao salvar, precisa inserir em public."QSA" (idealmente em transação via Edge Function ou após o insert da Entidade).
-  - Endereço 2 usa API de CEP (BrasilAPI).
+  - Endereço 1 e 2 usam API de CEP (BrasilAPI).
   - Campos de contato são manuais.
   - Ao submeter, o payload para public."Entidades" incluirá todos os novos campos.
   - Validações de frontend para formatos de CEP, UF, email, telefone.
 */
 
-    

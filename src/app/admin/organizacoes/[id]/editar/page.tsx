@@ -106,6 +106,13 @@ interface BrasilApiResponse { // For CEP API
   service: string;
 }
 
+const getValueOrDefault = (value: string | null | undefined, defaultValue: string = "sem informação"): string => {
+    if (value === null || value === undefined || String(value).trim() === '') {
+        return defaultValue;
+    }
+    return String(value).trim();
+};
+
 async function getOrganizacaoById(orgId: string): Promise<OrganizacaoDataFromDB | null> {
     if (!supabase) {
         console.error("EditarOrganizacaoPage: Supabase client not initialized.");
@@ -137,18 +144,28 @@ async function getOrganizacaoById(orgId: string): Promise<OrganizacaoDataFromDB 
 
 async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNPJApiResponse | null> {
   const apiUrl = `https://brasilapi.com.br/api/cnpj/v1/${cleanedCnpj}`;
+  console.log("EditarOrganizacaoPage: Chamando API CNPJ para (cleaned):", cleanedCnpj);
+  console.log("EditarOrganizacaoPage: URL da API CNPJ:", apiUrl);
   try {
     const response = await fetch(apiUrl);
+    const rawTextResponse = await response.text();
+    console.log(`EditarOrganizacaoPage: CNPJ API response status: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
-      const errorBody = await response.text().catch(() => "Corpo da resposta de erro não pôde ser lido.");
-      console.error(`EditarOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}. Corpo: ${errorBody}`);
+      console.error(`EditarOrganizacaoPage: CNPJ API retornou erro. Status: ${response.status} Texto: ${response.statusText}. Corpo: ${rawTextResponse}`);
       return null;
     }
-    const rawTextResponse = await response.text();
-    const data: CNPJApiResponse = JSON.parse(rawTextResponse);
-    return data;
+     console.log('EditarOrganizacaoPage: CNPJ API response data (raw text):', rawTextResponse);
+    try {
+        const data: CNPJApiResponse = JSON.parse(rawTextResponse);
+        console.log('EditarOrganizacaoPage: CNPJ API response data (parsed JSON):', data);
+        return data;
+    } catch (jsonError: any) {
+        console.error('EditarOrganizacaoPage: Erro ao processar JSON da API CNPJ:', jsonError.message, 'Raw text:', rawTextResponse);
+        return null;
+    }
   } catch (error: any) {
-    console.error("EditarOrganizacaoPage: Erro ao buscar dados do CNPJ (fetch/network):", error.message);
+    console.error("EditarOrganizacaoPage: Erro ao buscar dados do CNPJ (fetch/network):", error.message, error);
     return null;
   }
 }
@@ -250,11 +267,11 @@ export default function EditarOrganizacaoPage() {
             setFormData({
                 cnpj: orgData.cnpj || '',
                 nome: orgData.nome || '',
-                nome_fantasia: orgData.nome_fantasia || '',
+                nome_fantasia: getValueOrDefault(orgData.nome_fantasia),
                 codigo_entidade: orgData.codigo_entidade || '',
                 id_tipo_entidade: orgData.id_tipo_entidade?.toString() || '',
-                telefone: orgData.telefone || '',
-                email: orgData.email || '',
+                telefone: getValueOrDefault(orgData.telefone),
+                email: getValueOrDefault(orgData.email),
                 logradouro: orgData.logradouro || '',
                 numero: orgData.numero || '',
                 complemento: orgData.complemento || '',
@@ -274,11 +291,11 @@ export default function EditarOrganizacaoPage() {
                 email_contato: orgData.email_contato || '',
                 telefone_contato: orgData.telefone_contato || '',
                 observacoes_contato: orgData.observacoes_contato || '',
-                data_inicio_atividade: orgData.data_inicio_atividade ? format(parseISO(orgData.data_inicio_atividade), 'yyyy-MM-dd') : '',
-                porte_empresa: orgData.porte_empresa || '',
-                natureza_juridica: orgData.natureza_juridica || '',
-                cnae_principal: orgData.cnae_principal || '',
-                descricao_situacao_cadastral: orgData.descricao_situacao_cadastral || '',
+                data_inicio_atividade: orgData.data_inicio_atividade ? format(parseISO(orgData.data_inicio_atividade), 'yyyy-MM-dd') : getValueOrDefault(null),
+                porte_empresa: getValueOrDefault(orgData.porte_empresa),
+                natureza_juridica: getValueOrDefault(orgData.natureza_juridica),
+                cnae_principal: getValueOrDefault(orgData.cnae_principal),
+                descricao_situacao_cadastral: getValueOrDefault(orgData.descricao_situacao_cadastral),
                 observacoes: orgData.observacoes || '',
             });
             setDisplayOnlyApiData({
@@ -310,13 +327,13 @@ export default function EditarOrganizacaoPage() {
         setFormData(prev => ({
           ...prev, // Keep existing data, especially manually entered contact/address2
           nome: apiData.razao_social || prev.nome,
-          nome_fantasia: apiData.nome_fantasia || prev.nome_fantasia,
+          nome_fantasia: getValueOrDefault(apiData.nome_fantasia),
           cnpj: apiData.cnpj || cleanedCnpjForAPI,
-          data_inicio_atividade: apiData.data_inicio_atividade || prev.data_inicio_atividade,
-          porte_empresa: apiData.porte || prev.porte_empresa,
-          natureza_juridica: apiData.natureza_juridica || prev.natureza_juridica,
-          cnae_principal: apiData.cnae_fiscal_descricao || prev.cnae_principal,
-          descricao_situacao_cadastral: apiData.descricao_situacao_cadastral || prev.descricao_situacao_cadastral,
+          data_inicio_atividade: apiData.data_inicio_atividade || getValueOrDefault(prev.data_inicio_atividade),
+          porte_empresa: getValueOrDefault(apiData.porte, prev.porte_empresa),
+          natureza_juridica: getValueOrDefault(apiData.natureza_juridica, prev.natureza_juridica),
+          cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao, prev.cnae_principal),
+          descricao_situacao_cadastral: getValueOrDefault(apiData.descricao_situacao_cadastral, prev.descricao_situacao_cadastral),
           logradouro: apiData.logradouro || prev.logradouro,
           numero: apiData.numero || prev.numero,
           complemento: apiData.complemento || prev.complemento,
@@ -324,8 +341,8 @@ export default function EditarOrganizacaoPage() {
           cidade: apiData.municipio || prev.cidade,
           estado_uf: apiData.uf || prev.estado_uf,
           cep: (apiData.cep || prev.cep).replace(/\D/g, ''),
-          telefone: apiData.ddd_telefone_1 || prev.telefone,
-          email: apiData.email || prev.email,
+          telefone: getValueOrDefault(apiData.ddd_telefone_1, prev.telefone),
+          email: getValueOrDefault(apiData.email, prev.email),
         }));
         setDisplayOnlyApiData(prev => ({
             ...(prev ?? {cnae_secundarios: [], qsa: []}),
@@ -401,18 +418,18 @@ export default function EditarOrganizacaoPage() {
 
       const entidadeUpdatePayload = {
         nome: formData.nome,
-        nome_fantasia: formData.nome_fantasia || null,
+        nome_fantasia: formData.nome_fantasia === "sem informação" ? null : formData.nome_fantasia,
         codigo_entidade: formData.codigo_entidade,
         cnpj: formData.cnpj.replace(/\D/g, ''),
         id_tipo_entidade: parseInt(formData.id_tipo_entidade, 10),
-        telefone: formData.telefone || null,
-        email: formData.email || null,
-        data_inicio_atividade: formData.data_inicio_atividade || null,
-        porte_empresa: formData.porte_empresa || null,
-        natureza_juridica: formData.natureza_juridica || null,
-        cnae_principal: formData.cnae_principal || null,
+        telefone: formData.telefone === "sem informação" ? null : formData.telefone,
+        email: formData.email === "sem informação" ? null : formData.email,
+        data_inicio_atividade: formData.data_inicio_atividade === "sem informação" || !formData.data_inicio_atividade ? null : formData.data_inicio_atividade,
+        porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa,
+        natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica,
+        cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal,
         cnae_secundarios: displayOnlyApiData?.cnae_secundarios || null, 
-        descricao_situacao_cadastral: formData.descricao_situacao_cadastral || null,
+        descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
         complemento: formData.complemento || null,
@@ -501,9 +518,9 @@ export default function EditarOrganizacaoPage() {
                 name="cnpj" 
                 value={formData.cnpj} 
                 onChange={handleChange}
-                onBlur={handleCnpjBlur} // Allows re-fetching if CNPJ is changed and blurred
-                className="bg-background" // Not strictly read-only to allow re-fetch
-                disabled={isLoading || isCnpjLoading}
+                onBlur={handleCnpjBlur} 
+                className="bg-background" 
+                disabled={isLoading || isCnpjLoading || !orgFound } // Disable if org not found
               />
                {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-1" />}
             </div>
@@ -648,7 +665,7 @@ export default function EditarOrganizacaoPage() {
                           <tr key={(socio as QSAItemFromDB).id_qsa || index} className="border-b last:border-b-0 hover:bg-muted/20">
                               <td className="p-2">{socio.nome_socio}</td>
                               <td className="p-2">{socio.qualificacao_socio}</td>
-                              <td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade ? format(parseISO(socio.data_entrada_sociedade), 'dd/MM/yyyy') : 'N/A'}</td>
+                              <td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade ? format(parseISO(socio.data_entrada_sociedade), 'dd/MM/yyyy') : <span className="italic text-muted-foreground">sem informação</span>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -688,4 +705,3 @@ export default function EditarOrganizacaoPage() {
 - CNPJ field is typically read-only on edit. If re-fetch by CNPJ is needed, a separate button might be better.
 */
 
-    
