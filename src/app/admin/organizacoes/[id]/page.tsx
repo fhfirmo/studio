@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added AlertDialogTrigger
 import { Building, Edit3, Trash2, AlertTriangle, Info, MapPin, Users, Car, CalendarDays, Mail, Phone, Hash, Workflow, UserPlus, GripVertical, DollarSign, FileText, Contact, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from 'next/navigation';
@@ -89,7 +89,7 @@ interface VeiculoAssociado {
   id_veiculo: string;
   placa_atual: string;
   modelo_nome: string; 
-  marca: string; // This should come from ModelosVeiculo
+  marca: string; 
   ano_fabricacao: number | null;
 }
 
@@ -269,12 +269,12 @@ export default function OrganizacaoDetailsPage() {
   
   const [memberToRemove, setMemberToRemove] = useState<Membro | null>(null);
   const [isRemoveMemberModalOpen, setIsRemoveMemberModalOpen] = useState(false);
-  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<{value: string, label: string}[]>(placeholderPessoasFisicasOptions);
-  const [availableOutrasEntidades, setAvailableOutrasEntidades] = useState<{value: string, label: string}[]>(placeholderOutrasEntidadesOptions);
+  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<{value: string, label: string}[]>([]);
+  const [availableOutrasEntidades, setAvailableOutrasEntidades] = useState<{value: string, label: string}[]>([]);
 
   const fetchSelectOptions = async () => {
     if (!supabase) return;
-    // Fetch Pessoas Fisicas
+    
     const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo');
     if (pfError) console.error("Erro ao buscar Pessoas Físicas para select:", pfError);
     else setAvailablePessoasFisicas(pfData.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: `${pf.nome_completo} (${pf.cpf})` })));
@@ -305,7 +305,7 @@ export default function OrganizacaoDetailsPage() {
     refreshOrganizacaoDetails();
     fetchSelectOptions();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizacaoId]);
+  }, [organizacaoId]); // Removed toast from dependencies as it's stable
 
   const formatDate = (dateString: string | null | undefined, outputFormat = "dd/MM/yyyy") => {
     if (!dateString) return "N/A";
@@ -418,11 +418,9 @@ export default function OrganizacaoDetailsPage() {
       console.log(`Excluindo Organização ID: ${organizacao.id}`);
       
       try {
-        // Delete related QSA entries
         const { error: qsaError } = await supabase.from('QSA').delete().eq('id_entidade', parseInt(organizacao.id));
-        if (qsaError) console.warn("Erro ao deletar QSA da organização:", qsaError.message); // Log warning but proceed
+        if (qsaError) console.warn("Erro ao deletar QSA da organização:", qsaError.message); 
 
-        // Delete Entidade
         const { error } = await supabase.from('Entidades').delete().eq('id_entidade', parseInt(organizacao.id));
         if (error) throw error;
 
@@ -489,7 +487,7 @@ export default function OrganizacaoDetailsPage() {
             <CardContent><InfoItem label="Endereço Completo" value={fullAddress} /></CardContent>
           </Card>
 
-          {organizacao.endereco2_logradouro && (
+          {(organizacao.endereco2_logradouro || organizacao.endereco2_cidade || organizacao.endereco2_cep) && (
             <Card className="shadow-lg">
               <CardHeader><CardTitle className="flex items-center text-xl"><MapPin className="mr-2 h-5 w-5 text-primary" /> Endereço Adicional/Correspondência</CardTitle></CardHeader>
               <CardContent><InfoItem label="Endereço Completo 2" value={fullAddress2} /></CardContent>
@@ -628,3 +626,4 @@ const InfoItem = ({ label, value, icon: Icon, className }: { label: string, valu
 - Delete Organizacao: Ensure ON DELETE CASCADE is set for QSA, MembrosEntidade, Veiculos(id_proprietario_entidade), Seguros(id_titular_entidade), Arquivos(id_entidade_associada) or handle these deletions in a transaction/Edge Function.
 */
     
+
