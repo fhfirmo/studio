@@ -23,12 +23,20 @@ const placeholderTiposOrganizacao = [
   { value: "5", label: "Empresa Privada (Exemplo ID 5)" },
 ];
 
-// Placeholder for BrasilAPI CEP call
-async function fetchAddressFromCEP(cep: string): Promise<Partial<{ logradouro: string; bairro: string; cidade: string; estado_uf: string; cep: string }> | null> {
+interface BrasilApiResponse {
+  cep: string;
+  state: string;
+  city: string;
+  neighborhood: string;
+  street: string;
+  service: string;
+}
+
+async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
   if (cleanedCep.length !== 8) return null;
 
-  console.log(`NovaOrganizacaoPage: Chamando BrasilAPI para CEP: ${cleanedCep}`);
+  console.log("NovaOrganizacaoPage: Chamando BrasilAPI para CEP:", cleanedCep);
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
     if (!response.ok) {
@@ -37,15 +45,14 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<{ logradouro: s
       console.error(`NovaOrganizacaoPage: BrasilAPI CEP error body: ${errorData}`);
       return null;
     }
-    const data = await response.json();
+    const data: BrasilApiResponse = await response.json();
     console.log(`NovaOrganizacaoPage: BrasilAPI CEP response:`, data);
-    // Ensure mapping matches the expected fields (street, neighborhood, city, state)
     return {
-      logradouro: data.street,
-      bairro: data.neighborhood,
-      cidade: data.city,
-      estado_uf: data.state,
-      cep: data.cep, // API returns formatted CEP
+      street: data.street,
+      neighborhood: data.neighborhood,
+      city: data.city,
+      state: data.state,
+      cep: data.cep, 
     };
   } catch (error) {
     console.error("NovaOrganizacaoPage: Erro ao buscar endereço do CEP via BrasilAPI:", error);
@@ -67,8 +74,7 @@ export default function NovaOrganizacaoPage() {
     tipoOrganizacaoId: '',
     telefone: '',
     email: '',
-    dataCadastro: new Date().toISOString().split('T')[0], // Default to today
-    // Endereço direto
+    dataCadastro: new Date().toISOString().split('T')[0],
     logradouro: '',
     numero: '',
     complemento: '',
@@ -78,7 +84,6 @@ export default function NovaOrganizacaoPage() {
     estado_uf: '',
   });
 
-  // Placeholder for dynamic TiposEntidade (fetch from Supabase)
   const [tiposEntidadeOptions, setTiposEntidadeOptions] = useState(placeholderTiposOrganizacao);
   // In a real app:
   // useEffect(() => {
@@ -101,11 +106,11 @@ export default function NovaOrganizacaoPage() {
         if (address) {
           setFormData(prev => ({
             ...prev,
-            logradouro: address.logradouro || '',
-            bairro: address.bairro || '',
-            cidade: address.cidade || '',
-            estado_uf: address.estado_uf || '',
-            cep: address.cep || cepValue, // Use formatted CEP from API or user's input
+            logradouro: address.street || '',
+            bairro: address.neighborhood || '',
+            cidade: address.city || '',
+            estado_uf: address.state || '',
+            cep: address.cep || cepValue, 
           }));
           toast({ title: "Endereço Encontrado!", description: "Campos de endereço preenchidos automaticamente." });
         } else {
@@ -147,10 +152,9 @@ export default function NovaOrganizacaoPage() {
         return;
       }
       console.log(`NovaOrganizacaoPage: Resultado da RPC get_user_role (client-side):`, rpcData);
-      // Ensure user has a role that allows creation based on your RLS
-      const allowedRolesForCreation = ['admin', 'supervisor', 'operator'];
+      const allowedRolesForCreation = ['admin', 'supervisor', 'operator']; 
       if (!rpcData || !allowedRolesForCreation.includes(rpcData as string)) {
-         toast({ title: "Permissão Insuficiente (Diagnóstico)", description: `Seu papel atual detectado é '${rpcData || 'desconhecido'}'. A política RLS requer 'admin', 'supervisor' ou 'operator' para esta operação.`, variant: "destructive", duration: 10000 });
+         toast({ title: "Permissão Insuficiente (Diagnóstico)", description: `Seu papel atual detectado é '${rpcData || 'desconhecido'}'. A política RLS requer um dos seguintes papéis para esta operação: ${allowedRolesForCreation.join(', ')}.`, variant: "destructive", duration: 10000 });
          setIsLoading(false);
          return;
       }
@@ -162,19 +166,17 @@ export default function NovaOrganizacaoPage() {
     }
     // End Diagnostic
 
-    // Client-side validation (basic example)
     if (!formData.nomeOrganizacao || !formData.codigoEntidade || !formData.cnpj || !formData.tipoOrganizacaoId) {
       toast({ title: "Campos Obrigatórios", description: "Nome da Organização, Código da Entidade, CNPJ e Tipo de Organização são obrigatórios.", variant: "destructive" });
       setIsLoading(false); return;
     }
     
     try {
-      // Payload for Entidades table (assumes direct address fields)
       const entidadePayload = {
         nome: formData.nomeOrganizacao,
         codigo_entidade: formData.codigoEntidade,
-        cnpj: formData.cnpj, // Ensure proper formatting/masking if needed before sending
-        id_tipo_entidade: parseInt(formData.tipoOrganizacaoId, 10), // Ensure this is an integer
+        cnpj: formData.cnpj,
+        id_tipo_entidade: parseInt(formData.tipoOrganizacaoId, 10),
         telefone: formData.telefone || null,
         email: formData.email || null,
         data_cadastro: formData.dataCadastro ? new Date(formData.dataCadastro).toISOString() : new Date().toISOString(),
@@ -185,7 +187,6 @@ export default function NovaOrganizacaoPage() {
         cep: formData.cep || null,
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
-        // user_id and responsavel_cadastro are typically handled by db triggers or backend logic based on auth.uid()
       };
       console.log("NovaOrganizacaoPage: Payload para Entidades:", entidadePayload);
 
@@ -197,23 +198,21 @@ export default function NovaOrganizacaoPage() {
 
       if (error) {
         console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização (Supabase):', JSON.stringify(error, null, 2), error);
-        const defaultMessage = "Ocorreu um erro desconhecido ao salvar a organização. Verifique o console e as permissões RLS na tabela 'Entidades'. Certifique-se também que o esquema da tabela no banco de dados corresponde aos campos enviados (especialmente campos de endereço e a ausência de 'id_endereco' como FK).";
+        const defaultMessage = "Ocorreu um erro desconhecido ao salvar a organização. Verifique o console e as permissões RLS na tabela 'Entidades'.";
         toast({ title: "Erro ao Cadastrar Organização", description: error.message || defaultMessage, variant: "destructive", duration: 10000 });
-        setIsLoading(false); // Ensure loading is stopped on error
+        setIsLoading(false); 
         return;
       }
       
       toast({ title: "Organização Cadastrada!", description: `${data?.nome || 'A nova organização'} foi adicionada com sucesso.` });
-      router.push('/admin/organizacoes'); // Redirect on success
+      router.push('/admin/organizacoes'); 
 
     } catch (error: any) {
       console.error('NovaOrganizacaoPage: Erro inesperado no handleSubmit:', JSON.stringify(error, null, 2), error);
       toast({ title: "Erro ao Cadastrar", description: error.message || "Ocorreu um erro inesperado.", variant: "destructive" });
     } finally {
-      // Only set isLoading to false if not navigating away.
-      // However, router.push is async, so it might still be set before navigation completes.
-      // A more robust solution might involve checking if the component is still mounted.
-      // For now, a simple setIsLoading is fine.
+      // This might still run if navigation happens before this finally block executes fully.
+      // Checking if component is mounted or a navigation flag could be more robust if issues persist.
       setIsLoading(false);
     }
   };
@@ -250,7 +249,6 @@ export default function NovaOrganizacaoPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2"><Label htmlFor="cnpj">CNPJ <span className="text-destructive">*</span></Label><Input id="cnpj" name="cnpj" value={formData.cnpj} onChange={handleChange} placeholder="XX.XXX.XXX/YYYY-ZZ" required disabled={isLoading} /></div>
                   <div className="space-y-2"><Label htmlFor="tipoOrganizacaoId">Tipo de Organização <span className="text-destructive">*</span></Label>
-                    {/* Supabase: Options for this select should be loaded dynamically from public.TiposEntidade */}
                     <Select name="tipoOrganizacaoId" value={formData.tipoOrganizacaoId} onValueChange={(v) => handleSelectChange('tipoOrganizacaoId', v)} required disabled={isLoading}><SelectTrigger id="tipoOrganizacaoId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione o tipo" /></SelectTrigger><SelectContent>{tiposEntidadeOptions.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select>
                   </div>
                 </div>
@@ -302,14 +300,11 @@ export default function NovaOrganizacaoPage() {
 /*
 Supabase Integration Notes:
 - This page assumes the 'Entidades' table has direct address columns (logradouro, numero, etc.)
-  and NO LONGER uses an 'id_endereco' foreign key.
 - Ensure RLS policies on 'Entidades' and 'TiposEntidade' allow the logged-in user (admin/supervisor/operator)
   to perform INSERT operations on 'Entidades' and SELECT on 'TiposEntidade'.
 - The 'user_id' and 'responsavel_cadastro' fields in 'Entidades' would typically be populated on the
-  backend (e.g., using database triggers with auth.uid() or via an Edge Function) to ensure data integrity.
+  backend (e.g., database triggers with auth.uid() or via an Edge Function) to ensure data integrity.
 - Dynamic select options for 'Tipos de Organização' should be fetched from Supabase.
-- The 'data_cadastro' field, if using a Supabase default (DEFAULT CURRENT_TIMESTAMP), might not need to be sent from the client,
-  or can be sent as new Date().toISOString().
 - For a production app, consider using a Supabase Edge Function for creating organizations if it involves
   multiple related inserts or complex logic to ensure atomicity.
 */
@@ -330,12 +325,5 @@ WITH CHECK (get_user_role() = 'operator');
 
 -- Similar SELECT/UPDATE/DELETE policies for 'operator' may be needed.
 */
-```
-I've updated `src/app/admin/organizacoes/novo/page.tsx` with:
-1.  **Diagnostic RPC Call**: Before the `try...catch` block for inserting the entity, it now calls `supabase.rpc('get_user_role')`.
-    *   It logs the result.
-    *   If the RPC call fails or if the returned role is not 'admin', 'supervisor', or 'operator', it shows a specific toast message and prevents the actual entity insert attempt.
-2.  **Enhanced Error Toast**: The `toast` message in the `catch` block for the entity insert operation now provides a more detailed default message, prompting the user to check RLS, the table schema (specifically regarding direct address fields vs. an `id_endereco` FK), and unique constraints.
-3.  **Console Logging**: Added more specific `console.error` and `console.log` statements with a "NovaOrganizacaoPage:" prefix for easier debugging.
 
-This should provide much clearer feedback if the RLS policies or the current user's role (as determined by `get_user_role()`) is the reason for the insert failure. Ensure your RLS policies on `public."Entidades"` and the `public.get_user_role()` function are working correctly.
+    
