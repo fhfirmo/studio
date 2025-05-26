@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input"; 
 import { Label as InfoItemLabel } from "@/components/ui/label"; 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; 
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"; 
@@ -18,8 +17,9 @@ import Link from "next/link";
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid } from "date-fns";
-import { supabase } from '@/lib/supabase';
+import { Input } from '@/components/ui/input'; 
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabase';
 
 // Interfaces
 interface QSAItemFromDB {
@@ -31,7 +31,7 @@ interface QSAItemFromDB {
 }
 
 interface OrganizacaoDetailed {
-  id: string; // Corresponds to id_entidade
+  id: string; 
   nome: string;
   nome_fantasia: string | null;
   codigoEntidade: string | null;
@@ -80,7 +80,7 @@ interface Membro {
   id_membro_entidade: string;
   id_membro_original: string; 
   nome: string;
-  tipo: 'Pessoa Fisica' | 'Pessoa Juridica'; // Matches DB ENUM
+  tipo: 'Pessoa Fisica' | 'Pessoa Juridica'; 
   funcao: string;
   dataAssociacao: string | null;
 }
@@ -88,14 +88,19 @@ interface Membro {
 interface VeiculoAssociado {
   id_veiculo: string;
   placa_atual: string;
-  modelo_nome: string; // This comes from ModelosVeiculo.modelo
-  marca: string;
+  modelo_nome: string; 
+  marca: string; // This should come from ModelosVeiculo
   ano_fabricacao: number | null;
 }
 
-// Placeholder for select options in Add Member modal
-const initialPessoasFisicasOptions: {value: string, label: string}[] = [];
-const initialOutrasEntidadesOptions: {value: string, label: string}[] = [];
+const placeholderPessoasFisicasOptions: {value: string, label: string}[] = [
+    {value: "pf_1", label: "João Silva (123.456.789-00)"},
+    {value: "pf_2", label: "Maria Oliveira (987.654.321-99)"}
+];
+const placeholderOutrasEntidadesOptions: {value: string, label: string}[] = [
+    {value: "ent_2", label: "Empresa Parceira Beta (11.222.333/0001-00)"},
+    {value: "ent_3", label: "Consultoria Gama (22.333.444/0001-11)"}
+];
 
 
 async function getOrganizacaoDetails(organizacaoId: string): Promise<OrganizacaoDetailed | null> {
@@ -160,9 +165,8 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
       Veiculos!Veiculos_id_proprietario_entidade_fkey (
         id_veiculo,
         placa_atual,
-        marca,
         ano_fabricacao,
-        ModelosVeiculo ( modelo ) 
+        ModelosVeiculo ( modelo, marca ) 
       )
     `)
     .eq('id_entidade', numericOrgId)
@@ -178,7 +182,7 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
     id_membro_entidade: m.id_membro_entidade.toString(),
     id_membro_original: (m.PessoasFisicas?.id_pessoa_fisica || m.Entidades?.id_entidade)?.toString() || 'N/A_MEMBER_ID',
     nome: m.PessoasFisicas?.nome_completo || m.Entidades?.nome || 'Membro Desconhecido',
-    tipo: m.tipo_membro, // Direct from DB
+    tipo: m.tipo_membro as 'Pessoa Fisica' | 'Pessoa Juridica', 
     funcao: m.funcao_no_membro || 'N/A',
     dataAssociacao: m.data_associacao,
   }));
@@ -186,14 +190,13 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
   const veiculosFormatados: VeiculoAssociado[] = (orgData.Veiculos || []).map((v: any) => ({
     id_veiculo: v.id_veiculo.toString(),
     placa_atual: v.placa_atual,
-    modelo_nome: v.ModelosVeiculo?.modelo || 'N/A', // Corrected from nome_modelo to modelo
-    marca: v.marca || 'N/A',
+    modelo_nome: v.ModelosVeiculo?.modelo || 'N/A',
+    marca: v.ModelosVeiculo?.marca || 'N/A', 
     ano_fabricacao: v.ano_fabricacao,
   }));
   
   const qsaFormatado: QSAItemFromDB[] = (orgData.QSA || []).map((q: any) => ({
       id_qsa: q.id_qsa,
-      id_entidade: q.id_entidade,
       nome_socio: q.nome_socio,
       qualificacao_socio: q.qualificacao_socio,
       data_entrada_sociedade: q.data_entrada_sociedade,
@@ -243,8 +246,8 @@ async function getOrganizacaoDetails(organizacaoId: string): Promise<Organizacao
 }
 
 export default function OrganizacaoDetailsPage() {
-  const params = useParams();
-  const organizacaoId = params.id as string;
+  const paramsHook = useParams();
+  const organizacaoId = paramsHook.id as string;
   const { toast } = useToast();
   const router = useRouter();
 
@@ -266,8 +269,8 @@ export default function OrganizacaoDetailsPage() {
   
   const [memberToRemove, setMemberToRemove] = useState<Membro | null>(null);
   const [isRemoveMemberModalOpen, setIsRemoveMemberModalOpen] = useState(false);
-  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<{value: string, label: string}[]>(initialPessoasFisicasOptions);
-  const [availableOutrasEntidades, setAvailableOutrasEntidades] = useState<{value: string, label: string}[]>(initialOutrasEntidadesOptions);
+  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<{value: string, label: string}[]>(placeholderPessoasFisicasOptions);
+  const [availableOutrasEntidades, setAvailableOutrasEntidades] = useState<{value: string, label: string}[]>(placeholderOutrasEntidadesOptions);
 
   const fetchSelectOptions = async () => {
     if (!supabase) return;
@@ -276,7 +279,6 @@ export default function OrganizacaoDetailsPage() {
     if (pfError) console.error("Erro ao buscar Pessoas Físicas para select:", pfError);
     else setAvailablePessoasFisicas(pfData.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: `${pf.nome_completo} (${pf.cpf})` })));
 
-    // Fetch Outras Entidades (excluding the current one)
     const numericOrgId = parseInt(organizacaoId, 10);
     let queryEntidades = supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome');
     if (!isNaN(numericOrgId)) {
@@ -414,19 +416,20 @@ export default function OrganizacaoDetailsPage() {
   const handleDeleteOrganizacao = async () => {
       if (!organizacao || !supabase) return;
       console.log(`Excluindo Organização ID: ${organizacao.id}`);
-      // First, delete related QSA entries if not handled by cascade
-      const { error: qsaError } = await supabase.from('QSA').delete().eq('id_entidade', parseInt(organizacao.id));
-      if (qsaError) {
-        console.warn("Erro ao deletar QSA da organização:", qsaError.message);
-        // Potentially stop or notify, depending on desired behavior
-      }
       
-      const { error } = await supabase.from('Entidades').delete().eq('id_entidade', parseInt(organizacao.id));
-      if (error) {
-        toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
-      } else {
+      try {
+        // Delete related QSA entries
+        const { error: qsaError } = await supabase.from('QSA').delete().eq('id_entidade', parseInt(organizacao.id));
+        if (qsaError) console.warn("Erro ao deletar QSA da organização:", qsaError.message); // Log warning but proceed
+
+        // Delete Entidade
+        const { error } = await supabase.from('Entidades').delete().eq('id_entidade', parseInt(organizacao.id));
+        if (error) throw error;
+
         toast({title: "Organização Excluída", description: `Organização ${organizacao.nome} foi excluída.`});
         router.push('/admin/organizacoes');
+      } catch (error: any) {
+        toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
       }
   };
 
@@ -603,7 +606,6 @@ export default function OrganizacaoDetailsPage() {
 }
 
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
-  // Do not render if value is truly null/undefined or an effectively empty string, unless it's specifically "N/A"
   const displayValue = (value === null || value === undefined || (typeof value === 'string' && value.trim() === '' && value !== "N/A"))
     ? <span className="italic text-muted-foreground">sem informação</span>
     : value;
@@ -620,12 +622,9 @@ const InfoItem = ({ label, value, icon: Icon, className }: { label: string, valu
 };
 
 /* Supabase Integration Notes:
-- `getOrganizacaoDetails`: Fetch Entidade by ID, including direct address fields, TiposEntidade.nome_tipo, QSA, MembrosEntidade (with PessoasFisicas/Entidades names), and Veiculos (with ModelosVeiculo.modelo).
+- `getOrganizacaoDetails`: Fetch Entidade by ID, including direct address fields, TiposEntidade.nome_tipo, QSA, MembrosEntidade (with PessoasFisicas/Entidades names), and Veiculos (with ModelosVeiculo.modelo and ModelosVeiculo.marca).
 - `fetchSelectOptions`: Dynamically load PessoasFisicas and Entidades (excluding current) for "Add Member" modal.
 - Add/Edit/Remove Membro: Interact with public."MembrosEntidade".
 - Delete Organizacao: Ensure ON DELETE CASCADE is set for QSA, MembrosEntidade, Veiculos(id_proprietario_entidade), Seguros(id_titular_entidade), Arquivos(id_entidade_associada) or handle these deletions in a transaction/Edge Function.
 */
-
-    
-
     
