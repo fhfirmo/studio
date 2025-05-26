@@ -14,14 +14,14 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, isValid } from 'date-fns';
 
-// Interface for data fetched from Supabase for PessoasFisicas
+// Interface for data fetched from Supabase for PessoasFisicas, including related Entidade name
 interface PessoaFisicaSupabase {
   id_pessoa_fisica: number;
   nome_completo: string;
   cpf: string;
   email: string | null;
   telefone: string | null;
-  tipo_relacao: string | null; // Direct column
+  tipo_relacao: string | null; 
   data_cadastro: string;
   MembrosEntidade?: { 
     "Entidades!MembrosEntidade_id_entidade_pai_fkey": { nome: string } | null 
@@ -35,8 +35,8 @@ interface PessoaFisicaRow {
   cpf: string;
   email: string | null;
   telefone: string | null;
-  tipoRelacao: string | null; // Direct from PessoasFisicas
-  organizacaoVinculada: string | null; // Derived from MembrosEntidade join
+  tipoRelacao: string | null;
+  organizacaoVinculada: string | null; 
   dataCadastro: string;
 }
 
@@ -58,6 +58,23 @@ export default function GerenciamentoPessoasFisicasPage() {
     setIsLoading(true);
     console.log("GerenciamentoPessoasFisicasPage: Fetching PessoasFisicas, search:", searchTerm);
     
+    // Diagnostic: Check current user role via RPC
+    try {
+      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role');
+      if (roleError) {
+        console.error("Erro ao chamar RPC get_user_role ANTES da query principal:", JSON.stringify(roleError, null, 2));
+        toast({ title: "Erro de Diagnóstico de Role", description: `Falha ao verificar papel do usuário: ${roleError.message || 'Erro desconhecido na RPC.'}`, variant: "destructive", duration: 7000 });
+      } else {
+        console.log("Papel do usuário (antes da query de PessoasFisicas):", roleData);
+        if (!roleData) {
+          console.warn("Papel do usuário retornado pela RPC é NULO. A query principal pode falhar devido a RLS.");
+        }
+      }
+    } catch (e: any) {
+      console.error("Exceção ao chamar RPC get_user_role:", e.message);
+      toast({ title: "Exceção Diagnóstico Role", description: e.message, variant: "destructive" });
+    }
+
     let query = supabase
       .from('PessoasFisicas')
       .select(`
@@ -66,7 +83,7 @@ export default function GerenciamentoPessoasFisicasPage() {
         cpf,
         email,
         telefone,
-        tipo_relacao, // Select direct column
+        tipo_relacao, 
         data_cadastro,
         MembrosEntidade!left ( 
           Entidades!MembrosEntidade_id_entidade_pai_fkey ( 
@@ -83,12 +100,13 @@ export default function GerenciamentoPessoasFisicasPage() {
     const { data, error } = await query;
 
     if (error) {
+      const errorMessage = (error && error.message) ? error.message : "Falha ao carregar dados. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.";
       console.error("Erro ao buscar pessoas físicas:", JSON.stringify(error, null, 2), error); 
       toast({ 
         title: "Erro ao Buscar Dados", 
-        description: error.message || "Falha ao carregar dados. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.", 
+        description: errorMessage, 
         variant: "destructive",
-        duration: 7000 
+        duration: 10000 
       });
       setPessoasFisicas([]);
     } else {
@@ -98,7 +116,7 @@ export default function GerenciamentoPessoasFisicasPage() {
         cpf: pf.cpf,
         email: pf.email,
         telefone: pf.telefone,
-        tipoRelacao: pf.tipo_relacao, // Use direct column
+        tipoRelacao: pf.tipo_relacao,
         organizacaoVinculada: pf.MembrosEntidade && pf.MembrosEntidade.length > 0 && pf.MembrosEntidade[0]["Entidades!MembrosEntidade_id_entidade_pai_fkey"] ? pf.MembrosEntidade[0]["Entidades!MembrosEntidade_id_entidade_pai_fkey"].nome : null,
         dataCadastro: pf.data_cadastro,
       }));
@@ -127,8 +145,7 @@ export default function GerenciamentoPessoasFisicasPage() {
     
     setIsLoading(true);
     console.log(`Attempting to delete Pessoa Física ID: ${pessoaToDelete.id}, Name: ${pessoaToDelete.nome}`);
-    // Note: Deleting from PessoasFisicas might trigger CASCADE deletes in CNHs, MembrosEntidade, Veiculos (if id_proprietario_pessoa_fisica), Seguros (if id_titular_pessoa_fisica), Arquivos (if id_pessoa_fisica_associada)
-    // Ensure your ON DELETE CASCADE rules are correctly set up in the DB if this is the desired behavior.
+    
     const { error } = await supabase
       .from('PessoasFisicas')
       .delete()
@@ -151,11 +168,10 @@ export default function GerenciamentoPessoasFisicasPage() {
     try {
         const date = parseISO(dateString);
         if (isValid(date)) {
-            // Check if it's just a date (YYYY-MM-DD) or a full timestamp
-            if (dateString.length === 10) {
+            if (dateString.length === 10) { // YYYY-MM-DD
                  return format(date, "dd/MM/yyyy");
             }
-            return format(date, "dd/MM/yyyy HH:mm");
+            return format(date, "dd/MM/yyyy HH:mm"); // Full timestamp
         }
         return "Data inválida";
     } catch (e) {
@@ -178,7 +194,7 @@ export default function GerenciamentoPessoasFisicasPage() {
           <div className="flex flex-col sm:flex-row gap-2">
             <ExportDataDialog 
               dataTypeName="Pessoas Físicas" 
-              exportableFields={[ // Ensure these IDs match properties in PessoaFisicaRow
+              exportableFields={[
                 { id: 'id', label: 'ID'},
                 { id: 'nomeCompleto', label: 'Nome Completo'},
                 { id: 'cpf', label: 'CPF'},
@@ -317,6 +333,19 @@ export default function GerenciamentoPessoasFisicasPage() {
     </div>
   );
 }
-
     
   
+// Supabase Integration RLS Notes:
+// - SELECT on public."PessoasFisicas":
+//   - Admins/Supervisors/Operators should be able to read all (or based on their scope if applicable).
+//   - RLS policies must allow access to 'id_pessoa_fisica', 'nome_completo', 'cpf', 'email', 'telefone', 'tipo_relacao', 'data_cadastro'.
+// - SELECT on public."MembrosEntidade" and public."Entidades":
+//   - The user performing the query needs SELECT permission on these tables as well for the JOIN to work.
+//   - Specifically, on "Entidades", access to the 'nome' column is required.
+// - DELETE on public."PessoasFisicas":
+//   - The user role must have DELETE permission on "PessoasFisicas" table.
+//   - Consider ON DELETE CASCADE for related data in CNHs, MembrosEntidade, Veiculos (proprietario_pessoa_fisica), Seguros (titular_pessoa_fisica), Arquivos (pessoa_fisica_associada)
+//     or handle these deletions explicitly if cascade is not set.
+// - Ensure `public.get_user_role()` function correctly returns the role of the currently authenticated user.
+// - If any of these RLS are not met, the query may return empty data or an error (sometimes an empty error object {} if permissions are restrictive).
+```
