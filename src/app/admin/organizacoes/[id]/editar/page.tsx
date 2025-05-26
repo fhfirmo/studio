@@ -60,7 +60,7 @@ interface CNPJApiResponse {
 
 interface OrganizacaoDataFromDB { 
   id_entidade: number;
-  nome: string; // Razão Social
+  nome: string; 
   nome_fantasia: string | null;
   codigo_entidade: string | null;
   cnpj: string;
@@ -97,7 +97,7 @@ interface OrganizacaoDataFromDB {
   QSA?: QSAItemFromDB[];
 }
 
-interface BrasilApiResponse { // For CEP API
+interface BrasilApiResponse {
   cep: string;
   state: string;
   city: string;
@@ -126,9 +126,9 @@ async function getOrganizacaoById(orgId: string): Promise<OrganizacaoDataFromDB 
     
     const { data: orgData, error: orgError } = await supabase
         .from('Entidades')
-        .select(`*, QSA ( * ) `) // Fetch all columns from Entidades and all related QSA
+        .select(`*, QSA ( * ) `) 
         .eq('id_entidade', numericOrgId)
-        .single<OrganizacaoDataFromDB>();
+        .single<OrganizacaoDataFromDB>(); // Explicitly type the expected return
 
     if (orgError) {
         console.error("EditarOrganizacaoPage: Error fetching organization from Supabase:", JSON.stringify(orgError, null, 2));
@@ -140,7 +140,6 @@ async function getOrganizacaoById(orgId: string): Promise<OrganizacaoDataFromDB 
     }
     return orgData;
 }
-
 
 async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNPJApiResponse | null> {
   const apiUrl = `https://brasilapi.com.br/api/cnpj/v1/${cleanedCnpj}`;
@@ -190,7 +189,7 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiRespon
 
 const initialFormData = {
   cnpj: '', 
-  nome: '', // Razão Social
+  nome: '', 
   nome_fantasia: '',
   codigo_entidade: '',
   id_tipo_entidade: '',
@@ -223,14 +222,13 @@ const initialFormData = {
   observacoes: '',
 };
 
-
 export default function EditarOrganizacaoPage() {
   const router = useRouter();
   const params = useParams();
   const organizacaoId = params.id as string;
   const { toast } = useToast();
   
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // General loading state for form submission
   const [isFetchingInitialData, setIsFetchingInitialData] = useState(true);
   const [isCnpjLoading, setIsCnpjLoading] = useState(false); 
   const [isCep1Loading, setIsCep1Loading] = useState(false);
@@ -243,7 +241,6 @@ export default function EditarOrganizacaoPage() {
     cnae_secundarios: { codigo: number; descricao: string }[],
     qsa: (QSAItemFromAPI | QSAItemFromDB)[] 
   } | null>(null);
-
 
   useEffect(() => {
     const fetchInitialPageData = async () => {
@@ -267,11 +264,11 @@ export default function EditarOrganizacaoPage() {
             setFormData({
                 cnpj: orgData.cnpj || '',
                 nome: orgData.nome || '',
-                nome_fantasia: getValueOrDefault(orgData.nome_fantasia),
+                nome_fantasia: orgData.nome_fantasia || '',
                 codigo_entidade: orgData.codigo_entidade || '',
                 id_tipo_entidade: orgData.id_tipo_entidade?.toString() || '',
-                telefone: getValueOrDefault(orgData.telefone),
-                email: getValueOrDefault(orgData.email),
+                telefone: orgData.telefone || '',
+                email: orgData.email || '',
                 logradouro: orgData.logradouro || '',
                 numero: orgData.numero || '',
                 complemento: orgData.complemento || '',
@@ -291,18 +288,18 @@ export default function EditarOrganizacaoPage() {
                 email_contato: orgData.email_contato || '',
                 telefone_contato: orgData.telefone_contato || '',
                 observacoes_contato: orgData.observacoes_contato || '',
-                data_inicio_atividade: orgData.data_inicio_atividade ? format(parseISO(orgData.data_inicio_atividade), 'yyyy-MM-dd') : getValueOrDefault(null),
-                porte_empresa: getValueOrDefault(orgData.porte_empresa),
-                natureza_juridica: getValueOrDefault(orgData.natureza_juridica),
-                cnae_principal: getValueOrDefault(orgData.cnae_principal),
-                descricao_situacao_cadastral: getValueOrDefault(orgData.descricao_situacao_cadastral),
+                data_inicio_atividade: orgData.data_inicio_atividade ? format(parseISO(orgData.data_inicio_atividade), 'yyyy-MM-dd') : '',
+                porte_empresa: orgData.porte_empresa || '',
+                natureza_juridica: orgData.natureza_juridica || '',
+                cnae_principal: orgData.cnae_principal || '',
+                descricao_situacao_cadastral: orgData.descricao_situacao_cadastral || '',
                 observacoes: orgData.observacoes || '',
             });
             setDisplayOnlyApiData({
                 cnae_secundarios: orgData.cnae_secundarios || [],
                 qsa: orgData.QSA || [],
             });
-            if (orgData.data_cadastro) {
+            if (orgData.data_cadastro && isValid(parseISO(orgData.data_cadastro))) {
                 setDataCadastroDisplay(format(parseISO(orgData.data_cadastro), "dd/MM/yyyy HH:mm"));
             }
             setOrgFound(true);
@@ -310,7 +307,7 @@ export default function EditarOrganizacaoPage() {
             setOrgFound(false);
             toast({ title: "Erro", description: "Organização não encontrada.", variant: "destructive" });
         }
-        setIsLoading(false);
+        setIsLoading(false); // General loading should be false after initial fetch attempt
         setIsFetchingInitialData(false);
     };
     fetchInitialPageData();
@@ -320,20 +317,21 @@ export default function EditarOrganizacaoPage() {
     const cnpjValue = event.target.value;
     const cleanedCnpjForAPI = cnpjValue.replace(/\D/g, '');
 
-    if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14 && cleanedCnpjForAPI !== formData.cnpj.replace(/\D/g,'')) { // Only fetch if CNPJ changed
+    // Only fetch if CNPJ changed significantly or was empty before
+    if (cleanedCnpjForAPI && cleanedCnpjForAPI.length === 14) {
       setIsCnpjLoading(true);
       const apiData = await fetchOrganizacaoDataFromCNPJAPI(cleanedCnpjForAPI);
       if (apiData) {
         setFormData(prev => ({
-          ...prev, // Keep existing data, especially manually entered contact/address2
+          ...prev, 
           nome: apiData.razao_social || prev.nome,
           nome_fantasia: getValueOrDefault(apiData.nome_fantasia),
           cnpj: apiData.cnpj || cleanedCnpjForAPI,
-          data_inicio_atividade: apiData.data_inicio_atividade || getValueOrDefault(prev.data_inicio_atividade),
-          porte_empresa: getValueOrDefault(apiData.porte, prev.porte_empresa),
-          natureza_juridica: getValueOrDefault(apiData.natureza_juridica, prev.natureza_juridica),
-          cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao, prev.cnae_principal),
-          descricao_situacao_cadastral: getValueOrDefault(apiData.descricao_situacao_cadastral, prev.descricao_situacao_cadastral),
+          data_inicio_atividade: getValueOrDefault(apiData.data_inicio_atividade),
+          porte_empresa: getValueOrDefault(apiData.porte),
+          natureza_juridica: getValueOrDefault(apiData.natureza_juridica),
+          cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao),
+          descricao_situacao_cadastral: getValueOrDefault(apiData.descricao_situacao_cadastral),
           logradouro: apiData.logradouro || prev.logradouro,
           numero: apiData.numero || prev.numero,
           complemento: apiData.complemento || prev.complemento,
@@ -342,12 +340,16 @@ export default function EditarOrganizacaoPage() {
           estado_uf: apiData.uf || prev.estado_uf,
           cep: (apiData.cep || prev.cep).replace(/\D/g, ''),
           telefone: getValueOrDefault(apiData.ddd_telefone_1, prev.telefone),
-          email: getValueOrDefault(apiData.email, prev.email),
+          email: getValueOrDefault(apiData.email?.toLowerCase(), prev.email),
         }));
         setDisplayOnlyApiData(prev => ({
             ...(prev ?? {cnae_secundarios: [], qsa: []}),
             cnae_secundarios: apiData.cnaes_secundarios || prev?.cnae_secundarios || [],
-            qsa: apiData.qsa || prev?.qsa || [],
+             qsa: (apiData.qsa || []).map(s => ({
+                nome_socio: s.nome_socio,
+                qualificacao_socio: s.qualificacao_socio,
+                data_entrada_sociedade: s.data_entrada_sociedade || null
+            })),
         }));
         toast({ title: "Dados do CNPJ Atualizados!", description: "Campos preenchidos pela BrasilAPI. Verifique e ajuste se necessário." });
       } else {
@@ -369,10 +371,10 @@ export default function EditarOrganizacaoPage() {
         if (address) {
           setFormData(prev => ({
             ...prev,
-            [`${prefix}logradouro`]: address.street || prev[`${prefix}logradouro`],
-            [`${prefix}bairro`]: address.neighborhood || prev[`${prefix}bairro`],
-            [`${prefix}cidade`]: address.city || prev[`${prefix}cidade`],
-            [`${prefix}estado_uf`]: address.state || prev[`${prefix}estado_uf`],
+            [`${prefix}logradouro`]: address.street || prev[`${prefix}logradouro` as keyof typeof prev],
+            [`${prefix}bairro`]: address.neighborhood || prev[`${prefix}bairro` as keyof typeof prev],
+            [`${prefix}cidade`]: address.city || prev[`${prefix}cidade` as keyof typeof prev],
+            [`${prefix}estado_uf`]: address.state || prev[`${prefix}estado_uf` as keyof typeof prev],
             [`${prefix}cep`]: (address.cep || cepValue).replace(/\D/g, ''),
           }));
           toast({ title: `Endereço ${addressNumber} Encontrado!`, description: "Campos de endereço preenchidos." });
@@ -387,7 +389,6 @@ export default function EditarOrganizacaoPage() {
       }
     }
   };
-
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -428,7 +429,7 @@ export default function EditarOrganizacaoPage() {
         porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa,
         natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica,
         cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal,
-        cnae_secundarios: displayOnlyApiData?.cnae_secundarios || null, 
+        cnae_secundarios: displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 ? displayOnlyApiData.cnae_secundarios : null, 
         descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
@@ -459,11 +460,29 @@ export default function EditarOrganizacaoPage() {
 
       if (updateError) throw updateError;
       
-      // QSA Management on edit is complex: typically involves deleting all for entity and re-inserting, or diffing.
-      // For this example, QSA is considered display-only from initial load or API refresh, and not directly part of this form's update logic.
-      // If QSA data was fetched from CNPJ API and `displayOnlyApiData.qsa` has items,
-      // a real app might delete old QSA for this id_entidade and insert new ones here in a transaction.
-      // This part is highly dependent on business rules for QSA updates.
+      // QSA Management on edit is complex.
+      // If QSA data came from the API and is stored in displayOnlyApiData,
+      // and your business logic dictates that API QSA data should replace DB QSA data:
+      if (displayOnlyApiData?.qsa && displayOnlyApiData.qsa.length > 0) {
+        // 1. Delete existing QSA for this id_entidade
+        const { error: deleteQsaError } = await supabase
+            .from('QSA')
+            .delete()
+            .eq('id_entidade', numericOrgId);
+        if (deleteQsaError) console.warn("Aviso ao deletar QSA antigo:", deleteQsaError.message);
+
+        // 2. Insert new QSA data
+        const qsaPayload = displayOnlyApiData.qsa.map(socio => ({
+            id_entidade: numericOrgId,
+            nome_socio: socio.nome_socio,
+            qualificacao_socio: socio.qualificacao_socio,
+            data_entrada_sociedade: socio.data_entrada_sociedade || null,
+            // observacoes: (socio as QSAItemFromDB).observacoes || null, // If you allow editing QSA observacoes
+        }));
+         const { error: insertQsaError } = await supabase.from('QSA').insert(qsaPayload);
+         if (insertQsaError) console.warn("Aviso ao inserir novo QSA:", insertQsaError.message);
+      }
+
 
       toast({ title: "Organização Atualizada!", description: "Os dados da organização foram salvos." });
       router.push(`/admin/organizacoes/${numericOrgId}`); 
@@ -505,30 +524,8 @@ export default function EditarOrganizacaoPage() {
       </header>
 
       <form onSubmit={handleSubmit}>
-         <Card className="shadow-lg mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center">CNPJ</CardTitle>
-             <CardDescription>O CNPJ é o identificador principal. Alterá-lo pode re-buscar dados da API.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="cnpj_field">CNPJ</Label>
-              <Input 
-                id="cnpj_field" 
-                name="cnpj" 
-                value={formData.cnpj} 
-                onChange={handleChange}
-                onBlur={handleCnpjBlur} 
-                className="bg-background" 
-                disabled={isLoading || isCnpjLoading || !orgFound } // Disable if org not found
-              />
-               {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-1" />}
-            </div>
-          </CardContent>
-        </Card>
-
         <Tabs defaultValue="informacoes" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs flex-wrap">
+           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs flex-wrap">
             <TabsTrigger value="informacoes"><Info className="mr-1 h-3 w-3" />Informações</TabsTrigger>
             <TabsTrigger value="dadosFiscais"><FileText className="mr-1 h-3 w-3" />Dados Fiscais</TabsTrigger>
             <TabsTrigger value="enderecoPrincipal"><MapPin className="mr-1 h-3 w-3" />End. Principal</TabsTrigger>
@@ -542,19 +539,34 @@ export default function EditarOrganizacaoPage() {
             <Card className="shadow-lg">
               <CardHeader><CardTitle>Identificação</CardTitle></CardHeader>
               <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj_field">CNPJ <span className="text-destructive">*</span></Label>
+                  <Input 
+                    id="cnpj_field" 
+                    name="cnpj" 
+                    value={formData.cnpj} 
+                    onChange={handleChange}
+                    onBlur={handleCnpjBlur}
+                    placeholder="00.000.000/0000-00"
+                    required 
+                    disabled={isLoading || isCnpjLoading || isFetchingInitialData} 
+                  />
+                  {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-1" />}
+                   <p className="text-xs text-muted-foreground">Alterar o CNPJ e sair do campo pode re-buscar dados da BrasilAPI.</p>
+                </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2"><Label htmlFor="nome">Nome da Organização (Razão Social) <span className="text-destructive">*</span></Label><Input id="nome" name="nome" value={formData.nome} onChange={handleChange} required disabled={isLoading} /></div>
-                  <div className="space-y-2"><Label htmlFor="nome_fantasia">Nome Fantasia</Label><Input id="nome_fantasia" name="nome_fantasia" value={formData.nome_fantasia} onChange={handleChange} disabled={isLoading} /></div>
+                  <div className="space-y-2"><Label htmlFor="nome">Nome da Organização (Razão Social) <span className="text-destructive">*</span></Label><Input id="nome" name="nome" value={formData.nome} onChange={handleChange} required disabled={isLoading || isFetchingInitialData} /></div>
+                  <div className="space-y-2"><Label htmlFor="nome_fantasia">Nome Fantasia</Label><Input id="nome_fantasia" name="nome_fantasia" value={formData.nome_fantasia} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2"><Label htmlFor="codigo_entidade">Código da Entidade <span className="text-destructive">*</span></Label><Input id="codigo_entidade" name="codigo_entidade" value={formData.codigo_entidade} onChange={handleChange} required disabled={isLoading} /></div>
+                  <div className="space-y-2"><Label htmlFor="codigo_entidade">Código da Entidade <span className="text-destructive">*</span></Label><Input id="codigo_entidade" name="codigo_entidade" value={formData.codigo_entidade} onChange={handleChange} required disabled={isLoading || isFetchingInitialData} /></div>
                   <div className="space-y-2"><Label htmlFor="id_tipo_entidade">Tipo <span className="text-destructive">*</span></Label>
-                    <Select name="id_tipo_entidade" value={formData.id_tipo_entidade} onValueChange={(v) => handleSelectChange('id_tipo_entidade', v)} required disabled={isLoading}><SelectTrigger id="id_tipo_entidade"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{tiposEntidadeOptions.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select>
+                    <Select name="id_tipo_entidade" value={formData.id_tipo_entidade} onValueChange={(v) => handleSelectChange('id_tipo_entidade', v)} required disabled={isLoading || isFetchingInitialData}><SelectTrigger id="id_tipo_entidade"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{tiposEntidadeOptions.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select>
                   </div>
                 </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <div className="space-y-2"><Label htmlFor="telefone">Telefone Principal</Label><Input id="telefone" name="telefone" type="tel" value={formData.telefone} onChange={handleChange} disabled={isLoading} /></div>
-                   <div className="space-y-2"><Label htmlFor="email">E-mail Principal</Label><Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} disabled={isLoading} /></div>
+                   <div className="space-y-2"><Label htmlFor="telefone">Telefone Principal</Label><Input id="telefone" name="telefone" type="tel" value={formData.telefone} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                   <div className="space-y-2"><Label htmlFor="email">E-mail Principal</Label><Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
               </CardContent>
             </Card>
@@ -565,11 +577,11 @@ export default function EditarOrganizacaoPage() {
               <CardHeader><CardTitle>Dados da Empresa</CardTitle><CardDescription>Informações obtidas da API CNPJ ou cadastradas.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div className="space-y-1"><Label htmlFor="data_inicio_atividade">Data Início Atividade</Label><Input id="data_inicio_atividade" value={formData.data_inicio_atividade} onChange={handleChange} name="data_inicio_atividade" type="date" disabled={isLoading} /></div>
-                    <div className="space-y-1"><Label htmlFor="porte_empresa">Porte da Empresa</Label><Input id="porte_empresa" value={formData.porte_empresa} onChange={handleChange} name="porte_empresa" disabled={isLoading} /></div>
-                    <div className="space-y-1"><Label htmlFor="natureza_juridica">Natureza Jurídica</Label><Input id="natureza_juridica" value={formData.natureza_juridica} onChange={handleChange} name="natureza_juridica" disabled={isLoading} /></div>
-                    <div className="space-y-1 md:col-span-2 lg:col-span-3"><Label htmlFor="cnae_principal">CNAE Principal</Label><Input id="cnae_principal" value={formData.cnae_principal} onChange={handleChange} name="cnae_principal" disabled={isLoading} /></div>
-                    <div className="space-y-1"><Label htmlFor="descricao_situacao_cadastral">Situação Cadastral</Label><Input id="descricao_situacao_cadastral" value={formData.descricao_situacao_cadastral} onChange={handleChange} name="descricao_situacao_cadastral" disabled={isLoading} /></div>
+                    <div className="space-y-1"><Label htmlFor="data_inicio_atividade">Data Início Atividade</Label><Input id="data_inicio_atividade" value={formData.data_inicio_atividade} onChange={handleChange} name="data_inicio_atividade" type="date" disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-1"><Label htmlFor="porte_empresa">Porte da Empresa</Label><Input id="porte_empresa" value={formData.porte_empresa} onChange={handleChange} name="porte_empresa" disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-1"><Label htmlFor="natureza_juridica">Natureza Jurídica</Label><Input id="natureza_juridica" value={formData.natureza_juridica} onChange={handleChange} name="natureza_juridica" disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-1 md:col-span-2 lg:col-span-3"><Label htmlFor="cnae_principal">CNAE Principal</Label><Input id="cnae_principal" value={formData.cnae_principal} onChange={handleChange} name="cnae_principal" disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-1"><Label htmlFor="descricao_situacao_cadastral">Situação Cadastral</Label><Input id="descricao_situacao_cadastral" value={formData.descricao_situacao_cadastral} onChange={handleChange} name="descricao_situacao_cadastral" disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
                 {displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 && (
                     <div className="space-y-2">
@@ -592,19 +604,19 @@ export default function EditarOrganizacaoPage() {
                  <div className="space-y-2">
                   <Label htmlFor="cep">CEP</Label>
                   <div className="flex items-center gap-2">
-                    <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} onBlur={(e) => handleCepBlur(e, 1)} placeholder="00000-000" disabled={isLoading || isCep1Loading} />
+                    <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} onBlur={(e) => handleCepBlur(e, 1)} placeholder="00000-000" disabled={isLoading || isCep1Loading || isFetchingInitialData} />
                      {isCep1Loading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2 md:col-span-2"><Label htmlFor="logradouro">Logradouro</Label><Input id="logradouro" name="logradouro" value={formData.logradouro} onChange={handleChange} disabled={isLoading} /></div>
-                  <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" name="numero" value={formData.numero} onChange={handleChange} disabled={isLoading} /></div>
+                  <div className="space-y-2 md:col-span-2"><Label htmlFor="logradouro">Logradouro</Label><Input id="logradouro" name="logradouro" value={formData.logradouro} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                  <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" name="numero" value={formData.numero} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
-                <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" name="complemento" value={formData.complemento} onChange={handleChange} disabled={isLoading} /></div>
+                <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" name="complemento" value={formData.complemento} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> 
-                  <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" name="bairro" value={formData.bairro} onChange={handleChange} disabled={isLoading}/></div>
-                  <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" name="cidade" value={formData.cidade} onChange={handleChange} disabled={isLoading}/></div>
-                  <div className="space-y-2"><Label htmlFor="estado_uf">UF</Label><Input id="estado_uf" name="estado_uf" value={formData.estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" name="bairro" value={formData.bairro} onChange={handleChange} disabled={isLoading || isFetchingInitialData}/></div>
+                  <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" name="cidade" value={formData.cidade} onChange={handleChange} disabled={isLoading || isFetchingInitialData}/></div>
+                  <div className="space-y-2"><Label htmlFor="estado_uf">UF</Label><Input id="estado_uf" name="estado_uf" value={formData.estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading || isFetchingInitialData}/></div>
                 </div>
               </CardContent>
             </Card>
@@ -617,19 +629,19 @@ export default function EditarOrganizacaoPage() {
                  <div className="space-y-2">
                   <Label htmlFor="endereco2_cep">CEP (Endereço Adicional)</Label>
                   <div className="flex items-center gap-2">
-                    <Input id="endereco2_cep" name="endereco2_cep" value={formData.endereco2_cep} onChange={handleChange} onBlur={(e) => handleCepBlur(e, 2)} placeholder="00000-000" disabled={isLoading || isCep2Loading} />
+                    <Input id="endereco2_cep" name="endereco2_cep" value={formData.endereco2_cep} onChange={handleChange} onBlur={(e) => handleCepBlur(e, 2)} placeholder="00000-000" disabled={isLoading || isCep2Loading || isFetchingInitialData} />
                      {isCep2Loading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2 md:col-span-2"><Label htmlFor="endereco2_logradouro">Logradouro (Endereço Adicional)</Label><Input id="endereco2_logradouro" name="endereco2_logradouro" value={formData.endereco2_logradouro} onChange={handleChange} disabled={isLoading} /></div>
-                  <div className="space-y-2"><Label htmlFor="endereco2_numero">Número (Endereço Adicional)</Label><Input id="endereco2_numero" name="endereco2_numero" value={formData.endereco2_numero} onChange={handleChange} disabled={isLoading} /></div>
+                  <div className="space-y-2 md:col-span-2"><Label htmlFor="endereco2_logradouro">Logradouro (Endereço Adicional)</Label><Input id="endereco2_logradouro" name="endereco2_logradouro" value={formData.endereco2_logradouro} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_numero">Número (Endereço Adicional)</Label><Input id="endereco2_numero" name="endereco2_numero" value={formData.endereco2_numero} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
-                <div className="space-y-2"><Label htmlFor="endereco2_complemento">Complemento (Endereço Adicional)</Label><Input id="endereco2_complemento" name="endereco2_complemento" value={formData.endereco2_complemento} onChange={handleChange} disabled={isLoading} /></div>
+                <div className="space-y-2"><Label htmlFor="endereco2_complemento">Complemento (Endereço Adicional)</Label><Input id="endereco2_complemento" name="endereco2_complemento" value={formData.endereco2_complemento} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> 
-                  <div className="space-y-2"><Label htmlFor="endereco2_bairro">Bairro (Endereço Adicional)</Label><Input id="endereco2_bairro" name="endereco2_bairro" value={formData.endereco2_bairro} onChange={handleChange} disabled={isLoading}/></div>
-                  <div className="space-y-2"><Label htmlFor="endereco2_cidade">Cidade (Endereço Adicional)</Label><Input id="endereco2_cidade" name="endereco2_cidade" value={formData.endereco2_cidade} onChange={handleChange} disabled={isLoading}/></div>
-                  <div className="space-y-2"><Label htmlFor="endereco2_estado_uf">UF (Endereço Adicional)</Label><Input id="endereco2_estado_uf" name="endereco2_estado_uf" value={formData.endereco2_estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_bairro">Bairro (Endereço Adicional)</Label><Input id="endereco2_bairro" name="endereco2_bairro" value={formData.endereco2_bairro} onChange={handleChange} disabled={isLoading || isFetchingInitialData}/></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_cidade">Cidade (Endereço Adicional)</Label><Input id="endereco2_cidade" name="endereco2_cidade" value={formData.endereco2_cidade} onChange={handleChange} disabled={isLoading || isFetchingInitialData}/></div>
+                  <div className="space-y-2"><Label htmlFor="endereco2_estado_uf">UF (Endereço Adicional)</Label><Input id="endereco2_estado_uf" name="endereco2_estado_uf" value={formData.endereco2_estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading || isFetchingInitialData}/></div>
                 </div>
               </CardContent>
             </Card>
@@ -640,14 +652,14 @@ export default function EditarOrganizacaoPage() {
               <CardHeader><CardTitle>Informações de Contato</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2"><Label htmlFor="nome_contato_responsavel">Nome do Contato</Label><Input id="nome_contato_responsavel" name="nome_contato_responsavel" value={formData.nome_contato_responsavel} onChange={handleChange} disabled={isLoading} /></div>
-                    <div className="space-y-2"><Label htmlFor="cargo_contato_responsavel">Cargo do Contato</Label><Input id="cargo_contato_responsavel" name="cargo_contato_responsavel" value={formData.cargo_contato_responsavel} onChange={handleChange} disabled={isLoading} /></div>
+                    <div className="space-y-2"><Label htmlFor="nome_contato_responsavel">Nome do Contato</Label><Input id="nome_contato_responsavel" name="nome_contato_responsavel" value={formData.nome_contato_responsavel} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-2"><Label htmlFor="cargo_contato_responsavel">Cargo do Contato</Label><Input id="cargo_contato_responsavel" name="cargo_contato_responsavel" value={formData.cargo_contato_responsavel} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2"><Label htmlFor="email_contato">E-mail de Contato</Label><Input id="email_contato" name="email_contato" type="email" value={formData.email_contato} onChange={handleChange} disabled={isLoading} /></div>
-                    <div className="space-y-2"><Label htmlFor="telefone_contato">Telefone de Contato</Label><Input id="telefone_contato" name="telefone_contato" type="tel" value={formData.telefone_contato} onChange={handleChange} disabled={isLoading} /></div>
+                    <div className="space-y-2"><Label htmlFor="email_contato">E-mail de Contato</Label><Input id="email_contato" name="email_contato" type="email" value={formData.email_contato} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
+                    <div className="space-y-2"><Label htmlFor="telefone_contato">Telefone de Contato</Label><Input id="telefone_contato" name="telefone_contato" type="tel" value={formData.telefone_contato} onChange={handleChange} disabled={isLoading || isFetchingInitialData} /></div>
                 </div>
-                <div className="space-y-2"><Label htmlFor="observacoes_contato">Observações sobre Contato</Label><Textarea id="observacoes_contato" name="observacoes_contato" value={formData.observacoes_contato} onChange={handleChange} rows={3} disabled={isLoading} /></div>
+                <div className="space-y-2"><Label htmlFor="observacoes_contato">Observações sobre Contato</Label><Textarea id="observacoes_contato" name="observacoes_contato" value={formData.observacoes_contato} onChange={handleChange} rows={3} disabled={isLoading || isFetchingInitialData} /></div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -665,7 +677,7 @@ export default function EditarOrganizacaoPage() {
                           <tr key={(socio as QSAItemFromDB).id_qsa || index} className="border-b last:border-b-0 hover:bg-muted/20">
                               <td className="p-2">{socio.nome_socio}</td>
                               <td className="p-2">{socio.qualificacao_socio}</td>
-                              <td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade ? format(parseISO(socio.data_entrada_sociedade), 'dd/MM/yyyy') : <span className="italic text-muted-foreground">sem informação</span>}</td>
+                              <td className="p-2 hidden sm:table-cell">{socio.data_entrada_sociedade && isValid(parseISO(socio.data_entrada_sociedade)) ? format(parseISO(socio.data_entrada_sociedade), 'dd/MM/yyyy') : <span className="italic text-muted-foreground">sem informação</span>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -682,7 +694,7 @@ export default function EditarOrganizacaoPage() {
           <TabsContent value="observacoes">
             <Card className="shadow-lg">
               <CardHeader><CardTitle>Observações Gerais</CardTitle></CardHeader>
-              <CardContent><Textarea id="observacoes" name="observacoes" value={formData.observacoes} onChange={handleChange} rows={4} disabled={isLoading} /></CardContent>
+              <CardContent><Textarea id="observacoes" name="observacoes" value={formData.observacoes} onChange={handleChange} rows={4} disabled={isLoading || isFetchingInitialData} /></CardContent>
             </Card>
           </TabsContent>
         </Tabs>
@@ -704,4 +716,3 @@ export default function EditarOrganizacaoPage() {
 - CEP API: Integrate real API for address fields.
 - CNPJ field is typically read-only on edit. If re-fetch by CNPJ is needed, a separate button might be better.
 */
-

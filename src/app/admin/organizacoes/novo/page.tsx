@@ -32,7 +32,7 @@ interface CNPJApiResponse {
   nome_fantasia?: string;
   cnpj?: string;
   data_inicio_atividade?: string;
-  porte?: string;
+  porte?: string; // Ex: "DEMAIS"
   natureza_juridica?: string;
   cnae_fiscal?: number;
   cnae_fiscal_descricao?: string;
@@ -42,8 +42,8 @@ interface CNPJApiResponse {
   numero?: string;
   complemento?: string;
   bairro?: string;
-  municipio?: string; // Ou 'city' dependendo da API
-  uf?: string; // Ou 'state'
+  municipio?: string; 
+  uf?: string; 
   cep?: string;
   ddd_telefone_1?: string;
   email?: string;
@@ -66,7 +66,6 @@ const getValueOrDefault = (value: string | null | undefined, defaultValue: strin
     return String(value).trim();
 };
 
-
 async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNPJApiResponse | null> {
   const apiUrl = `https://brasilapi.com.br/api/cnpj/v1/${cleanedCnpj}`;
   console.log("NovaOrganizacaoPage: Chamando API CNPJ para (cleaned):", cleanedCnpj);
@@ -74,7 +73,7 @@ async function fetchOrganizacaoDataFromCNPJAPI(cleanedCnpj: string): Promise<CNP
 
   try {
     const response = await fetch(apiUrl);
-    const rawTextResponse = await response.text(); // Get raw text first for logging
+    const rawTextResponse = await response.text();
     console.log(`NovaOrganizacaoPage: CNPJ API response status: ${response.status} ${response.statusText}`);
     
     if (!response.ok) {
@@ -170,7 +169,6 @@ export default function NovaOrganizacaoPage() {
   useEffect(() => {
     const fetchTiposEntidade = async () => {
       if (!supabase) return;
-      // TODO: Implement RLS for TiposEntidade if needed by non-admin roles.
       const { data, error } = await supabase.from('TiposEntidade').select('id_tipo_entidade, nome_tipo').order('nome_tipo');
       if (error) {
         console.error("Erro ao buscar tipos de entidade:", error);
@@ -194,8 +192,8 @@ export default function NovaOrganizacaoPage() {
           ...prev,
           nome: apiData.razao_social || '',
           nome_fantasia: getValueOrDefault(apiData.nome_fantasia),
-          cnpj: apiData.cnpj || cleanedCnpj,
-          data_inicio_atividade: apiData.data_inicio_atividade || "sem informação",
+          cnpj: apiData.cnpj || cleanedCnpj, // Use cleaned CNPJ if API doesn't return formatted
+          data_inicio_atividade: getValueOrDefault(apiData.data_inicio_atividade),
           porte_empresa: getValueOrDefault(apiData.porte),
           natureza_juridica: getValueOrDefault(apiData.natureza_juridica),
           cnae_principal: getValueOrDefault(apiData.cnae_fiscal_descricao),
@@ -208,17 +206,21 @@ export default function NovaOrganizacaoPage() {
           estado_uf: apiData.uf || '',
           cep: (apiData.cep || '').replace(/\D/g, ''),
           telefone: getValueOrDefault(apiData.ddd_telefone_1),
-          email: getValueOrDefault(apiData.email),
+          email: getValueOrDefault(apiData.email?.toLowerCase()),
         }));
         setDisplayOnlyApiData({
           cnae_secundarios: apiData.cnaes_secundarios || [],
-          qsa: apiData.qsa || [],
+          qsa: (apiData.qsa || []).map(s => ({ // Ensure QSA data is mapped correctly
+            nome_socio: s.nome_socio,
+            qualificacao_socio: s.qualificacao_socio,
+            data_entrada_sociedade: s.data_entrada_sociedade || null
+          })),
         });
         toast({ title: "Dados do CNPJ Encontrados!", description: "Campos preenchidos automaticamente pela BrasilAPI." });
       } else {
         toast({
           title: "CNPJ Não Encontrado ou Erro na API",
-          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro ao consultar a API. Verifique o número digitado e tente novamente. Consulte o console para mais detalhes do erro.",
+          description: "O CNPJ informado não foi encontrado na BrasilAPI ou ocorreu um erro. Verifique o número e o console.",
           variant: "default",
           duration: 7000,
         });
@@ -241,10 +243,10 @@ export default function NovaOrganizacaoPage() {
         if (address) {
           setFormData(prev => ({
             ...prev,
-            [`${prefix}logradouro`]: address.street || prev[`${prefix}logradouro`],
-            [`${prefix}bairro`]: address.neighborhood || prev[`${prefix}bairro`],
-            [`${prefix}cidade`]: address.city || prev[`${prefix}cidade`],
-            [`${prefix}estado_uf`]: address.state || prev[`${prefix}estado_uf`],
+            [`${prefix}logradouro`]: address.street || prev[`${prefix}logradouro` as keyof typeof prev],
+            [`${prefix}bairro`]: address.neighborhood || prev[`${prefix}bairro` as keyof typeof prev],
+            [`${prefix}cidade`]: address.city || prev[`${prefix}cidade` as keyof typeof prev],
+            [`${prefix}estado_uf`]: address.state || prev[`${prefix}estado_uf` as keyof typeof prev],
             [`${prefix}cep`]: (address.cep || cepValue).replace(/\D/g, ''),
           }));
           toast({ title: `Endereço ${addressNumber} Encontrado!`, description: "Campos de endereço preenchidos." });
@@ -284,19 +286,13 @@ export default function NovaOrganizacaoPage() {
     }
     
     try {
-      // Diagnostic: Call get_user_role
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_role');
-      if (rpcError) {
-        console.error(`NovaOrganizacaoPage: Erro ao chamar RPC get_user_role:`, JSON.stringify(rpcError, null, 2));
-        toast({ title: "Erro de Diagnóstico", description: `Falha ao verificar o papel do usuário via RPC: ${rpcError.message}. Verifique o console.`, variant: "destructive", duration: 7000 });
+      const { data: rpcRoleData, error: rpcRoleError } = await supabase.rpc('get_user_role');
+      if (rpcRoleError) throw rpcRoleError;
+      console.log(`NovaOrganizacaoPage: Papel do usuário (RPC): ${rpcRoleData}`);
+      if (!['admin', 'supervisor', 'operator'].includes(rpcRoleData)) {
+        toast({ title: "Permissão Negada", description: `Seu papel (${rpcRoleData}) não permite criar organizações.`, variant: "destructive" });
         setIsLoading(false);
         return;
-      }
-      console.log(`NovaOrganizacaoPage: Resultado da RPC get_user_role (client-side):`, rpcData);
-      if (!['admin', 'supervisor', 'operator'].includes(rpcData)) {
-         toast({ title: "Permissão Insuficiente (Diagnóstico)", description: `Seu papel atual detectado é '${rpcData}'. A política RLS requer 'admin', 'supervisor' ou 'operator' para esta operação. Verifique seu perfil e a função get_user_role.`, variant: "destructive", duration: 10000 });
-         setIsLoading(false);
-         return;
       }
 
       const entidadePayload = {
@@ -311,7 +307,7 @@ export default function NovaOrganizacaoPage() {
         porte_empresa: formData.porte_empresa === "sem informação" ? null : formData.porte_empresa,
         natureza_juridica: formData.natureza_juridica === "sem informação" ? null : formData.natureza_juridica,
         cnae_principal: formData.cnae_principal === "sem informação" ? null : formData.cnae_principal,
-        cnae_secundarios: displayOnlyApiData?.cnae_secundarios || null,
+        cnae_secundarios: displayOnlyApiData?.cnae_secundarios && displayOnlyApiData.cnae_secundarios.length > 0 ? displayOnlyApiData.cnae_secundarios : null,
         descricao_situacao_cadastral: formData.descricao_situacao_cadastral === "sem informação" ? null : formData.descricao_situacao_cadastral,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
@@ -333,7 +329,6 @@ export default function NovaOrganizacaoPage() {
         telefone_contato: formData.telefone_contato || null,
         observacoes_contato: formData.observacoes_contato || null,
         observacoes: formData.observacoes || null,
-        // user_id and responsavel_cadastro can be set by backend or based on logged-in user
       };
       console.log("NovaOrganizacaoPage: Payload para Entidades:", entidadePayload);
 
@@ -369,9 +364,8 @@ export default function NovaOrganizacaoPage() {
       router.push('/admin/organizacoes');
 
     } catch (error: any) {
-      console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização:', error, JSON.stringify(error, null, 2));
-      const defaultMessage = "Ocorreu um erro. Verifique o console e as permissões RLS.";
-      toast({ title: "Erro ao Cadastrar", description: error.message || defaultMessage, variant: "destructive", duration: 10000 });
+      console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização:', error);
+      toast({ title: "Erro ao Cadastrar", description: error.message || "Ocorreu um erro. Verifique o console e as permissões RLS.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -392,31 +386,6 @@ export default function NovaOrganizacaoPage() {
       </header>
 
       <form onSubmit={handleSubmit}>
-        <Card className="shadow-lg mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center"><Search className="mr-2 h-5 w-5 text-primary" /> Buscar por CNPJ</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="cnpj_busca">CNPJ <span className="text-destructive">*</span></Label>
-              <div className="flex items-center gap-2">
-                <Input 
-                  id="cnpj_busca" 
-                  name="cnpj" 
-                  value={formData.cnpj} 
-                  onChange={handleChange}
-                  onBlur={handleCnpjBlur} 
-                  placeholder="00.000.000/0000-00" 
-                  required 
-                  disabled={isLoading || isCnpjLoading} 
-                />
-                {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-              </div>
-              <p className="text-xs text-muted-foreground">Digite o CNPJ e os campos serão preenchidos automaticamente se encontrado na BrasilAPI.</p>
-            </div>
-          </CardContent>
-        </Card>
-
         <Tabs defaultValue="informacoes" className="w-full">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6 text-xs flex-wrap">
             <TabsTrigger value="informacoes"><Info className="mr-1 h-3 w-3" />Informações</TabsTrigger>
@@ -432,6 +401,23 @@ export default function NovaOrganizacaoPage() {
             <Card className="shadow-lg">
               <CardHeader><CardTitle>Identificação</CardTitle><CardDescription>Preencha ou ajuste os dados básicos da organização.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj_field">CNPJ <span className="text-destructive">*</span></Label>
+                  <div className="flex items-center gap-2">
+                    <Input 
+                      id="cnpj_field" 
+                      name="cnpj" 
+                      value={formData.cnpj} 
+                      onChange={handleChange}
+                      onBlur={handleCnpjBlur} 
+                      placeholder="00.000.000/0000-00" 
+                      required 
+                      disabled={isLoading || isCnpjLoading} 
+                    />
+                    {isCnpjLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Digite o CNPJ e os campos serão preenchidos automaticamente se encontrado na BrasilAPI.</p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2"><Label htmlFor="nome">Nome da Organização (Razão Social) <span className="text-destructive">*</span></Label><Input id="nome" name="nome" value={formData.nome} onChange={handleChange} required disabled={isLoading} /></div>
                   <div className="space-y-2"><Label htmlFor="nome_fantasia">Nome Fantasia</Label><Input id="nome_fantasia" name="nome_fantasia" value={formData.nome_fantasia} onChange={handleChange} disabled={isLoading} /></div>
@@ -601,4 +587,3 @@ Supabase Integration Notes:
   - Ao submeter, o payload para public."Entidades" incluirá todos os novos campos.
   - Validações de frontend para formatos de CEP, UF, email, telefone.
 */
-
