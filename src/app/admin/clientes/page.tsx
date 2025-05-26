@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, isValid } from 'date-fns';
 
-// Interface for data fetched from Supabase
+// Interface for data fetched from Supabase for PessoasFisicas
 interface PessoaFisicaSupabase {
   id_pessoa_fisica: number;
   nome_completo: string;
@@ -23,7 +23,10 @@ interface PessoaFisicaSupabase {
   telefone: string | null;
   tipo_relacao: string | null; 
   data_cadastro: string;
-  MembrosEntidade?: { Entidades: { nome_fantasia: string } | null }[] | null; // Array for one-to-many through MembrosEntidade
+  MembrosEntidade?: { 
+    // Specify the relationship for Entidades
+    "Entidades!MembrosEntidade_id_entidade_pai_fkey": { nome: string } | null 
+  }[] | null; 
 }
 
 // Interface for data displayed in the table row
@@ -38,12 +41,8 @@ interface PessoaFisicaRow {
   dataCadastro: string;
 }
 
-// Initial placeholder data, will be replaced by Supabase data
-const initialPessoasFisicasData: PessoaFisicaRow[] = [];
-
-
 export default function GerenciamentoPessoasFisicasPage() {
-  const [pessoasFisicas, setPessoasFisicas] = useState<PessoaFisicaRow[]>(initialPessoasFisicasData);
+  const [pessoasFisicas, setPessoasFisicas] = useState<PessoaFisicaRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -71,8 +70,8 @@ export default function GerenciamentoPessoasFisicasPage() {
         tipo_relacao, 
         data_cadastro,
         MembrosEntidade!left ( 
-          Entidades!inner (
-            nome_fantasia
+          Entidades!MembrosEntidade_id_entidade_pai_fkey ( 
+            nome 
           )
         )
       `)
@@ -101,9 +100,7 @@ export default function GerenciamentoPessoasFisicasPage() {
         email: pf.email,
         telefone: pf.telefone,
         tipoRelacao: pf.tipo_relacao,
-        // Assuming one PessoaFisica is linked to at most one 'Entidade Pai' via MembrosEntidade for display here.
-        // If multiple links are possible and relevant, this mapping might need adjustment.
-        organizacaoVinculada: pf.MembrosEntidade && pf.MembrosEntidade.length > 0 && pf.MembrosEntidade[0].Entidades ? pf.MembrosEntidade[0].Entidades.nome_fantasia : null,
+        organizacaoVinculada: pf.MembrosEntidade && pf.MembrosEntidade.length > 0 && pf.MembrosEntidade[0]["Entidades!MembrosEntidade_id_entidade_pai_fkey"] ? pf.MembrosEntidade[0]["Entidades!MembrosEntidade_id_entidade_pai_fkey"].nome : null,
         dataCadastro: pf.data_cadastro,
       }));
       setPessoasFisicas(formattedData);
@@ -114,11 +111,11 @@ export default function GerenciamentoPessoasFisicasPage() {
   useEffect(() => {
     fetchPessoasFisicas();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Initial fetch. Search re-triggers via handleSearchSubmit -> fetchPessoasFisicas
+  }, []); 
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    fetchPessoasFisicas(); // Re-fetch with current searchTerm
+    fetchPessoasFisicas(); 
   };
 
   const handleDeleteClick = (pessoa: PessoaFisicaRow) => {
@@ -141,7 +138,7 @@ export default function GerenciamentoPessoasFisicasPage() {
       toast({ title: "Erro ao Excluir", description: error.message || "Falha ao excluir pessoa. Verifique as permissões (RLS).", variant: "destructive" });
     } else {
       toast({ title: "Pessoa Física Excluída!", description: `A pessoa ${pessoaToDelete.nome} foi excluída com sucesso.` });
-      fetchPessoasFisicas(); // Refresh the list
+      fetchPessoasFisicas(); 
     }
     setIsLoading(false);
     setIsAlertOpen(false);
@@ -177,6 +174,7 @@ export default function GerenciamentoPessoasFisicasPage() {
             <ExportDataDialog 
               dataTypeName="Pessoas Físicas" 
               exportableFields={[
+                { id: 'id', label: 'ID'},
                 { id: 'nomeCompleto', label: 'Nome Completo'},
                 { id: 'cpf', label: 'CPF'},
                 { id: 'email', label: 'Email'},
@@ -317,13 +315,11 @@ export default function GerenciamentoPessoasFisicasPage() {
         - Query PessoasFisicas table.
         - To display 'Organização Vinculada':
           - Perform a LEFT JOIN with 'MembrosEntidade' on 'PessoasFisicas.id_pessoa_fisica' = 'MembrosEntidade.id_membro_pessoa_fisica'.
-          - Then, perform an INNER JOIN from 'MembrosEntidade' to 'Entidades' on 'MembrosEntidade.id_entidade_pai' = 'Entidades.id_entidade' to get 'Entidades.nome_fantasia'.
-          - Supabase select syntax: .select('*, MembrosEntidade!left(Entidades!inner(nome_fantasia))')
+          - Then, perform an INNER JOIN from 'MembrosEntidade' to 'Entidades' using the 'MembrosEntidade_id_entidade_pai_fkey' relationship to get 'Entidades.nome'.
+          - Supabase select syntax: .select('*, MembrosEntidade!left(Entidades!MembrosEntidade_id_entidade_pai_fkey(nome))')
         - Search: Filter on 'nome_completo' or 'cpf' in PessoasFisicas.
         - RLS: Ensure policies on PessoasFisicas, MembrosEntidade, and Entidades allow the logged-in user (admin/supervisor/operator) to perform SELECT operations.
       */}
     </div>
   );
 }
-
-    
