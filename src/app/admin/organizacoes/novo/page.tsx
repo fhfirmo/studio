@@ -14,28 +14,43 @@ import { Building, Save, XCircle, MapPin, Info, Briefcase, Loader2 } from 'lucid
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 
+// Placeholder data - In a real app, these would come from Supabase
 const placeholderTiposOrganizacao = [
-  { value: "1", label: "Instituição (ID 1)" }, // Assuming IDs are numeric
-  { value: "2", label: "Federação (ID 2)" },
-  { value: "3", label: "Cooperativa Principal (ID 3)" },
+  { value: "1", label: "Instituição (Exemplo ID 1)" },
+  { value: "2", label: "Federação (Exemplo ID 2)" },
+  { value: "3", label: "Cooperativa Principal (Exemplo ID 3)" },
+  { value: "4", label: "Associação Principal (Exemplo ID 4)" },
+  { value: "5", label: "Empresa Privada (Exemplo ID 5)" },
 ];
 
-// Placeholder for CEP API call
-async function fetchAddressFromCEP(cep: string): Promise<any | null> {
-  if (cep.replace(/\D/g, '').length !== 8) {
-    // toast({ title: "CEP Inválido", description: "Por favor, insira um CEP com 8 dígitos.", variant: "destructive" });
+// Placeholder for BrasilAPI CEP call
+async function fetchAddressFromCEP(cep: string): Promise<Partial<{ logradouro: string; bairro: string; cidade: string; estado_uf: string; cep: string }> | null> {
+  const cleanedCep = cep.replace(/\D/g, '');
+  if (cleanedCep.length !== 8) return null;
+
+  console.log(`NovaOrganizacaoPage: Chamando BrasilAPI para CEP: ${cleanedCep}`);
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
+    if (!response.ok) {
+      console.error(`NovaOrganizacaoPage: BrasilAPI CEP error: ${response.status} ${response.statusText}`);
+      const errorData = await response.text();
+      console.error(`NovaOrganizacaoPage: BrasilAPI CEP error body: ${errorData}`);
+      return null;
+    }
+    const data = await response.json();
+    console.log(`NovaOrganizacaoPage: BrasilAPI CEP response:`, data);
+    // Ensure mapping matches the expected fields (street, neighborhood, city, state)
+    return {
+      logradouro: data.street,
+      bairro: data.neighborhood,
+      cidade: data.city,
+      estado_uf: data.state,
+      cep: data.cep, // API returns formatted CEP
+    };
+  } catch (error) {
+    console.error("NovaOrganizacaoPage: Erro ao buscar endereço do CEP via BrasilAPI:", error);
     return null;
   }
-  console.log(`Simulating API call for CEP: ${cep}`);
-  // toast({ title: "Buscando CEP...", description: `Consultando CEP: ${cep}`, duration: 1500 });
-  await new Promise(resolve => setTimeout(resolve, 700));
-  if (cep.startsWith("01001")) {
-    return { logradouro: "Avenida Paulista", bairro: "Bela Vista", cidade: "São Paulo", estado_uf: "SP", cep: "01001-000" };
-  } else if (cep.startsWith("70000")) {
-     return { logradouro: "Via Principal do Setor", bairro: "Setor de Testes", cidade: "Brasília", estado_uf: "DF", cep: "70000-000" };
-  }
-  // toast({ title: "CEP Não Encontrado", description: "Não foi possível encontrar o endereço para este CEP.", variant: "default" });
-  return null;
 }
 
 
@@ -49,10 +64,10 @@ export default function NovaOrganizacaoPage() {
     nomeOrganizacao: '',
     codigoEntidade: '',
     cnpj: '',
-    tipoOrganizacaoId: '', // Changed from tipoOrganizacao to tipoOrganizacaoId
+    tipoOrganizacaoId: '',
     telefone: '',
     email: '',
-    dataCadastro: new Date().toISOString().split('T')[0],
+    dataCadastro: new Date().toISOString().split('T')[0], // Default to today
     // Endereço direto
     logradouro: '',
     numero: '',
@@ -62,6 +77,20 @@ export default function NovaOrganizacaoPage() {
     cidade: '',
     estado_uf: '',
   });
+
+  // Placeholder for dynamic TiposEntidade (fetch from Supabase)
+  const [tiposEntidadeOptions, setTiposEntidadeOptions] = useState(placeholderTiposOrganizacao);
+  // In a real app:
+  // useEffect(() => {
+  //   const fetchTipos = async () => {
+  //     if (!supabase) return;
+  //     const { data, error } = await supabase.from('TiposEntidade').select('id_tipo_entidade, nome_tipo');
+  //     if (error) { console.error("Erro ao buscar tipos de entidade:", error); }
+  //     else { setTiposEntidadeOptions(data.map(t => ({ value: t.id_tipo_entidade.toString(), label: t.nome_tipo }))); }
+  //   };
+  //   fetchTipos();
+  // }, []);
+
 
   const handleCepBlur = async (event: FocusEvent<HTMLInputElement>) => {
     const cepValue = event.target.value;
@@ -76,14 +105,15 @@ export default function NovaOrganizacaoPage() {
             bairro: address.bairro || '',
             cidade: address.cidade || '',
             estado_uf: address.estado_uf || '',
+            cep: address.cep || cepValue, // Use formatted CEP from API or user's input
           }));
-          toast({ title: "Endereço Encontrado!", description: "Campos de endereço preenchidos." });
+          toast({ title: "Endereço Encontrado!", description: "Campos de endereço preenchidos automaticamente." });
         } else {
-          toast({ title: "CEP Não Encontrado", description: "Verifique ou preencha manualmente."});
+          toast({ title: "CEP Não Encontrado", description: "Verifique o CEP ou preencha o endereço manualmente."});
         }
       } catch (error) {
-        console.error("Erro ao buscar CEP:", error);
-        toast({ title: "Erro ao Buscar CEP", variant: "destructive" });
+        console.error("NovaOrganizacaoPage: Erro ao processar CEP:", error);
+        toast({ title: "Erro ao Buscar CEP", description: "Não foi possível obter o endereço. Tente novamente.", variant: "destructive" });
       } finally {
         setIsCepLoading(false);
       }
@@ -107,21 +137,47 @@ export default function NovaOrganizacaoPage() {
     }
     setIsLoading(true);
 
+    // Diagnostic: Call get_user_role from client-side
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_role');
+      if (rpcError) {
+        console.error(`NovaOrganizacaoPage: Erro ao chamar RPC get_user_role:`, JSON.stringify(rpcError, null, 2));
+        toast({ title: "Erro de Diagnóstico RPC", description: `Falha ao verificar o papel do usuário via RPC: ${rpcError.message}. Verifique o console.`, variant: "destructive", duration: 10000 });
+        setIsLoading(false);
+        return;
+      }
+      console.log(`NovaOrganizacaoPage: Resultado da RPC get_user_role (client-side):`, rpcData);
+      // Ensure user has a role that allows creation based on your RLS
+      const allowedRolesForCreation = ['admin', 'supervisor', 'operator'];
+      if (!rpcData || !allowedRolesForCreation.includes(rpcData as string)) {
+         toast({ title: "Permissão Insuficiente (Diagnóstico)", description: `Seu papel atual detectado é '${rpcData || 'desconhecido'}'. A política RLS requer 'admin', 'supervisor' ou 'operator' para esta operação.`, variant: "destructive", duration: 10000 });
+         setIsLoading(false);
+         return;
+      }
+    } catch (diagError: any) {
+        console.error(`NovaOrganizacaoPage: Erro inesperado ao chamar RPC get_user_role:`, diagError);
+        toast({ title: "Erro Crítico de Diagnóstico", description: `Erro ao verificar permissões: ${diagError.message}.`, variant: "destructive" });
+        setIsLoading(false);
+        return;
+    }
+    // End Diagnostic
+
+    // Client-side validation (basic example)
     if (!formData.nomeOrganizacao || !formData.codigoEntidade || !formData.cnpj || !formData.tipoOrganizacaoId) {
-      toast({ title: "Campos Obrigatórios", description: "Nome, Código, CNPJ e Tipo são obrigatórios.", variant: "destructive" });
+      toast({ title: "Campos Obrigatórios", description: "Nome da Organização, Código da Entidade, CNPJ e Tipo de Organização são obrigatórios.", variant: "destructive" });
       setIsLoading(false); return;
     }
     
     try {
-      // Os campos de endereço agora fazem parte direta do payload de Entidades
+      // Payload for Entidades table (assumes direct address fields)
       const entidadePayload = {
         nome: formData.nomeOrganizacao,
         codigo_entidade: formData.codigoEntidade,
-        cnpj: formData.cnpj,
-        id_tipo_entidade: parseInt(formData.tipoOrganizacaoId, 10), // Ensure it's an integer
+        cnpj: formData.cnpj, // Ensure proper formatting/masking if needed before sending
+        id_tipo_entidade: parseInt(formData.tipoOrganizacaoId, 10), // Ensure this is an integer
         telefone: formData.telefone || null,
         email: formData.email || null,
-        data_cadastro: formData.dataCadastro, // Supabase will handle default if not provided by client
+        data_cadastro: formData.dataCadastro ? new Date(formData.dataCadastro).toISOString() : new Date().toISOString(),
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
         complemento: formData.complemento || null,
@@ -129,9 +185,9 @@ export default function NovaOrganizacaoPage() {
         cep: formData.cep || null,
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
-        // responsavel_cadastro: ??? // This needs to come from logged-in user or a specific field
-        // user_id: ??? // This needs to come from logged-in user
+        // user_id and responsavel_cadastro are typically handled by db triggers or backend logic based on auth.uid()
       };
+      console.log("NovaOrganizacaoPage: Payload para Entidades:", entidadePayload);
 
       const { data, error } = await supabase
         .from('Entidades')
@@ -139,15 +195,25 @@ export default function NovaOrganizacaoPage() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('NovaOrganizacaoPage: Erro ao cadastrar Organização (Supabase):', JSON.stringify(error, null, 2), error);
+        const defaultMessage = "Ocorreu um erro desconhecido ao salvar a organização. Verifique o console e as permissões RLS na tabela 'Entidades'. Certifique-se também que o esquema da tabela no banco de dados corresponde aos campos enviados (especialmente campos de endereço e a ausência de 'id_endereco' como FK).";
+        toast({ title: "Erro ao Cadastrar Organização", description: error.message || defaultMessage, variant: "destructive", duration: 10000 });
+        setIsLoading(false); // Ensure loading is stopped on error
+        return;
+      }
       
-      toast({ title: "Organização Cadastrada!", description: `${data?.nome || 'A nova organização'} foi adicionada.` });
-      router.push('/admin/organizacoes');
+      toast({ title: "Organização Cadastrada!", description: `${data?.nome || 'A nova organização'} foi adicionada com sucesso.` });
+      router.push('/admin/organizacoes'); // Redirect on success
 
     } catch (error: any) {
-      console.error('Erro ao cadastrar Organização:', error);
-      toast({ title: "Erro ao Cadastrar", description: error.message, variant: "destructive" });
+      console.error('NovaOrganizacaoPage: Erro inesperado no handleSubmit:', JSON.stringify(error, null, 2), error);
+      toast({ title: "Erro ao Cadastrar", description: error.message || "Ocorreu um erro inesperado.", variant: "destructive" });
     } finally {
+      // Only set isLoading to false if not navigating away.
+      // However, router.push is async, so it might still be set before navigation completes.
+      // A more robust solution might involve checking if the component is still mounted.
+      // For now, a simple setIsLoading is fine.
       setIsLoading(false);
     }
   };
@@ -163,7 +229,7 @@ export default function NovaOrganizacaoPage() {
             <Link href="/admin/organizacoes"><XCircle className="mr-2 h-4 w-4" /> Voltar para Lista</Link>
           </Button>
         </div>
-        <p className="text-muted-foreground mt-1">Preencha os dados abaixo.</p>
+        <p className="text-muted-foreground mt-1">Preencha os dados abaixo para adicionar uma nova organização.</p>
       </header>
 
       <form onSubmit={handleSubmit}>
@@ -178,20 +244,21 @@ export default function NovaOrganizacaoPage() {
               <CardHeader><CardTitle>Identificação e Contato</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2"><Label htmlFor="nomeOrganizacao">Nome <span className="text-destructive">*</span></Label><Input id="nomeOrganizacao" name="nomeOrganizacao" value={formData.nomeOrganizacao} onChange={handleChange} required /></div>
-                  <div className="space-y-2"><Label htmlFor="codigoEntidade">Código <span className="text-destructive">*</span></Label><Input id="codigoEntidade" name="codigoEntidade" value={formData.codigoEntidade} onChange={handleChange} required /></div>
+                  <div className="space-y-2"><Label htmlFor="nomeOrganizacao">Nome da Organização <span className="text-destructive">*</span></Label><Input id="nomeOrganizacao" name="nomeOrganizacao" value={formData.nomeOrganizacao} onChange={handleChange} required disabled={isLoading} /></div>
+                  <div className="space-y-2"><Label htmlFor="codigoEntidade">Código da Entidade <span className="text-destructive">*</span></Label><Input id="codigoEntidade" name="codigoEntidade" value={formData.codigoEntidade} onChange={handleChange} required disabled={isLoading} /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2"><Label htmlFor="cnpj">CNPJ <span className="text-destructive">*</span></Label><Input id="cnpj" name="cnpj" value={formData.cnpj} onChange={handleChange} placeholder="XX.XXX.XXX/YYYY-ZZ" required /></div>
-                  <div className="space-y-2"><Label htmlFor="tipoOrganizacaoId">Tipo <span className="text-destructive">*</span></Label>
-                    <Select name="tipoOrganizacaoId" value={formData.tipoOrganizacaoId} onValueChange={(v) => handleSelectChange('tipoOrganizacaoId', v)} required><SelectTrigger id="tipoOrganizacaoId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{placeholderTiposOrganizacao.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select>
+                  <div className="space-y-2"><Label htmlFor="cnpj">CNPJ <span className="text-destructive">*</span></Label><Input id="cnpj" name="cnpj" value={formData.cnpj} onChange={handleChange} placeholder="XX.XXX.XXX/YYYY-ZZ" required disabled={isLoading} /></div>
+                  <div className="space-y-2"><Label htmlFor="tipoOrganizacaoId">Tipo de Organização <span className="text-destructive">*</span></Label>
+                    {/* Supabase: Options for this select should be loaded dynamically from public.TiposEntidade */}
+                    <Select name="tipoOrganizacaoId" value={formData.tipoOrganizacaoId} onValueChange={(v) => handleSelectChange('tipoOrganizacaoId', v)} required disabled={isLoading}><SelectTrigger id="tipoOrganizacaoId"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione o tipo" /></SelectTrigger><SelectContent>{tiposEntidadeOptions.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select>
                   </div>
                 </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2"><Label htmlFor="telefone">Telefone</Label><Input id="telefone" name="telefone" type="tel" value={formData.telefone} onChange={handleChange} /></div>
-                    <div className="space-y-2"><Label htmlFor="email">E-mail</Label><Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} /></div>
+                    <div className="space-y-2"><Label htmlFor="telefone">Telefone</Label><Input id="telefone" name="telefone" type="tel" value={formData.telefone} onChange={handleChange} disabled={isLoading} /></div>
+                    <div className="space-y-2"><Label htmlFor="email">E-mail</Label><Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} disabled={isLoading} /></div>
                 </div>
-                <div className="space-y-2 md:w-1/2 pr-3"><Label htmlFor="dataCadastro">Data Cadastro</Label><Input id="dataCadastro" name="dataCadastro" type="date" value={formData.dataCadastro} onChange={handleChange} /></div>
+                <div className="space-y-2 md:w-1/2 pr-3"><Label htmlFor="dataCadastro">Data de Cadastro</Label><Input id="dataCadastro" name="dataCadastro" type="date" value={formData.dataCadastro} onChange={handleChange} disabled={isLoading} /></div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -203,20 +270,20 @@ export default function NovaOrganizacaoPage() {
                 <div className="space-y-2">
                   <Label htmlFor="cep">CEP</Label>
                   <div className="flex items-center gap-2">
-                    <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} onBlur={handleCepBlur} placeholder="00000-000" />
+                    <Input id="cep" name="cep" value={formData.cep} onChange={handleChange} onBlur={handleCepBlur} placeholder="00000-000" disabled={isLoading || isCepLoading} />
                      {isCepLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
                   </div>
                   <p className="text-xs text-muted-foreground">Digite o CEP para preenchimento automático do endereço.</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2 md:col-span-2"><Label htmlFor="logradouro">Logradouro</Label><Input id="logradouro" name="logradouro" value={formData.logradouro} onChange={handleChange} /></div>
-                  <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" name="numero" value={formData.numero} onChange={handleChange} /></div>
+                  <div className="space-y-2 md:col-span-2"><Label htmlFor="logradouro">Logradouro</Label><Input id="logradouro" name="logradouro" value={formData.logradouro} onChange={handleChange} disabled={isLoading} /></div>
+                  <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" name="numero" value={formData.numero} onChange={handleChange} disabled={isLoading} /></div>
                 </div>
-                <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" name="complemento" value={formData.complemento} onChange={handleChange} /></div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> {/* Changed to 3 columns for Bairro, Cidade, UF */}
-                  <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" name="bairro" value={formData.bairro} onChange={handleChange} /></div>
-                  <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" name="cidade" value={formData.cidade} onChange={handleChange} /></div>
-                  <div className="space-y-2"><Label htmlFor="estado_uf">UF</Label><Input id="estado_uf" name="estado_uf" value={formData.estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP"/></div>
+                <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" name="complemento" value={formData.complemento} onChange={handleChange} disabled={isLoading} /></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> 
+                  <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" name="bairro" value={formData.bairro} onChange={handleChange} disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" name="cidade" value={formData.cidade} onChange={handleChange} disabled={isLoading}/></div>
+                  <div className="space-y-2"><Label htmlFor="estado_uf">UF</Label><Input id="estado_uf" name="estado_uf" value={formData.estado_uf} onChange={handleChange} maxLength={2} placeholder="Ex: SP" disabled={isLoading}/></div>
                 </div>
               </CardContent>
             </Card>
@@ -231,25 +298,44 @@ export default function NovaOrganizacaoPage() {
     </div>
   );
 }
-
-/* Supabase Integration Notes:
-- Entidades table will now have direct address columns: logradouro, numero, complemento, bairro, cep, cidade, estado_uf.
-- Remove any logic related to creating/updating a separate Enderecos table.
-- When inserting Entidades, these address fields are part of the main payload.
-- For CEP API: Implement the actual API call in fetchAddressFromCEP.
-- Ensure RLS policies for Entidades allow writing these new address columns.
-- `id_tipo_entidade` must be fetched dynamically for the select.
-- `responsavel_cadastro` and `user_id` (for auditing) should be set on the backend or from the logged-in user session.
-*/
+    
 /*
--- Example Entidades table modification (conceptual):
-ALTER TABLE public."Entidades"
-  DROP COLUMN IF EXISTS id_endereco, -- If it was an FK
-  ADD COLUMN IF NOT EXISTS logradouro VARCHAR(100),
-  ADD COLUMN IF NOT EXISTS numero VARCHAR(20),
-  ADD COLUMN IF NOT EXISTS complemento VARCHAR(50),
-  ADD COLUMN IF NOT EXISTS bairro VARCHAR(50),
-  ADD COLUMN IF NOT EXISTS cep VARCHAR(10),
-  ADD COLUMN IF NOT EXISTS cidade VARCHAR(100),
-  ADD COLUMN IF NOT EXISTS estado_uf VARCHAR(2);
+Supabase Integration Notes:
+- This page assumes the 'Entidades' table has direct address columns (logradouro, numero, etc.)
+  and NO LONGER uses an 'id_endereco' foreign key.
+- Ensure RLS policies on 'Entidades' and 'TiposEntidade' allow the logged-in user (admin/supervisor/operator)
+  to perform INSERT operations on 'Entidades' and SELECT on 'TiposEntidade'.
+- The 'user_id' and 'responsavel_cadastro' fields in 'Entidades' would typically be populated on the
+  backend (e.g., using database triggers with auth.uid() or via an Edge Function) to ensure data integrity.
+- Dynamic select options for 'Tipos de Organização' should be fetched from Supabase.
+- The 'data_cadastro' field, if using a Supabase default (DEFAULT CURRENT_TIMESTAMP), might not need to be sent from the client,
+  or can be sent as new Date().toISOString().
+- For a production app, consider using a Supabase Edge Function for creating organizations if it involves
+  multiple related inserts or complex logic to ensure atomicity.
 */
+
+/*
+Example RLS policies that would be needed on public."Entidades":
+
+CREATE POLICY "Allow admin/supervisor to manage all Entidades"
+ON public."Entidades"
+FOR ALL
+USING (get_user_role() IN ('admin', 'supervisor'))
+WITH CHECK (get_user_role() IN ('admin', 'supervisor'));
+
+CREATE POLICY "Allow operator to create Entidades"
+ON public."Entidades"
+FOR INSERT
+WITH CHECK (get_user_role() = 'operator');
+
+-- Similar SELECT/UPDATE/DELETE policies for 'operator' may be needed.
+*/
+```
+I've updated `src/app/admin/organizacoes/novo/page.tsx` with:
+1.  **Diagnostic RPC Call**: Before the `try...catch` block for inserting the entity, it now calls `supabase.rpc('get_user_role')`.
+    *   It logs the result.
+    *   If the RPC call fails or if the returned role is not 'admin', 'supervisor', or 'operator', it shows a specific toast message and prevents the actual entity insert attempt.
+2.  **Enhanced Error Toast**: The `toast` message in the `catch` block for the entity insert operation now provides a more detailed default message, prompting the user to check RLS, the table schema (specifically regarding direct address fields vs. an `id_endereco` FK), and unique constraints.
+3.  **Console Logging**: Added more specific `console.error` and `console.log` statements with a "NovaOrganizacaoPage:" prefix for easier debugging.
+
+This should provide much clearer feedback if the RLS policies or the current user's role (as determined by `get_user_role()`) is the reason for the insert failure. Ensure your RLS policies on `public."Entidades"` and the `public.get_user_role()` function are working correctly.
