@@ -50,15 +50,15 @@ interface VehicleDataFromDB {
     PessoasFisicas: { nome_completo: string; cpf: string; }; 
     id_cnh: string;
     CNHs: { numero_registro: string; categoria: string; data_validade: string }; 
-    categoria_cnh: string; // This is categoria_cnh from VeiculoMotoristas
+    categoria_cnh: string; 
   }[];
 }
 
 interface GenericOption { value: string; label: string; }
 
 interface StagedMotorista {
-  id_veiculo_motorista?: string; // Present if it's an existing record from DB
-  tempId?: string; // Used for client-side key for new items before save
+  id_veiculo_motorista?: string; 
+  tempId?: string; 
   id_motorista: string;
   nome_motorista: string;
   id_cnh: string;
@@ -67,7 +67,7 @@ interface StagedMotorista {
 }
 
 const initialFormData = {
-  placa_atual: '', placa_anterior: '', chassi: '', tipo_especie: '', combustivel: '',
+  placa_atual: '', placa_anterior: '', chassi: '', tipo_especie: '--select--', combustivel: '',
   marca: '', modelo: '', ano_fabricacao: '', ano_modelo: '', cor: '',
   codigo_renavam: '', estado_crlv: '', numero_serie_crlv: '',
   data_expedicao_crlv: undefined as Date | undefined, data_validade_crlv: undefined as Date | undefined,
@@ -86,7 +86,6 @@ const tipoEspecieOptions: GenericOption[] = [
   { value: "Outro", label: "Outro (Especificar em Observações)"},
 ];
 
-// Parallelum FIPE API types
 interface FipeMarca { codigo: string; nome: string; }
 interface FipeModelo { codigo: string; nome: string; }
 interface FipeAno { codigo: string; nome: string; }
@@ -127,7 +126,6 @@ async function fetchFipeDetalhesVeiculoParallelum(marcaCodigo: string, modeloCod
   } catch (error) { console.error("Error fetching FIPE Detalhes:", error); return null; }
 }
 
-// Placeholder function to fetch vehicle data by ID
 async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | null> {
   if (!supabase) {
     console.error("EditarVeiculoPage: Supabase client not initialized.");
@@ -140,8 +138,6 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
   }
 
   console.log(`Fetching vehicle data for ID: ${numericId} from Supabase`);
-  // Supabase: Fetch from public.Veiculos
-  // Ensure to JOIN or select related data if needed for pre-filling (e.g., ModelosVeiculo if id_modelo was still a FK)
   const { data, error } = await supabase
     .from('Veiculos')
     .select(`
@@ -156,7 +152,7 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
       )
     `)
     .eq('id_veiculo', numericId)
-    .single<VehicleDataFromDB>(); // Specify the return type
+    .single<VehicleDataFromDB>(); 
 
   if (error) {
     console.error("Erro ao buscar dados do veículo:", JSON.stringify(error, null, 2));
@@ -184,7 +180,6 @@ export default function EditarVeiculoPage() {
   const [isMotoristaModalOpen, setIsMotoristaModalOpen] = useState(false);
   const [motoristaModalData, setMotoristaModalData] = useState({ id_motorista: '', id_cnh: '', categoria_cnh_veiculo: '' });
 
-  // FIPE Parallelum API State
   const [fipeMarcas, setFipeMarcas] = useState<FipeMarca[]>([]);
   const [fipeModelos, setFipeModelos] = useState<FipeModelo[]>([]);
   const [fipeAnos, setFipeAnos] = useState<FipeAno[]>([]);
@@ -260,7 +255,7 @@ export default function EditarVeiculoPage() {
           placa_atual: data.placa_atual || '',
           placa_anterior: data.placa_anterior || '',
           chassi: data.chassi || '',
-          tipo_especie: data.tipo_especie || '',
+          tipo_especie: data.tipo_especie || '--select--',
           combustivel: data.combustivel || '',
           marca: data.marca || '',
           modelo: data.modelo || '',
@@ -281,15 +276,14 @@ export default function EditarVeiculoPage() {
           mes_referencia_fipe: data.mes_referencia_fipe || '',
           observacao: data.observacao || '',
         });
-        // Pre-fill staged motoristas from existing data
         setStagedMotoristas((data.VeiculoMotoristas || []).map(vm => ({
-            id_veiculo_motorista: vm.id_veiculo_motorista, // Keep the original DB ID
-            tempId: vm.id_veiculo_motorista, // Use actual ID as tempId for existing ones
+            id_veiculo_motorista: vm.id_veiculo_motorista,
+            tempId: vm.id_veiculo_motorista, 
             id_motorista: vm.id_motorista.toString(),
             nome_motorista: vm.PessoasFisicas.nome_completo,
             id_cnh: vm.id_cnh.toString(),
             numero_cnh: `${vm.CNHs.numero_registro} (Cat: ${vm.CNHs.categoria}, Val: ${vm.CNHs.data_validade && isValidDate(parseISO(vm.CNHs.data_validade)) ? format(parseISO(vm.CNHs.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})`,
-            categoria_cnh: vm.categoria_cnh, // This is categoria_cnh from VeiculoMotoristas
+            categoria_cnh: vm.categoria_cnh,
         })));
         setVehicleFound(true);
       } else {
@@ -375,7 +369,7 @@ export default function EditarVeiculoPage() {
     if (!selectedMotorista || !selectedCNH) { toast({title: "Erro", description: "Motorista ou CNH não encontrado.", variant: "destructive"}); return; }
 
     setStagedMotoristas(prev => [...prev, {
-      tempId: Date.now().toString(), // For new items, generate a temp client-side ID
+      tempId: Date.now().toString(), 
       id_motorista: motoristaModalData.id_motorista, nome_motorista: selectedMotorista.label,
       id_cnh: motoristaModalData.id_cnh, numero_cnh: selectedCNH.label,
       categoria_cnh: motoristaModalData.categoria_cnh_veiculo
@@ -406,7 +400,6 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao removed from payload
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -433,16 +426,12 @@ export default function EditarVeiculoPage() {
 
       if (veiculoError) throw veiculoError;
 
-      // Sync VeiculoMotoristas: Delete existing and insert new staged ones
-      // This is a common pattern but can be optimized for large numbers of drivers.
-      // For more complex scenarios, consider diffing or using an Edge Function for transactional updates.
       const { error: deleteMotoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
         .eq('id_veiculo', parseInt(vehicleId));
       
       if (deleteMotoristasError) {
-        // Log warning but proceed if main vehicle update was successful. User can retry driver linking.
         console.warn("Erro ao deletar motoristas antigos:", JSON.stringify(deleteMotoristasError, null, 2));
         toast({ title: "Aviso", description: "Erro ao limpar motoristas antigos. Por favor, verifique os vínculos dos motoristas.", variant: "default", duration: 6000 });
       }
@@ -453,7 +442,6 @@ export default function EditarVeiculoPage() {
           id_motorista: parseInt(m.id_motorista),
           id_cnh: parseInt(m.id_cnh),
           categoria_cnh: m.categoria_cnh,
-          // data_vinculacao will use DB default if not provided
         }));
         const { error: insertMotoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (insertMotoristasError) {
@@ -466,7 +454,7 @@ export default function EditarVeiculoPage() {
       router.push('/admin/veiculos'); 
 
     } catch (error: any) {
-      console.error('Erro ao atualizar veículo:', JSON.stringify(error, null, 2), error);
+      console.error('Erro ao atualizar veículo:', JSON.stringify(error, null, 2));
       if (error.code === '22001') { 
         toast({ title: "Erro ao Atualizar", description: `Um dos campos de texto é muito longo para o banco de dados. Verifique os dados e tente novamente. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
       } else if (error.code === '23505') { 
@@ -633,12 +621,12 @@ export default function EditarVeiculoPage() {
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados do CRLV</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="space-y-2"><Label htmlFor="placa_anterior_edit">Placa Anterior</Label><Input id="placa_anterior_edit" name="placa_anterior" value={formData.placa_anterior} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="codigo_renavam_edit">Código Renavam <span className="text-destructive">*</span></Label><Input id="codigo_renavam_edit" name="codigo_renavam" value={formData.codigo_renavam} onChange={handleChange} required /></div>
-            <div className="space-y-2"><Label htmlFor="estado_crlv_edit">Estado CRLV</Label><Input id="estado_crlv_edit" name="estado_crlv" value={formData.estado_crlv} onChange={handleChange} maxLength={2} /></div>
             <div className="space-y-2"><Label htmlFor="numero_serie_crlv_edit">Nº Série CRLV</Label><Input id="numero_serie_crlv_edit" name="numero_serie_crlv" value={formData.numero_serie_crlv} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="data_expedicao_crlv_edit">Data Expedição CRLV</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{formData.data_expedicao_crlv ? format(formData.data_expedicao_crlv, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={formData.data_expedicao_crlv} onSelect={(d) => handleDateChange('data_expedicao_crlv', d)} /></PopoverContent></Popover></div>
             <div className="space-y-2"><Label htmlFor="data_validade_crlv_edit">Data Validade CRLV</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{formData.data_validade_crlv ? format(formData.data_validade_crlv, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={formData.data_validade_crlv} onSelect={(d) => handleDateChange('data_validade_crlv', d)} /></PopoverContent></Popover></div>
+            <div className="space-y-2"><Label htmlFor="estado_crlv_edit">Estado CRLV</Label><Input id="estado_crlv_edit" name="estado_crlv" value={formData.estado_crlv} onChange={handleChange} maxLength={2} /></div>
+            <div className="space-y-2"><Label htmlFor="placa_anterior_edit">Placa Anterior</Label><Input id="placa_anterior_edit" name="placa_anterior" value={formData.placa_anterior} onChange={handleChange} /></div>
           </CardContent>
         </Card>
         
@@ -767,7 +755,6 @@ Supabase Integration Notes:
 - Database schema:
   - `Veiculos` table has `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
   - `tipo_especie` is a dropdown.
-  - `versao` column has been removed from Veiculos.
 - FIPE API (Parallelum): Multi-step fetch logic (Marca -> Modelo/Ano -> Detalhes) is implemented.
 - `handleSubmit`: Saves vehicle data including FIPE fields and linked motoristas (to `VeiculoMotoristas`).
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista).

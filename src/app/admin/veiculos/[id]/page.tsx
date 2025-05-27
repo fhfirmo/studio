@@ -26,7 +26,6 @@ interface VehicleDetails {
   combustivel: string | null;
   marca: string;
   modelo: string;
-  // versao: string | null; // Removed as per recent update
   ano_fabricacao: number | null;
   ano_modelo: number | null;
   cor: string | null;
@@ -104,7 +103,6 @@ async function getVehicleDetailsFromDB(vehicleId: string): Promise<VehicleDetail
     combustivel: data.combustivel,
     marca: data.marca,
     modelo: data.modelo,
-    // versao: data.versao, // Removed
     ano_fabricacao: data.ano_fabricacao,
     ano_modelo: data.ano_modelo,
     cor: data.cor,
@@ -177,14 +175,12 @@ export default function VehicleDetailsPage() {
     if (!vehicle || !supabase) return;
     setIsLoading(true);
     try {
-      // First, delete related VeiculoMotoristas entries
       const { error: motoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
         .eq('id_veiculo', parseInt(vehicle.id));
       if (motoristasError) throw motoristasError;
 
-      // Then delete the Veiculo itself
       const { error: veiculoError } = await supabase
         .from('Veiculos')
         .delete()
@@ -195,9 +191,8 @@ export default function VehicleDetailsPage() {
       router.push('/admin/veiculos');
     } catch (error: any) {
       toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
-      setIsLoading(false); // Only set isLoading to false on error, successful navigation unmounts
+      setIsLoading(false); 
     }
-    // No finally block for setIsLoading(false) here because router.push will unmount
   };
 
   if (isLoading) return <div className="container mx-auto px-4 py-12 text-center">Carregando...</div>;
@@ -213,7 +208,6 @@ export default function VehicleDetailsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Informações Gerais Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Info className="mr-2 h-5 w-5 text-primary" /> Informações Gerais</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
@@ -229,20 +223,18 @@ export default function VehicleDetailsPage() {
             </CardContent>
           </Card>
 
-          {/* Dados do CRLV Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><FileText className="mr-2 h-5 w-5 text-primary" /> Dados do CRLV</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
-              <InfoItem label="Placa Anterior" value={vehicle.placa_anterior} />
               <InfoItem label="Código Renavam" value={vehicle.codigo_renavam} />
-              <InfoItem label="Estado CRLV" value={vehicle.estado_crlv} />
               <InfoItem label="Nº Série CRLV" value={vehicle.numero_serie_crlv} />
               <InfoItem label="Data Expedição CRLV" value={formatDate(vehicle.data_expedicao_crlv)} icon={CalendarDays}/>
               <InfoItem label="Data Validade CRLV" value={formatDate(vehicle.data_validade_crlv)} icon={CalendarDays}/>
+              <InfoItem label="Estado CRLV" value={vehicle.estado_crlv} />
+              <InfoItem label="Placa Anterior" value={vehicle.placa_anterior} />
             </CardContent>
           </Card>
 
-          {/* Dados do Proprietário Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><User className="mr-2 h-5 w-5 text-primary" /> Proprietário</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
@@ -314,7 +306,6 @@ export default function VehicleDetailsPage() {
 }
 
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
-  // Do not render the item if the value is essentially empty (null, undefined, or just whitespace), unless it's explicitly "N/A"
   if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '' && value !== "N/A")) return null;
   
   const displayValue = (typeof value === 'string' && value.trim() === '')

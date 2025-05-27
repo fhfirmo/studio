@@ -16,7 +16,7 @@ import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, Dia
 import { Car, Save, XCircle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
-import { format, parse, isValid as isValidDate, parseISO } from "date-fns";
+import { format, parse, isValid as isValidDate } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
 interface GenericOption { value: string; label: string; }
@@ -31,7 +31,7 @@ interface StagedMotorista {
 }
 
 const initialFormData = {
-  placa_atual: '', placa_anterior: '', chassi: '', tipo_especie: '', combustivel: '',
+  placa_atual: '', placa_anterior: '', chassi: '', tipo_especie: '--select--', combustivel: '',
   marca: '', modelo: '', ano_fabricacao: '', ano_modelo: '', cor: '',
   codigo_renavam: '', estado_crlv: '', numero_serie_crlv: '',
   data_expedicao_crlv: undefined as Date | undefined, data_validade_crlv: undefined as Date | undefined,
@@ -283,7 +283,6 @@ export default function NovoVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao is removed from payload
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -332,7 +331,7 @@ export default function NovoVeiculoPage() {
       router.push('/admin/veiculos');
 
     } catch (error: any) {
-        console.error('Erro ao cadastrar veículo:', JSON.stringify(error, null, 2), error);
+        console.error('Erro ao cadastrar veículo:', JSON.stringify(error, null, 2));
         if (error.code === '22001') { 
             toast({ title: "Erro ao Cadastrar", description: `Um dos campos de texto é muito longo para o banco de dados. Verifique os dados e tente novamente. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
         } else if (error.code === '23505') { 
@@ -492,12 +491,12 @@ export default function NovoVeiculoPage() {
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados do CRLV</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="space-y-2"><Label htmlFor="placa_anterior">Placa Anterior</Label><Input id="placa_anterior" name="placa_anterior" value={formData.placa_anterior} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="codigo_renavam">Código Renavam <span className="text-destructive">*</span></Label><Input id="codigo_renavam" name="codigo_renavam" value={formData.codigo_renavam} onChange={handleChange} required /></div>
-            <div className="space-y-2"><Label htmlFor="estado_crlv">Estado CRLV</Label><Input id="estado_crlv" name="estado_crlv" value={formData.estado_crlv} onChange={handleChange} maxLength={2} /></div>
             <div className="space-y-2"><Label htmlFor="numero_serie_crlv">Nº Série CRLV</Label><Input id="numero_serie_crlv" name="numero_serie_crlv" value={formData.numero_serie_crlv} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="data_expedicao_crlv">Data Expedição CRLV</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{formData.data_expedicao_crlv ? format(formData.data_expedicao_crlv, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={formData.data_expedicao_crlv} onSelect={(d) => handleDateChange('data_expedicao_crlv', d)} /></PopoverContent></Popover></div>
             <div className="space-y-2"><Label htmlFor="data_validade_crlv">Data Validade CRLV</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{formData.data_validade_crlv ? format(formData.data_validade_crlv, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={formData.data_validade_crlv} onSelect={(d) => handleDateChange('data_validade_crlv', d)} /></PopoverContent></Popover></div>
+            <div className="space-y-2"><Label htmlFor="estado_crlv">Estado CRLV</Label><Input id="estado_crlv" name="estado_crlv" value={formData.estado_crlv} onChange={handleChange} maxLength={2} /></div>
+            <div className="space-y-2"><Label htmlFor="placa_anterior">Placa Anterior</Label><Input id="placa_anterior" name="placa_anterior" value={formData.placa_anterior} onChange={handleChange} /></div>
           </CardContent>
         </Card>
         
@@ -622,7 +621,6 @@ Supabase Integration Notes:
 - Database schema:
   - `Veiculos` table has `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
   - `tipo_especie` is a dropdown.
-  - `versao` column has been removed from Veiculos.
 - FIPE API (Parallelum): Multi-step fetch logic (Marca -> Modelo/Ano -> Detalhes) is implemented.
 - `handleSubmit`: Saves vehicle data including FIPE fields and linked motoristas (to `VeiculoMotoristas`).
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista).
