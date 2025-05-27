@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent, useEffect, type ChangeEvent } from 'react';
@@ -397,6 +398,7 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
+      // versao: null, // Campo removido
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -424,7 +426,6 @@ export default function EditarVeiculoPage() {
       if (veiculoError) throw veiculoError;
 
       // Sync VeiculoMotoristas: Delete existing and insert new staged ones
-      // This approach is simpler than diffing but can be less efficient for minor changes.
       const { error: deleteMotoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
@@ -432,7 +433,6 @@ export default function EditarVeiculoPage() {
       
       if (deleteMotoristasError) {
         console.warn("Erro ao deletar motoristas antigos:", JSON.stringify(deleteMotoristasError, null, 2));
-        // Decide if this is critical enough to stop the whole process
       }
 
       if (stagedMotoristas.length > 0) {
@@ -441,7 +441,6 @@ export default function EditarVeiculoPage() {
           id_motorista: parseInt(m.id_motorista),
           id_cnh: parseInt(m.id_cnh),
           categoria_cnh: m.categoria_cnh,
-          // data_vinculacao is default CURRENT_DATE or can be set if you add a field for it
         }));
         const { error: insertMotoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (insertMotoristasError) {
@@ -506,7 +505,7 @@ export default function EditarVeiculoPage() {
                             }}
                             disabled={isLoadingFipeMarcas}
                         >
-                            <SelectTrigger id="fipe_marca_edit"><SelectValue placeholder={isLoadingFipeMarcas ? "Carregando..." : "Selecione a Marca"} /></SelectTrigger>
+                            <SelectTrigger id="fipe_marca_edit" className="w-full"><SelectValue placeholder={isLoadingFipeMarcas ? "Carregando..." : "Selecione a Marca"} /></SelectTrigger>
                             <SelectContent>
                                 {fipeMarcas.map(marca => <SelectItem key={marca.codigo} value={marca.codigo}>{marca.nome}</SelectItem>)}
                             </SelectContent>
@@ -522,8 +521,11 @@ export default function EditarVeiculoPage() {
                             }}
                             disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
                         >
-                           <SelectTrigger id="fipe_modelo_edit">
-                                <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} />
+                           <SelectTrigger id="fipe_modelo_edit" className="w-full">
+                                {selectedFipeModeloCodigo && fipeModelos.length > 0 ? 
+                                    (fipeModelos.find(m => m.codigo === selectedFipeModeloCodigo)?.nome || <span className="text-muted-foreground">Selecione o Modelo</span>)
+                                    : <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} />
+                                }
                            </SelectTrigger>
                             <SelectContent>
                                 {fipeModelos.map(modelo => <SelectItem key={modelo.codigo} value={modelo.codigo}>{modelo.nome}</SelectItem>)}
@@ -538,10 +540,13 @@ export default function EditarVeiculoPage() {
                                 console.log("EditPage - Ano FIPE selecionado:", value);
                                 setSelectedFipeAnoCodigo(value);
                             }}
-                            disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
+                            disabled={!selectedFipeMarcaCodigo || !selectedFipeModeloCodigo || isLoadingFipeModelosAnos}
                         >
-                            <SelectTrigger id="fipe_ano_edit">
-                                <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
+                            <SelectTrigger id="fipe_ano_edit" className="w-full">
+                               {selectedFipeAnoCodigo && fipeAnos.length > 0 ?
+                                 (fipeAnos.find(a => a.codigo === selectedFipeAnoCodigo)?.nome || <span className="text-muted-foreground">Selecione o Ano</span>)
+                                 : <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
+                               }
                             </SelectTrigger>
                             <SelectContent>
                                 {fipeAnos.map(ano => <SelectItem key={ano.codigo} value={ano.codigo}>{ano.nome}</SelectItem>)}
@@ -734,7 +739,7 @@ export default function EditarVeiculoPage() {
 Supabase Integration Notes:
 - On load (Edit page): Fetch vehicle data, including its `VeiculoMotoristas` and their related CNH/PessoaFisica details.
 - FIPE API (Parallelum): Multi-step fetch is now implemented.
-- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`. `versao` field has been removed.
+- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`.
 - On submit: Update `Veiculos`. Then, manage `VeiculoMotoristas` (delete all for vehicle, then re-insert staged ones).
 - `marca`, `modelo` are direct text inputs, populated by FIPE lookup or manually.
 - `tipo_especie` is now a select dropdown.
