@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
+import { useState, type FormEvent, useEffect, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -19,8 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { format, parse, isValid as isValidDate, parseISO } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
-interface GenericOption { value: string; label: string; }
-
 interface VehicleDataFromDB {
   id_veiculo: string;
   placa_atual: string;
@@ -30,7 +27,6 @@ interface VehicleDataFromDB {
   combustivel?: string | null;
   marca: string; 
   modelo: string; 
-  // versao?: string | null; // Removed
   ano_fabricacao?: number | null;
   ano_modelo?: number | null;
   cor?: string | null;
@@ -56,6 +52,8 @@ interface VehicleDataFromDB {
     categoria_cnh: string;
   }[];
 }
+
+interface GenericOption { value: string; label: string; }
 
 interface StagedMotorista {
   id_veiculo_motorista?: string; 
@@ -160,7 +158,6 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
   return data;
 }
 
-
 export default function EditarVeiculoPage() {
   const router = useRouter();
   const params = useParams();
@@ -223,6 +220,16 @@ export default function EditarVeiculoPage() {
   }, [selectedFipeMarcaCodigo, toast]);
 
   useEffect(() => {
+    setSelectedFipeAnoCodigo('');
+    setFipeVeiculoDetalhes(null);
+  }, [selectedFipeModeloCodigo]);
+
+  useEffect(() => {
+    setFipeVeiculoDetalhes(null);
+  }, [selectedFipeAnoCodigo]);
+
+
+  useEffect(() => {
     const fetchInitialData = async () => {
       if (!vehicleId || !supabase) { setIsLoading(false); setVehicleFound(false); return; }
       setIsLoading(true);
@@ -248,7 +255,6 @@ export default function EditarVeiculoPage() {
           combustivel: data.combustivel || '',
           marca: data.marca || '',
           modelo: data.modelo || '',
-          // versao: data.versao || '', // Removed
           ano_fabricacao: data.ano_fabricacao?.toString() || '',
           ano_modelo: data.ano_modelo?.toString() || '',
           cor: data.cor || '',
@@ -359,6 +365,7 @@ export default function EditarVeiculoPage() {
     if (!selectedMotorista || !selectedCNH) { toast({title: "Erro", description: "Motorista ou CNH não encontrado.", variant: "destructive"}); return; }
 
     setStagedMotoristas(prev => [...prev, {
+      id_veiculo_motorista: undefined, // This is for new ones, existing ones will have it
       tempId: Date.now().toString(), 
       id_motorista: motoristaModalData.id_motorista, nome_motorista: selectedMotorista.label,
       id_cnh: motoristaModalData.id_cnh, numero_cnh: selectedCNH.label,
@@ -390,7 +397,6 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao is intentionally omitted
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -417,6 +423,8 @@ export default function EditarVeiculoPage() {
 
       if (veiculoError) throw veiculoError;
 
+      // Sync VeiculoMotoristas: Delete existing and insert new staged ones
+      // This approach is simpler than diffing but can be less efficient for minor changes.
       const { error: deleteMotoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
@@ -424,6 +432,7 @@ export default function EditarVeiculoPage() {
       
       if (deleteMotoristasError) {
         console.warn("Erro ao deletar motoristas antigos:", JSON.stringify(deleteMotoristasError, null, 2));
+        // Decide if this is critical enough to stop the whole process
       }
 
       if (stagedMotoristas.length > 0) {
@@ -432,6 +441,7 @@ export default function EditarVeiculoPage() {
           id_motorista: parseInt(m.id_motorista),
           id_cnh: parseInt(m.id_cnh),
           categoria_cnh: m.categoria_cnh,
+          // data_vinculacao is default CURRENT_DATE or can be set if you add a field for it
         }));
         const { error: insertMotoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (insertMotoristasError) {
@@ -445,12 +455,11 @@ export default function EditarVeiculoPage() {
 
     } catch (error: any) {
       console.error('Erro ao atualizar veículo:', JSON.stringify(error, null, 2), error);
-      if (error.code === '22001') { // Value too long for type
+      if (error.code === '22001') { 
         toast({ title: "Erro ao Atualizar", description: `Um dos campos de texto é muito longo para o banco de dados. Verifique os dados e tente novamente. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
-      } else if (error.code === '23505') { // Unique constraint violation
+      } else if (error.code === '23505') { 
         toast({ title: "Erro ao Atualizar", description: `Já existe um veículo com esta Placa, Chassi ou Renavam. Verifique os dados. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
-      }
-      else {
+      } else {
         toast({ title: "Erro ao Atualizar", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
       }
     } finally {
@@ -489,7 +498,14 @@ export default function EditarVeiculoPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1">
                         <Label htmlFor="fipe_marca_edit">Marca</Label>
-                        <Select value={selectedFipeMarcaCodigo} onValueChange={setSelectedFipeMarcaCodigo} disabled={isLoadingFipeMarcas}>
+                        <Select 
+                            value={selectedFipeMarcaCodigo} 
+                            onValueChange={(value) => {
+                                console.log("EditPage - Marca FIPE selecionada:", value);
+                                setSelectedFipeMarcaCodigo(value);
+                            }}
+                            disabled={isLoadingFipeMarcas}
+                        >
                             <SelectTrigger id="fipe_marca_edit"><SelectValue placeholder={isLoadingFipeMarcas ? "Carregando..." : "Selecione a Marca"} /></SelectTrigger>
                             <SelectContent>
                                 {fipeMarcas.map(marca => <SelectItem key={marca.codigo} value={marca.codigo}>{marca.nome}</SelectItem>)}
@@ -498,8 +514,17 @@ export default function EditarVeiculoPage() {
                     </div>
                     <div className="space-y-1">
                         <Label htmlFor="fipe_modelo_edit">Modelo</Label>
-                        <Select value={selectedFipeModeloCodigo} onValueChange={setSelectedFipeModeloCodigo} disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}>
-                            <SelectTrigger id="fipe_modelo_edit"><SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} /></SelectTrigger>
+                        <Select 
+                            value={selectedFipeModeloCodigo} 
+                            onValueChange={(value) => {
+                                console.log("EditPage - Modelo FIPE selecionado:", value);
+                                setSelectedFipeModeloCodigo(value);
+                            }}
+                            disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
+                        >
+                           <SelectTrigger id="fipe_modelo_edit">
+                                <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} />
+                           </SelectTrigger>
                             <SelectContent>
                                 {fipeModelos.map(modelo => <SelectItem key={modelo.codigo} value={modelo.codigo}>{modelo.nome}</SelectItem>)}
                             </SelectContent>
@@ -507,8 +532,17 @@ export default function EditarVeiculoPage() {
                     </div>
                     <div className="space-y-1">
                         <Label htmlFor="fipe_ano_edit">Ano</Label>
-                        <Select value={selectedFipeAnoCodigo} onValueChange={setSelectedFipeAnoCodigo} disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}>
-                            <SelectTrigger id="fipe_ano_edit"><SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} /></SelectTrigger>
+                        <Select 
+                            value={selectedFipeAnoCodigo} 
+                            onValueChange={(value) => {
+                                console.log("EditPage - Ano FIPE selecionado:", value);
+                                setSelectedFipeAnoCodigo(value);
+                            }}
+                            disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
+                        >
+                            <SelectTrigger id="fipe_ano_edit">
+                                <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
+                            </SelectTrigger>
                             <SelectContent>
                                 {fipeAnos.map(ano => <SelectItem key={ano.codigo} value={ano.codigo}>{ano.nome}</SelectItem>)}
                             </SelectContent>
@@ -699,9 +733,11 @@ export default function EditarVeiculoPage() {
 /*
 Supabase Integration Notes:
 - On load (Edit page): Fetch vehicle data, including its `VeiculoMotoristas` and their related CNH/PessoaFisica details.
-- FIPE API (Parallelum): Multi-step fetch is available. 
-- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`. `versao` is omitted.
+- FIPE API (Parallelum): Multi-step fetch is now implemented.
+- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`. `versao` field has been removed.
 - On submit: Update `Veiculos`. Then, manage `VeiculoMotoristas` (delete all for vehicle, then re-insert staged ones).
 - `marca`, `modelo` are direct text inputs, populated by FIPE lookup or manually.
 - `tipo_especie` is now a select dropdown.
 */
+
+    
