@@ -1,0 +1,341 @@
+-- Tabela de Estados
+CREATE TABLE IF NOT EXISTS public."Estados" (
+    id_estado SERIAL PRIMARY KEY,
+    uf VARCHAR(2) UNIQUE NOT NULL,
+    nome_estado VARCHAR(50) UNIQUE NOT NULL
+);
+
+-- Tabela de Municípios
+CREATE TABLE IF NOT EXISTS public."Municipios" (
+    id_municipio SERIAL PRIMARY KEY,
+    nome_municipio VARCHAR(100) NOT NULL,
+    id_estado INT NOT NULL REFERENCES public."Estados"(id_estado)
+);
+
+-- Tabela de Endereços
+-- Esta tabela foi eliminada. Os campos de endereço foram incorporados
+-- diretamente nas tabelas PessoasFisicas e Entidades.
+
+-- Tabela de Tipos de Entidade (para classificar as organizações maiores)
+CREATE TABLE IF NOT EXISTS public."TiposEntidade" (
+    id_tipo_entidade SERIAL PRIMARY KEY,
+    nome_tipo VARCHAR(50) UNIQUE NOT NULL
+);
+
+-- Tabela de Entidades (As organizações de nível superior)
+CREATE TABLE IF NOT EXISTS public."Entidades" (
+    id_entidade SERIAL PRIMARY KEY,
+    codigo_entidade VARCHAR(20) UNIQUE,
+    nome VARCHAR(255) NOT NULL, -- Razao Social
+    nome_fantasia TEXT,
+    cnpj VARCHAR(18) UNIQUE NOT NULL,
+    -- Campos de endereço incorporados
+    logradouro VARCHAR(100),
+    numero VARCHAR(20),
+    complemento VARCHAR(50),
+    bairro VARCHAR(50),
+    cep VARCHAR(10),
+    cidade VARCHAR(100),
+    estado_uf VARCHAR(2),
+    -- Campos de endereço 2 (para correspondência, por exemplo)
+    endereco2_logradouro VARCHAR(100),
+    endereco2_numero VARCHAR(20),
+    endereco2_complemento VARCHAR(50),
+    endereco2_bairro VARCHAR(50),
+    endereco2_cep VARCHAR(10),
+    endereco2_cidade VARCHAR(100),
+    endereco2_estado_uf VARCHAR(2),
+    -- Campos de contato
+    telefone VARCHAR(20),
+    email VARCHAR(100),
+    nome_contato_responsavel VARCHAR(255),
+    cargo_contato_responsavel VARCHAR(100),
+    email_contato VARCHAR(100),
+    telefone_contato VARCHAR(20),
+    observacoes_contato TEXT,
+    -- Outros campos
+    id_tipo_entidade INT NOT NULL REFERENCES public."TiposEntidade"(id_tipo_entidade),
+    data_cadastro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    responsavel_cadastro VARCHAR(100),
+    user_id UUID REFERENCES auth.users(id),
+    -- Novos campos econômico-fiscais
+    data_inicio_atividade DATE,
+    porte_empresa VARCHAR(50),
+    natureza_juridica VARCHAR(100),
+    cnae_principal VARCHAR(255), -- Alterado de VARCHAR(10) para acomodar descrição
+    cnae_secundarios JSONB, -- Para armazenar a lista de CNAEs secundários
+    descricao_situacao_cadastral VARCHAR(100),
+    observacoes TEXT
+);
+
+-- Tabela de Pessoas Físicas (para membros individuais e motoristas)
+CREATE TABLE IF NOT EXISTS public."PessoasFisicas" (
+    id_pessoa_fisica SERIAL PRIMARY KEY,
+    nome_completo VARCHAR(255) NOT NULL,
+    cpf VARCHAR(14) UNIQUE NOT NULL,
+    rg VARCHAR(20) UNIQUE,
+    data_nascimento DATE,
+    -- Campos de endereço incorporados
+    logradouro VARCHAR(100),
+    numero VARCHAR(20),
+    complemento VARCHAR(50),
+    bairro VARCHAR(50),
+    cep VARCHAR(10),
+    cidade VARCHAR(100),
+    estado_uf VARCHAR(2),
+    --
+    telefone VARCHAR(20),
+    email VARCHAR(100),
+    tipo_relacao VARCHAR(50), -- Adicionado: Ex: Associado, Cooperado, Cliente Geral
+    user_id UUID REFERENCES auth.users(id),
+    data_cadastro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    observacoes TEXT -- Adicionado
+);
+
+-- Nova Tabela de CNHs (com local de emissão)
+CREATE TABLE IF NOT EXISTS public."CNHs" (
+    id_cnh SERIAL PRIMARY KEY,
+    id_pessoa_fisica INT NOT NULL REFERENCES public."PessoasFisicas"(id_pessoa_fisica) ON DELETE CASCADE,
+    numero_registro VARCHAR(20) UNIQUE NOT NULL,
+    categoria VARCHAR(10) NOT NULL,
+    data_emissao DATE,
+    data_validade DATE,
+    primeira_habilitacao DATE,
+    local_emissao_cidade VARCHAR(100),
+    local_emissao_uf VARCHAR(2), -- Referencia public."Estados"(uf) implicitamente pela sigla
+    observacoes_cnh TEXT, -- Renomeado de 'observacoes' para evitar conflito
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+-- Tabela de Membros de Entidade (Relacionamento entre Entidades e seus Membros)
+CREATE TABLE IF NOT EXISTS public."MembrosEntidade" (
+    id_membro_entidade SERIAL PRIMARY KEY,
+    id_entidade_pai INT NOT NULL REFERENCES public."Entidades"(id_entidade) ON DELETE CASCADE,
+    id_membro_pessoa_fisica INT REFERENCES public."PessoasFisicas"(id_pessoa_fisica) ON DELETE CASCADE,
+    id_membro_entidade_juridica INT REFERENCES public."Entidades"(id_entidade) ON DELETE CASCADE,
+    tipo_membro VARCHAR(20) NOT NULL CHECK (tipo_membro IN ('Pessoa Fisica', 'Pessoa Juridica')),
+    funcao_no_membro VARCHAR(100),
+    data_associacao DATE DEFAULT CURRENT_DATE,
+    UNIQUE (id_entidade_pai, id_membro_pessoa_fisica),
+    UNIQUE (id_entidade_pai, id_membro_entidade_juridica),
+    CONSTRAINT chk_membro_type CHECK (
+        (id_membro_pessoa_fisica IS NOT NULL AND id_membro_entidade_juridica IS NULL) OR
+        (id_membro_pessoa_fisica IS NULL AND id_membro_entidade_juridica IS NOT NULL)
+    )
+);
+
+-- Tabela de Modelos de Veículo
+CREATE TABLE IF NOT EXISTS public."ModelosVeiculo" (
+    id_modelo SERIAL PRIMARY KEY,
+    marca VARCHAR(50) NOT NULL,
+    modelo VARCHAR(50) NOT NULL,
+    versao VARCHAR(50),
+    UNIQUE (marca, modelo, versao)
+);
+
+-- Tabela de Veículos (Agora vinculada a Pessoas Físicas OU Entidades)
+CREATE TABLE IF NOT EXISTS public."Veiculos" (
+    id_veiculo SERIAL PRIMARY KEY,
+    placa_atual VARCHAR(10) UNIQUE NOT NULL,
+    placa_anterior VARCHAR(10),
+    chassi VARCHAR(25) UNIQUE NOT NULL,
+    tipo_especie VARCHAR(50),
+    combustivel VARCHAR(50),
+    id_modelo INT NOT NULL REFERENCES public."ModelosVeiculo"(id_modelo),
+    ano_fabricacao INT,
+    ano_modelo INT,
+    cor VARCHAR(30),
+    numero_motor VARCHAR(50),
+    id_proprietario_entidade INT REFERENCES public."Entidades"(id_entidade),
+    id_proprietario_pessoa_fisica INT REFERENCES public."PessoasFisicas"(id_pessoa_fisica),
+    data_aquisicao DATE,
+    created_by UUID REFERENCES auth.users(id),
+    updated_by UUID REFERENCES auth.users(id),
+    CONSTRAINT chk_proprietario_type CHECK (
+        (id_proprietario_entidade IS NOT NULL AND id_proprietario_pessoa_fisica IS NULL) OR
+        (id_proprietario_entidade IS NULL AND id_proprietario_pessoa_fisica IS NOT NULL)
+    )
+);
+
+-- Tabela de CRLV
+CREATE TABLE IF NOT EXISTS public."CRLV" (
+    id_crlv SERIAL PRIMARY KEY,
+    id_veiculo INT NOT NULL REFERENCES public."Veiculos"(id_veiculo) ON DELETE CASCADE,
+    codigo_renavam VARCHAR(20) UNIQUE NOT NULL,
+    estado VARCHAR(2),
+    numero_serie VARCHAR(100),
+    data_expedicao DATE,
+    data_validade DATE,
+    created_by UUID REFERENCES auth.users(id),
+    updated_by UUID REFERENCES auth.users(id)
+);
+
+-- Tabela de Seguradoras
+CREATE TABLE IF NOT EXISTS public."Seguradoras" (
+    id_seguradora SERIAL PRIMARY KEY,
+    nome_seguradora VARCHAR(100) UNIQUE NOT NULL
+);
+
+-- Tabela de Coberturas
+CREATE TABLE IF NOT EXISTS public."Coberturas" (
+    id_cobertura SERIAL PRIMARY KEY,
+    nome_cobertura VARCHAR(100) UNIQUE NOT NULL,
+    descricao_cobertura TEXT
+);
+
+-- Tabela de Assistencias
+CREATE TABLE IF NOT EXISTS public."Assistencias" (
+    id_assistencia SERIAL PRIMARY KEY,
+    nome_assistencia VARCHAR(100) UNIQUE NOT NULL,
+    descricao_assistencia TEXT
+);
+
+-- Tabela de Seguros
+CREATE TABLE IF NOT EXISTS public."Seguros" (
+    id_seguro SERIAL PRIMARY KEY,
+    id_veiculo INT REFERENCES public."Veiculos"(id_veiculo) ON DELETE CASCADE, -- Pode ser NULL se for seguro de vida/residencial
+    id_seguradora INT NOT NULL REFERENCES public."Seguradoras"(id_seguradora),
+    numero_apolice VARCHAR(50) UNIQUE NOT NULL,
+    valor_indenizacao DECIMAL(15, 2),
+    franquia DECIMAL(15, 2),
+    vigencia_inicio DATE NOT NULL,
+    vigencia_fim DATE NOT NULL,
+    data_contratacao DATE,
+    id_titular_entidade INT REFERENCES public."Entidades"(id_entidade),
+    id_titular_pessoa_fisica INT REFERENCES public."PessoasFisicas"(id_pessoa_fisica),
+    created_by UUID REFERENCES auth.users(id),
+    updated_by UUID REFERENCES auth.users(id),
+    CONSTRAINT chk_titular_type CHECK (
+        (id_titular_entidade IS NOT NULL AND id_titular_pessoa_fisica IS NULL) OR
+        (id_titular_entidade IS NULL AND id_titular_pessoa_fisica IS NOT NULL)
+    )
+);
+
+-- Tabela de Ligação entre Seguros e Coberturas
+CREATE TABLE IF NOT EXISTS public."SeguroCoberturas" (
+    id_seguro INT NOT NULL REFERENCES public."Seguros"(id_seguro) ON DELETE CASCADE,
+    id_cobertura INT NOT NULL REFERENCES public."Coberturas"(id_cobertura) ON DELETE CASCADE,
+    PRIMARY KEY (id_seguro, id_cobertura)
+);
+
+-- Tabela de Ligação entre Seguros e Assistencias
+CREATE TABLE IF NOT EXISTS public."SeguroAssistencias" (
+    id_seguro INT NOT NULL REFERENCES public."Seguros"(id_seguro) ON DELETE CASCADE,
+    id_assistencia INT NOT NULL REFERENCES public."Assistencias"(id_assistencia) ON DELETE CASCADE,
+    PRIMARY KEY (id_seguro, id_assistencia)
+);
+
+-- Tabela de Perfis de Usuário (estende auth.users)
+CREATE TABLE IF NOT EXISTS public."profiles" (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'supervisor', 'operator', 'client')),
+    full_name VARCHAR(255),
+    cpf VARCHAR(14) UNIQUE,
+    institution VARCHAR(255), -- Renomeado de instituicao
+    id_pessoa_fisica_associada INT REFERENCES public."PessoasFisicas"(id_pessoa_fisica),
+    id_entidade_associada INT REFERENCES public."Entidades"(id_entidade),
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+-- Tabela para armazenar informações dos arquivos (com associações flexíveis)
+CREATE TABLE IF NOT EXISTS public."Arquivos" (
+    id_arquivo UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome_arquivo VARCHAR(255) NOT NULL,
+    caminho_armazenamento VARCHAR(255) NOT NULL UNIQUE, -- Referência ao caminho no Supabase Storage
+    tipo_mime VARCHAR(100) NOT NULL,
+    tamanho_bytes BIGINT NOT NULL,
+    data_upload TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    id_veiculo INT REFERENCES public."Veiculos"(id_veiculo) ON DELETE CASCADE,
+    id_seguro INT REFERENCES public."Seguros"(id_seguro) ON DELETE CASCADE,
+    id_entidade_associada INT REFERENCES public."Entidades"(id_entidade) ON DELETE CASCADE,
+    id_pessoa_fisica_associada INT REFERENCES public."PessoasFisicas"(id_pessoa_fisica) ON DELETE CASCADE,
+    tipo_documento VARCHAR(50), -- Ex: Contrato, Apólice, Laudo
+    user_id_upload UUID REFERENCES auth.users(id), -- Quem fez o upload
+    -- UNIQUE (caminho_armazenamento), -- Supabase Storage já garante unicidade de caminho
+    CONSTRAINT chk_arquivo_association CHECK ( -- Garante que o arquivo está associado a no máximo uma entidade principal
+        (id_veiculo IS NOT NULL AND id_seguro IS NULL AND id_entidade_associada IS NULL AND id_pessoa_fisica_associada IS NULL) OR
+        (id_veiculo IS NULL AND id_seguro IS NOT NULL AND id_entidade_associada IS NULL AND id_pessoa_fisica_associada IS NULL) OR
+        (id_veiculo IS NULL AND id_seguro IS NULL AND id_entidade_associada IS NOT NULL AND id_pessoa_fisica_associada IS NULL) OR
+        (id_veiculo IS NULL AND id_seguro IS NULL AND id_entidade_associada IS NULL AND id_pessoa_fisica_associada IS NOT NULL) OR
+        (id_veiculo IS NULL AND id_seguro IS NULL AND id_entidade_associada IS NULL AND id_pessoa_fisica_associada IS NULL) -- Ou não associado a nenhuma
+    )
+);
+
+---
+-- Índices para otimizar consultas
+---
+
+-- Municípios
+CREATE INDEX IF NOT EXISTS idx_municipios_id_estado ON public."Municipios" (id_estado);
+
+-- Entidades (Organizações)
+CREATE INDEX IF NOT EXISTS idx_entidades_cnpj ON public."Entidades" (cnpj);
+CREATE INDEX IF NOT EXISTS idx_entidades_id_tipo_entidade ON public."Entidades" (id_tipo_entidade);
+CREATE INDEX IF NOT EXISTS idx_entidades_user_id ON public."Entidades" (user_id);
+CREATE INDEX IF NOT EXISTS idx_entidades_cep ON public."Entidades" (cep);
+CREATE INDEX IF NOT EXISTS idx_entidades_cidade ON public."Entidades" (cidade);
+CREATE INDEX IF NOT EXISTS idx_entidades_estado_uf ON public."Entidades" (estado_uf);
+
+-- Pessoas Físicas
+CREATE INDEX IF NOT EXISTS idx_pessoasfisicas_cpf ON public."PessoasFisicas" (cpf);
+CREATE INDEX IF NOT EXISTS idx_pessoasfisicas_user_id ON public."PessoasFisicas" (user_id);
+CREATE INDEX IF NOT EXISTS idx_pessoasfisicas_cep ON public."PessoasFisicas" (cep);
+CREATE INDEX IF NOT EXISTS idx_pessoasfisicas_cidade ON public."PessoasFisicas" (cidade);
+CREATE INDEX IF NOT EXISTS idx_pessoasfisicas_estado_uf ON public."PessoasFisicas" (estado_uf);
+
+
+-- CNHs
+CREATE INDEX IF NOT EXISTS idx_cnhs_id_pessoa_fisica ON public."CNHs" (id_pessoa_fisica);
+CREATE INDEX IF NOT EXISTS idx_cnhs_numero_registro ON public."CNHs" (numero_registro);
+CREATE INDEX IF NOT EXISTS idx_cnhs_local_emissao_cidade ON public."CNHs" (local_emissao_cidade);
+CREATE INDEX IF NOT EXISTS idx_cnhs_local_emissao_estado_uf ON public."CNHs" (local_emissao_uf);
+
+-- Membros Entidade
+CREATE INDEX IF NOT EXISTS idx_membrosentidade_id_entidade_pai ON public."MembrosEntidade" (id_entidade_pai);
+CREATE INDEX IF NOT EXISTS idx_membrosentidade_id_membro_pf ON public."MembrosEntidade" (id_membro_pessoa_fisica);
+CREATE INDEX IF NOT EXISTS idx_membrosentidade_id_membro_pj ON public."MembrosEntidade" (id_membro_entidade_juridica);
+
+-- Modelos Veículo
+CREATE INDEX IF NOT EXISTS idx_modelosveiculo_marca_modelo ON public."ModelosVeiculo" (marca, modelo);
+
+-- Veículos
+CREATE INDEX IF NOT EXISTS idx_veiculos_placa_atual ON public."Veiculos" (placa_atual);
+CREATE INDEX IF NOT EXISTS idx_veiculos_chassi ON public."Veiculos" (chassi);
+CREATE INDEX IF NOT EXISTS idx_veiculos_id_modelo ON public."Veiculos" (id_modelo);
+CREATE INDEX IF NOT EXISTS idx_veiculos_id_proprietario_entidade ON public."Veiculos" (id_proprietario_entidade);
+CREATE INDEX IF NOT EXISTS idx_veiculos_id_proprietario_pessoa_fisica ON public."Veiculos" (id_proprietario_pessoa_fisica);
+
+-- CRLV
+CREATE INDEX IF NOT EXISTS idx_crlv_id_veiculo ON public."CRLV" (id_veiculo);
+CREATE INDEX IF NOT EXISTS idx_crlv_codigo_renavam ON public."CRLV" (codigo_renavam);
+
+-- Seguradoras
+CREATE INDEX IF NOT EXISTS idx_seguradoras_nome_seguradora ON public."Seguradoras" (nome_seguradora);
+
+-- Seguros
+CREATE INDEX IF NOT EXISTS idx_seguros_id_veiculo ON public."Seguros" (id_veiculo);
+CREATE INDEX IF NOT EXISTS idx_seguros_id_seguradora ON public."Seguros" (id_seguradora);
+CREATE INDEX IF NOT EXISTS idx_seguros_numero_apolice ON public."Seguros" (numero_apolice);
+CREATE INDEX IF NOT EXISTS idx_seguros_id_titular_entidade ON public."Seguros" (id_titular_entidade);
+CREATE INDEX IF NOT EXISTS idx_seguros_id_titular_pessoa_fisica ON public."Seguros" (id_titular_pessoa_fisica);
+
+-- SeguroCoberturas
+CREATE INDEX IF NOT EXISTS idx_segurocoberturas_id_seguro ON public."SeguroCoberturas" (id_seguro);
+CREATE INDEX IF NOT EXISTS idx_segurocoberturas_id_cobertura ON public."SeguroCoberturas" (id_cobertura);
+
+-- SeguroAssistencias
+CREATE INDEX IF NOT EXISTS idx_seguroassistencias_id_seguro ON public."SeguroAssistencias" (id_seguro);
+CREATE INDEX IF NOT EXISTS idx_seguroassistencias_id_assistencia ON public."SeguroAssistencias" (id_assistencia);
+
+-- Perfis
+CREATE INDEX IF NOT EXISTS profiles_role_idx ON public.profiles (role);
+CREATE INDEX IF NOT EXISTS idx_profiles_id_pessoa_fisica_associada ON public.profiles (id_pessoa_fisica_associada);
+CREATE INDEX IF NOT EXISTS idx_profiles_id_entidade_associada ON public.profiles (id_entidade_associada);
+
+-- Arquivos
+CREATE INDEX IF NOT EXISTS idx_arquivos_id_veiculo ON public."Arquivos" (id_veiculo);
+CREATE INDEX IF NOT EXISTS idx_arquivos_id_seguro ON public."Arquivos" (id_seguro);
+CREATE INDEX IF NOT EXISTS idx_arquivos_id_entidade_associada ON public."Arquivos" (id_entidade_associada);
+CREATE INDEX IF NOT EXISTS idx_arquivos_id_pessoa_fisica_associada ON public."Arquivos" (id_pessoa_fisica_associada);
+CREATE INDEX IF NOT EXISTS idx_arquivos_tipo_documento ON public."Arquivos" (tipo_documento);
+CREATE INDEX IF NOT EXISTS idx_arquivos_user_id_upload ON public."Arquivos" (user_id_upload);
