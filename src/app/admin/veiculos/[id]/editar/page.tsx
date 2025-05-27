@@ -30,7 +30,7 @@ interface VehicleDataFromDB {
   combustivel?: string | null;
   marca: string; 
   modelo: string; 
-  versao?: string | null; // Added based on schema
+  // versao?: string | null; // Removed
   ano_fabricacao?: number | null;
   ano_modelo?: number | null;
   cor?: string | null;
@@ -86,8 +86,6 @@ const tipoEspecieOptions: GenericOption[] = [
   { value: "Outro", label: "Outro (Especificar em Observações)"},
 ];
 
-
-// Interfaces for Parallelum FIPE API responses
 interface FipeMarca { codigo: string; nome: string; }
 interface FipeModelo { codigo: string; nome: string; }
 interface FipeAno { codigo: string; nome: string; }
@@ -126,47 +124,40 @@ async function fetchFipeDetalhesVeiculoParallelum(marcaCodigo: string, modeloCod
   } catch (error) { console.error("Error fetching FIPE Detalhes:", error); return null; }
 }
 
-
+// Placeholder function to fetch vehicle data by ID
 async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | null> {
-  if (!supabase) return null;
-  // Supabase: Fetch from public.Veiculos, joining with PessoasFisicas/Entidades for owner, ModelosVeiculo for model details (if still used),
-  // and VeiculoMotoristas (joining with PessoasFisicas and CNHs)
-  console.log(`Fetching vehicle data for ID: ${vehicleId} (placeholder edit page)`);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Example placeholder: adapt if your data source changes
-  if (vehicleId === "1" || vehicleId === "vei_001") {
-    return {
-      id_veiculo: vehicleId,
-      placa_atual: "ABC-1234",
-      placa_anterior: "XYZ-7890",
-      chassi: "9BWZZZ377VT000001",
-      tipo_especie: "Carro passeio - Automóvel de passeio",
-      combustivel: "Flex",
-      marca: "Fiat",
-      modelo: "Uno Mille",
-      versao: "EX",
-      ano_fabricacao: 2020,
-      ano_modelo: 2020,
-      cor: "Vermelho",
-      codigo_renavam: "01234567890",
-      estado_crlv: "SP",
-      numero_serie_crlv: "DOC0000123",
-      data_expedicao_crlv: "2023-01-15",
-      data_validade_crlv: "2024-01-15",
-      id_proprietario_pessoa_fisica: "1", // Corresponds to a pf_... id
-      data_aquisicao: "2020-05-10",
-      codigo_fipe: "001004-9",
-      valor_fipe: 6022.00,
-      data_consulta_fipe: "2021-06-07",
-      mes_referencia_fipe: "junho de 2021",
-      observacao: "Veículo em bom estado, revisões em dia.",
-      VeiculoMotoristas: [
-        { id_veiculo_motorista: "vm_001", id_motorista: "1", PessoasFisicas: { nome_completo: "João Motorista", cpf: "111.111.111-11"}, id_cnh: "cnh_001", CNHs: { numero_registro: "REG123", categoria: "B", data_validade: "2028-10-10"}, categoria_cnh: "B"},
-      ]
-    };
+  if (!supabase) {
+    console.error("EditarVeiculoPage: Supabase client not initialized.");
+    return null;
   }
-  return null;
+  const numericId = parseInt(vehicleId, 10);
+  if (isNaN(numericId)) {
+    console.error("EditarVeiculoPage: Invalid vehicle ID provided:", vehicleId);
+    return null;
+  }
+
+  console.log(`Fetching vehicle data for ID: ${numericId} from Supabase`);
+  const { data, error } = await supabase
+    .from('Veiculos')
+    .select(`
+      *, 
+      VeiculoMotoristas (
+        id_veiculo_motorista,
+        id_motorista,
+        id_cnh,
+        categoria_cnh,
+        PessoasFisicas!inner ( nome_completo, cpf ),
+        CNHs!inner ( numero_registro, categoria, data_validade )
+      )
+    `)
+    .eq('id_veiculo', numericId)
+    .single<VehicleDataFromDB>();
+
+  if (error) {
+    console.error("Erro ao buscar dados do veículo:", JSON.stringify(error, null, 2));
+    return null;
+  }
+  return data;
 }
 
 
@@ -201,7 +192,6 @@ export default function EditarVeiculoPage() {
   const [isLoadingFipeModelosAnos, setIsLoadingFipeModelosAnos] = useState(false);
   const [isLoadingFipeDetalhes, setIsLoadingFipeDetalhes] = useState(false);
 
-  // Fetch FIPE Marcas on mount
   useEffect(() => {
     const loadMarcas = async () => {
       setIsLoadingFipeMarcas(true);
@@ -212,7 +202,6 @@ export default function EditarVeiculoPage() {
     loadMarcas();
   }, []);
 
-  // Fetch FIPE Modelos/Anos when marca changes
   useEffect(() => {
     const loadModelosAnos = async () => {
       if (selectedFipeMarcaCodigo) {
@@ -233,7 +222,6 @@ export default function EditarVeiculoPage() {
     if (selectedFipeMarcaCodigo) loadModelosAnos();
   }, [selectedFipeMarcaCodigo, toast]);
 
-  // Fetch initial data for form (PessoasFisicas, Organizacoes, Vehicle by ID)
   useEffect(() => {
     const fetchInitialData = async () => {
       if (!vehicleId || !supabase) { setIsLoading(false); setVehicleFound(false); return; }
@@ -260,6 +248,7 @@ export default function EditarVeiculoPage() {
           combustivel: data.combustivel || '',
           marca: data.marca || '',
           modelo: data.modelo || '',
+          // versao: data.versao || '', // Removed
           ano_fabricacao: data.ano_fabricacao?.toString() || '',
           ano_modelo: data.ano_modelo?.toString() || '',
           cor: data.cor || '',
@@ -401,7 +390,7 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      versao: null, // Explicitly sending null for versao as it's not in the main form
+      // versao is intentionally omitted
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -434,7 +423,7 @@ export default function EditarVeiculoPage() {
         .eq('id_veiculo', parseInt(vehicleId));
       
       if (deleteMotoristasError) {
-        console.warn("Erro ao deletar motoristas antigos:", deleteMotoristasError);
+        console.warn("Erro ao deletar motoristas antigos:", JSON.stringify(deleteMotoristasError, null, 2));
       }
 
       if (stagedMotoristas.length > 0) {
@@ -446,8 +435,8 @@ export default function EditarVeiculoPage() {
         }));
         const { error: insertMotoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (insertMotoristasError) {
-          console.warn("Erro ao salvar novos motoristas vinculados:", insertMotoristasError);
-          toast({ title: "Veículo Atualizado com Aviso", description: "Dados principais salvos, mas erro ao atualizar motoristas.", variant: "default", duration: 6000 });
+          console.warn("Erro ao salvar novos motoristas vinculados:", JSON.stringify(insertMotoristasError, null, 2));
+          toast({ title: "Veículo Atualizado com Aviso", description: `Dados principais salvos, mas erro ao atualizar motoristas: ${insertMotoristasError.message}`, variant: "default", duration: 6000 });
         }
       }
       
@@ -456,7 +445,14 @@ export default function EditarVeiculoPage() {
 
     } catch (error: any) {
       console.error('Erro ao atualizar veículo:', JSON.stringify(error, null, 2), error);
-      toast({ title: "Erro ao Atualizar", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
+      if (error.code === '22001') { // Value too long for type
+        toast({ title: "Erro ao Atualizar", description: `Um dos campos de texto é muito longo para o banco de dados. Verifique os dados e tente novamente. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
+      } else if (error.code === '23505') { // Unique constraint violation
+        toast({ title: "Erro ao Atualizar", description: `Já existe um veículo com esta Placa, Chassi ou Renavam. Verifique os dados. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
+      }
+      else {
+        toast({ title: "Erro ao Atualizar", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -704,10 +700,8 @@ export default function EditarVeiculoPage() {
 Supabase Integration Notes:
 - On load (Edit page): Fetch vehicle data, including its `VeiculoMotoristas` and their related CNH/PessoaFisica details.
 - FIPE API (Parallelum): Multi-step fetch is available. 
-- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe` exist. The `versao` column should also be present if you intend to save it.
+- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`. `versao` is omitted.
 - On submit: Update `Veiculos`. Then, manage `VeiculoMotoristas` (delete all for vehicle, then re-insert staged ones).
 - `marca`, `modelo` are direct text inputs, populated by FIPE lookup or manually.
 - `tipo_especie` is now a select dropdown.
 */
-
-    

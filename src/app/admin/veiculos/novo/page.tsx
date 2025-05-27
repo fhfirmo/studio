@@ -49,7 +49,6 @@ const tipoEspecieOptions: GenericOption[] = [
   { value: "Outro", label: "Outro (Especificar em Observações)"},
 ];
 
-// Interfaces for Parallelum FIPE API responses
 interface FipeMarca { codigo: string; nome: string; }
 interface FipeModelo { codigo: string; nome: string; }
 interface FipeAno { codigo: string; nome: string; }
@@ -132,7 +131,7 @@ export default function NovoVeiculoPage() {
         setIsLoadingFipeModelosAnos(true);
         setFipeModelos([]); setFipeAnos([]); 
         setSelectedFipeModeloCodigo(''); setSelectedFipeAnoCodigo('');
-        setFipeVeiculoDetalhes(null); // Reset details when marca changes
+        setFipeVeiculoDetalhes(null);
         const data = await fetchFipeModelosAnosParallelum(selectedFipeMarcaCodigo);
         if (data) {
           setFipeModelos(data.modelos);
@@ -218,12 +217,12 @@ export default function NovoVeiculoPage() {
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
       modelo: fipeVeiculoDetalhes.Modelo || prev.modelo, 
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao,
+      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, // Often AnoModelo is used for AnoFabricacao in FIPE context or is very close
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
       valor_fipe: fipeVeiculoDetalhes.Valor ? fipeVeiculoDetalhes.Valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
       mes_referencia_fipe: fipeVeiculoDetalhes.MesReferencia?.trim() || prev.mes_referencia_fipe,
-      data_consulta_fipe: new Date(),
+      data_consulta_fipe: new Date(), // Set current date as consultation date
     }));
     toast({ title: "Formulário Preenchido", description: "Dados da FIPE aplicados ao formulário principal." });
   };
@@ -268,20 +267,20 @@ export default function NovoVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      versao: null, // Explicitly sending null for versao as it was removed from the form
+      // versao is intentionally omitted as it's removed from the DB table
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
-      codigo_renavam: formData.codigo_renavam, // CRLV field
-      estado_crlv: formData.estado_crlv || null, // CRLV field
-      numero_serie_crlv: formData.numero_serie_crlv || null, // CRLV field
-      data_expedicao_crlv: formData.data_expedicao_crlv ? format(formData.data_expedicao_crlv, "yyyy-MM-dd") : null, // CRLV field
-      data_validade_crlv: formData.data_validade_crlv ? format(formData.data_validade_crlv, "yyyy-MM-dd") : null, // CRLV field
+      codigo_renavam: formData.codigo_renavam, 
+      estado_crlv: formData.estado_crlv || null, 
+      numero_serie_crlv: formData.numero_serie_crlv || null, 
+      data_expedicao_crlv: formData.data_expedicao_crlv ? format(formData.data_expedicao_crlv, "yyyy-MM-dd") : null, 
+      data_validade_crlv: formData.data_validade_crlv ? format(formData.data_validade_crlv, "yyyy-MM-dd") : null, 
       id_proprietario_pessoa_fisica: formData.tipo_proprietario === 'pessoa_fisica' ? parseInt(formData.id_proprietario) : null,
       id_proprietario_entidade: formData.tipo_proprietario === 'organizacao' ? parseInt(formData.id_proprietario) : null,
       data_aquisicao: formData.data_aquisicao ? format(formData.data_aquisicao, "yyyy-MM-dd") : null,
       observacao: formData.observacao || null,
-      codigo_fipe: formData.codigo_fipe || null,
+      codigo_fipe: formData.codigo_fipe || null, // Note: FIPE code from Parallelum API is a string like "001004-9"
       valor_fipe: formData.valor_fipe ? parseFloat(formData.valor_fipe) : null,
       data_consulta_fipe: formData.data_consulta_fipe ? format(formData.data_consulta_fipe, "yyyy-MM-dd") : null,
       mes_referencia_fipe: formData.mes_referencia_fipe || null,
@@ -308,8 +307,8 @@ export default function NovoVeiculoPage() {
         }));
         const { error: motoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (motoristasError) {
-          console.warn("Erro ao salvar motoristas vinculados:", motoristasError);
-          toast({ title: "Veículo Salvo com Aviso", description: "Dados principais do veículo salvos, mas houve erro ao vincular motoristas.", variant: "default", duration: 6000 });
+          console.warn("Erro ao salvar motoristas vinculados:", JSON.stringify(motoristasError, null, 2));
+          toast({ title: "Veículo Salvo com Aviso", description: `Dados principais do veículo salvos, mas houve erro ao vincular motoristas: ${motoristasError.message}`, variant: "default", duration: 6000 });
         }
       }
       
@@ -318,7 +317,14 @@ export default function NovoVeiculoPage() {
 
     } catch (error: any) {
       console.error('Erro ao cadastrar veículo:', JSON.stringify(error, null, 2), error);
-      toast({ title: "Erro ao Cadastrar Veículo", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
+      if (error.code === '22001') { // Value too long for type
+        toast({ title: "Erro ao Cadastrar", description: `Um dos campos de texto é muito longo para o banco de dados. Verifique os dados e tente novamente. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
+      } else if (error.code === '23505') { // Unique constraint violation
+        toast({ title: "Erro ao Cadastrar", description: `Já existe um veículo com esta Placa, Chassi ou Renavam. Verifique os dados. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
+      }
+      else {
+        toast({ title: "Erro ao Cadastrar Veículo", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -555,12 +561,8 @@ export default function NovoVeiculoPage() {
 /*
 Supabase Integration Notes:
 - FIPE API (Parallelum): Multi-step fetch logic is now implemented.
-- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`, and `versao` (if you still have it - your prompt implies it was removed but schema shows it) exist and are correctly typed.
+- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`. The `versao` column is now omitted from payload.
 - `VeiculoMotoristas` table: For linking drivers and CNHs.
-- `handleSubmit`: Needs to send all direct vehicle fields to `Veiculos`. For `VeiculoMotoristas`, it involves separate inserts.
+- `handleSubmit`: Sends vehicle data to `Veiculos`. For `VeiculoMotoristas`, it involves separate inserts.
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista) will fetch from Supabase.
 */
-
-    
-
-    
