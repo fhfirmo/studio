@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'; // Added CardDescription
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -32,7 +32,7 @@ interface StagedMotorista {
 
 const initialFormData = {
   placa_atual: '', placa_anterior: '', chassi: '', tipo_especie: '', combustivel: '',
-  marca: '', modelo: '', versao: '', ano_fabricacao: '', ano_modelo: '', cor: '',
+  marca: '', modelo: '', ano_fabricacao: '', ano_modelo: '', cor: '',
   codigo_renavam: '', estado_crlv: '', numero_serie_crlv: '',
   data_expedicao_crlv: undefined as Date | undefined, data_validade_crlv: undefined as Date | undefined,
   tipo_proprietario: '' as 'pessoa_fisica' | 'organizacao' | '', id_proprietario: '',
@@ -41,9 +41,17 @@ const initialFormData = {
   observacao: '',
 };
 
+const tipoEspecieOptions: GenericOption[] = [
+  { value: "Moto - Motocicleta", label: "Moto - Motocicleta" },
+  { value: "Carro passeio - Automóvel de passeio", label: "Carro passeio - Automóvel de passeio" },
+  { value: "Van - Utilitário/ Comercial Leve", label: "Van - Utilitário/ Comercial Leve" },
+  { value: "Pickup - Caminhonete (ou Pickup)", label: "Pickup - Caminhonete (ou Pickup)" },
+  { value: "Outro", label: "Outro (Especificar em Observações)"},
+];
+
 // Interfaces for Parallelum FIPE API responses
 interface FipeMarca { codigo: string; nome: string; }
-interface FipeModelo { codigo: string; nome: string; } // Parallelum API uses string for modelo.codigo
+interface FipeModelo { codigo: string; nome: string; }
 interface FipeAno { codigo: string; nome: string; }
 interface FipeModelosAnosResponse { modelos: FipeModelo[]; anos: FipeAno[]; }
 interface FipeVeiculoDetalhesResponse {
@@ -214,12 +222,12 @@ export default function NovoVeiculoPage() {
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
       modelo: fipeVeiculoDetalhes.Modelo || prev.modelo, 
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, 
+      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, // Often AnoModelo is used as AnoFabricacao for FIPE
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
       valor_fipe: fipeVeiculoDetalhes.Valor ? fipeVeiculoDetalhes.Valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
       mes_referencia_fipe: fipeVeiculoDetalhes.MesReferencia?.trim() || prev.mes_referencia_fipe,
-      data_consulta_fipe: fipeVeiculoDetalhes.DataConsulta ? parse(fipeVeiculoDetalhes.DataConsulta, "EEEE, d 'de' MMMM 'de' yyyy HH:mm", new Date(), { locale: ptBR }) : prev.data_consulta_fipe,
+      data_consulta_fipe: new Date(), // Set to current date
     }));
     toast({ title: "Formulário Preenchido", description: "Dados da FIPE aplicados ao formulário principal." });
   };
@@ -252,7 +260,7 @@ export default function NovoVeiculoPage() {
     setIsLoading(true);
 
     if (!formData.placa_atual || !formData.marca || !formData.modelo || !formData.ano_fabricacao || !formData.codigo_renavam || !formData.tipo_proprietario || !formData.id_proprietario) {
-      toast({ title: "Campos Obrigatórios", description: "Placa, Marca, Modelo, Ano Fabricação, Renavam e Proprietário são obrigatórios.", variant: "destructive" });
+      toast({ title: "Campos Obrigatórios", description: "Placa Atual, Marca, Modelo, Ano Fabricação, Renavam e Proprietário são obrigatórios.", variant: "destructive" });
       setIsLoading(false); return;
     }
     
@@ -264,7 +272,7 @@ export default function NovoVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      versao: formData.versao || null,
+      // versao field is removed
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -336,10 +344,9 @@ export default function NovoVeiculoPage() {
       </header>
 
       <form onSubmit={handleSubmit}>
-        {/* Busca Tabela FIPE (Parallelum API) Card */}
         <Card className="shadow-lg mb-6">
              <CardHeader>
-                <CardTitle className="flex items-center"><Tags className="mr-2 h-5 w-5 text-primary"/> Busca Tabela FIPE (Parallelum API)</CardTitle>
+                <CardTitle className="flex items-center"><Tags className="mr-2 h-5 w-5 text-primary"/> Busca Tabela FIPE</CardTitle>
                 <CardDescription>Selecione Marca, Modelo e Ano para buscar dados da FIPE e preencher o formulário.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -398,7 +405,6 @@ export default function NovoVeiculoPage() {
             </CardContent>
         </Card>
         
-        {/* Dados Principais do Veículo Card */}
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados Principais do Veículo</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -407,17 +413,24 @@ export default function NovoVeiculoPage() {
             <div className="space-y-2"><Label htmlFor="chassi">Chassi <span className="text-destructive">*</span></Label><Input id="chassi" name="chassi" value={formData.chassi} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="marca">Marca <span className="text-destructive">*</span></Label><Input id="marca" name="marca" value={formData.marca} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="modelo">Modelo <span className="text-destructive">*</span></Label><Input id="modelo" name="modelo" value={formData.modelo} onChange={handleChange} required /></div>
-            <div className="space-y-2"><Label htmlFor="versao">Versão</Label><Input id="versao" name="versao" value={formData.versao} onChange={handleChange} /></div>
+            {/* Versão field removed from here */}
             <div className="space-y-2"><Label htmlFor="ano_fabricacao">Ano Fabricação <span className="text-destructive">*</span></Label><Input id="ano_fabricacao" name="ano_fabricacao" type="number" value={formData.ano_fabricacao} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="ano_modelo">Ano Modelo</Label><Input id="ano_modelo" name="ano_modelo" type="number" value={formData.ano_modelo} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="cor">Cor</Label><Input id="cor" name="cor" value={formData.cor} onChange={handleChange} /></div>
-            <div className="space-y-2"><Label htmlFor="tipo_especie">Tipo/Espécie</Label><Input id="tipo_especie" name="tipo_especie" value={formData.tipo_especie} onChange={handleChange} /></div>
+            <div className="space-y-2">
+                <Label htmlFor="tipo_especie">Tipo/Espécie</Label>
+                <Select name="tipo_especie" value={formData.tipo_especie} onValueChange={(v) => handleSelectChange('tipo_especie', v)}>
+                    <SelectTrigger id="tipo_especie"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                        {tipoEspecieOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
             <div className="space-y-2"><Label htmlFor="combustivel">Combustível</Label><Input id="combustivel" name="combustivel" value={formData.combustivel} onChange={handleChange} /></div>
-            <div className="space-y-2"><Label htmlFor="codigo_fipe">Código FIPE (Manual)</Label><Input id="codigo_fipe" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Se não usou a busca acima" /></div>
+            <div className="space-y-2"><Label htmlFor="codigo_fipe">Código FIPE</Label><Input id="codigo_fipe" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Preenchido pela busca FIPE" /></div>
           </CardContent>
         </Card>
 
-        {/* Dados do CRLV Card */}
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados do CRLV</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -429,7 +442,6 @@ export default function NovoVeiculoPage() {
           </CardContent>
         </Card>
         
-        {/* Dados do Proprietário Card */}
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados do Proprietário</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -460,7 +472,6 @@ export default function NovoVeiculoPage() {
           </CardContent>
         </Card>
         
-        {/* Dados FIPE Display Card (após consulta, só para referência no formulário principal) */}
         <Card className="shadow-lg mb-6">
             <CardHeader><CardTitle className="flex items-center"><DollarSignIcon className="mr-2 h-5 w-5 text-primary"/> Dados de Mercado (FIPE Preenchidos)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -475,7 +486,6 @@ export default function NovoVeiculoPage() {
             </CardContent>
         </Card>
 
-        {/* Motoristas Vinculados Card */}
         <Card className="shadow-lg mb-6">
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Motoristas Vinculados</CardTitle>
@@ -498,7 +508,6 @@ export default function NovoVeiculoPage() {
             </CardContent>
         </Card>
 
-        {/* Observação Card */}
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Observação</CardTitle></CardHeader>
           <CardContent><Textarea id="observacao" name="observacao" value={formData.observacao} onChange={handleChange} rows={4} /></CardContent>
@@ -553,5 +562,9 @@ Supabase Integration Notes:
 - New FIPE API (Parallelum): Requires multi-step fetch.
 - `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe` exist.
 - `VeiculoMotoristas` table: Used for linking drivers (PessoasFisicas) and their CNHs to vehicles.
+- `marca`, `modelo` are now direct text inputs, populated by FIPE lookup or manually.
+- `versao` field removed from main form as per prompt, but `public."Veiculos"` schema still shows it as nullable.
+- `tipo_especie` is now a select dropdown.
 */
 
+    
