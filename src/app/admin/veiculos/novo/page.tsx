@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'; // Added CardDescription
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -20,7 +20,6 @@ import { format, parse, isValid as isValidDate } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
 interface GenericOption { value: string; label: string; }
-interface FipeOption { codigo: string; nome: string; }
 
 interface StagedMotorista {
   tempId: string;
@@ -44,71 +43,43 @@ const initialFormData = {
 
 // Interfaces for Parallelum FIPE API responses
 interface FipeMarca { codigo: string; nome: string; }
-interface FipeModelo { codigo: number; nome: string; } // Modelos têm código numérico na API
-interface FipeAno { codigo: string; nome: string; } // Ex: "2020-1"
+interface FipeModelo { codigo: string; nome: string; } // Parallelum API uses string for modelo.codigo
+interface FipeAno { codigo: string; nome: string; }
 interface FipeModelosAnosResponse { modelos: FipeModelo[]; anos: FipeAno[]; }
 interface FipeVeiculoDetalhesResponse {
-  Valor: string; // "R$ 60.190,00"
-  Marca: string;
-  Modelo: string; // Often includes version
-  AnoModelo: number;
-  Combustivel: string;
-  CodigoFipe: string;
-  MesReferencia: string; // "maio de 2024 "
-  TipoVeiculo: number;
-  SiglaCombustivel: string;
-  DataConsulta: string; // "quinta-feira, 30 de maio de 2024 11:57"
+  Valor: string; Marca: string; Modelo: string; AnoModelo: number; Combustivel: string;
+  CodigoFipe: string; MesReferencia: string; TipoVeiculo: number; SiglaCombustivel: string; DataConsulta: string;
 }
 
-async function fetchFipeMarcas(): Promise<FipeMarca[]> {
+async function fetchFipeMarcasParallelum(): Promise<FipeMarca[]> {
   console.log("Fetching FIPE Marcas from Parallelum API...");
   try {
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas`);
-    if (!response.ok) {
-      console.error(`Parallelum FIPE Marcas API error: ${response.status} ${response.statusText}`);
-      return [];
-    }
-    const data: FipeMarca[] = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching FIPE Marcas:", error);
-    return [];
-  }
+    if (!response.ok) { console.error(`Parallelum FIPE Marcas API error: ${response.status} ${response.statusText}`); return []; }
+    return await response.json();
+  } catch (error) { console.error("Error fetching FIPE Marcas:", error); return []; }
 }
 
-async function fetchFipeModelosAnos(marcaCodigo: string): Promise<FipeModelosAnosResponse | null> {
+async function fetchFipeModelosAnosParallelum(marcaCodigo: string): Promise<FipeModelosAnosResponse | null> {
   if (!marcaCodigo) return null;
   console.log(`Fetching FIPE Modelos/Anos for marca ${marcaCodigo} from Parallelum API...`);
   try {
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCodigo}/modelos`);
-    if (!response.ok) {
-      console.error(`Parallelum FIPE Modelos/Anos API error: ${response.status} ${response.statusText}`);
-      return null;
-    }
-    const data: FipeModelosAnosResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching FIPE Modelos/Anos:", error);
-    return null;
-  }
+    if (!response.ok) { console.error(`Parallelum FIPE Modelos/Anos API error: ${response.status} ${response.statusText}`); return null; }
+    return await response.json();
+  } catch (error) { console.error("Error fetching FIPE Modelos/Anos:", error); return null; }
 }
 
-async function fetchFipeDetalhesVeiculo(marcaCodigo: string, modeloCodigo: string, anoCodigo: string): Promise<FipeVeiculoDetalhesResponse | null> {
+async function fetchFipeDetalhesVeiculoParallelum(marcaCodigo: string, modeloCodigo: string, anoCodigo: string): Promise<FipeVeiculoDetalhesResponse | null> {
   if (!marcaCodigo || !modeloCodigo || !anoCodigo) return null;
   console.log(`Fetching FIPE Detalhes for ${marcaCodigo}/${modeloCodigo}/${anoCodigo} from Parallelum API...`);
   try {
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCodigo}/modelos/${modeloCodigo}/anos/${anoCodigo}`);
-    if (!response.ok) {
-      console.error(`Parallelum FIPE Detalhes API error: ${response.status} ${response.statusText}`);
-      return null;
-    }
-    const data: FipeVeiculoDetalhesResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching FIPE Detalhes:", error);
-    return null;
-  }
+    if (!response.ok) { console.error(`Parallelum FIPE Detalhes API error: ${response.status} ${response.statusText}`); return null; }
+    return await response.json();
+  } catch (error) { console.error("Error fetching FIPE Detalhes:", error); return null; }
 }
+
 
 export default function NovoVeiculoPage() {
   const router = useRouter();
@@ -141,7 +112,7 @@ export default function NovoVeiculoPage() {
   useEffect(() => {
     const loadMarcas = async () => {
       setIsLoadingFipeMarcas(true);
-      const marcas = await fetchFipeMarcas();
+      const marcas = await fetchFipeMarcasParallelum();
       setFipeMarcas(marcas);
       setIsLoadingFipeMarcas(false);
     };
@@ -153,27 +124,26 @@ export default function NovoVeiculoPage() {
     const loadModelosAnos = async () => {
       if (selectedFipeMarcaCodigo) {
         setIsLoadingFipeModelosAnos(true);
-        setFipeModelos([]); setFipeAnos([]); // Clear previous
+        setFipeModelos([]); setFipeAnos([]); 
         setSelectedFipeModeloCodigo(''); setSelectedFipeAnoCodigo('');
         setFipeVeiculoDetalhes(null);
-        const data = await fetchFipeModelosAnos(selectedFipeMarcaCodigo);
+        const data = await fetchFipeModelosAnosParallelum(selectedFipeMarcaCodigo);
         if (data) {
           setFipeModelos(data.modelos);
           setFipeAnos(data.anos);
         } else {
-          toast({ title: "Erro ao buscar modelos/anos", description: "Não foi possível carregar os modelos e anos para a marca selecionada.", variant: "destructive" });
+          toast({ title: "Erro ao buscar modelos/anos FIPE", description: "Não foi possível carregar os modelos e anos para a marca selecionada.", variant: "destructive" });
         }
         setIsLoadingFipeModelosAnos(false);
       }
     };
-    loadModelosAnos();
+    if (selectedFipeMarcaCodigo) loadModelosAnos();
   }, [selectedFipeMarcaCodigo, toast]);
   
   // Fetch PessoasFisicas and Organizacoes for proprietario select
   useEffect(() => {
     const fetchData = async () => {
       if (!supabase) return;
-      // Fetch Pessoas Fisicas
       const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo');
       if (pfError) toast({ title: "Erro Pessoas Físicas", description: pfError.message, variant: "destructive" });
       else {
@@ -181,7 +151,6 @@ export default function NovoVeiculoPage() {
         setAvailableMotoristas(pfData.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: `${pf.nome_completo} (${pf.cpf})` })));
       }
 
-      // Fetch Organizacoes
       const { data: orgData, error: orgError } = await supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome');
       if (orgError) toast({ title: "Erro Organizações", description: orgError.message, variant: "destructive" });
       else setAvailableOrganizacoes(orgData.map(org => ({ value: org.id_entidade.toString(), label: `${org.nome} (${org.cnpj})` })));
@@ -199,7 +168,7 @@ export default function NovoVeiculoPage() {
       if (cnhError) { toast({ title: "Erro CNHs", description: cnhError.message, variant: "destructive" }); setAvailableCNHsForSelectedMotorista([]); }
       else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${isValidDate(new Date(cnh.data_validade!)) ? format(new Date(cnh.data_validade!), 'dd/MM/yyyy') : 'Data Inválida'})` })));
     };
-    fetchCNHs();
+    if (motoristaModalData.id_motorista) fetchCNHs();
   }, [motoristaModalData.id_motorista, toast]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -225,7 +194,7 @@ export default function NovoVeiculoPage() {
     }
     setIsLoadingFipeDetalhes(true);
     setFipeVeiculoDetalhes(null);
-    const detalhes = await fetchFipeDetalhesVeiculo(selectedFipeMarcaCodigo, selectedFipeModeloCodigo, selectedFipeAnoCodigo);
+    const detalhes = await fetchFipeDetalhesVeiculoParallelum(selectedFipeMarcaCodigo, selectedFipeModeloCodigo, selectedFipeAnoCodigo);
     if (detalhes) {
       setFipeVeiculoDetalhes(detalhes);
       toast({ title: "Detalhes FIPE Carregados", description: "Verifique os dados abaixo e clique em 'Usar Dados FIPE' para preencher o formulário." });
@@ -243,9 +212,8 @@ export default function NovoVeiculoPage() {
     setFormData(prev => ({
       ...prev,
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
-      modelo: fipeVeiculoDetalhes.Modelo || prev.modelo, // This often includes version
+      modelo: fipeVeiculoDetalhes.Modelo || prev.modelo, 
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      // ano_fabricacao might be the same as ano_modelo from FIPE, or user might need to confirm/adjust
       ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, 
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
@@ -255,7 +223,6 @@ export default function NovoVeiculoPage() {
     }));
     toast({ title: "Formulário Preenchido", description: "Dados da FIPE aplicados ao formulário principal." });
   };
-
 
   const handleAddMotorista = () => {
      if (!motoristaModalData.id_motorista || !motoristaModalData.id_cnh || !motoristaModalData.categoria_cnh_veiculo) {
@@ -371,7 +338,7 @@ export default function NovoVeiculoPage() {
       <form onSubmit={handleSubmit}>
         {/* Busca Tabela FIPE (Parallelum API) Card */}
         <Card className="shadow-lg mb-6">
-            <CardHeader>
+             <CardHeader>
                 <CardTitle className="flex items-center"><Tags className="mr-2 h-5 w-5 text-primary"/> Busca Tabela FIPE (Parallelum API)</CardTitle>
                 <CardDescription>Selecione Marca, Modelo e Ano para buscar dados da FIPE e preencher o formulário.</CardDescription>
             </CardHeader>
@@ -388,10 +355,10 @@ export default function NovoVeiculoPage() {
                     </div>
                     <div className="space-y-1">
                         <Label htmlFor="fipe_modelo">Modelo</Label>
-                        <Select value={selectedFipeModeloCodigo} onValueChange={setSelectedFipeModeloCodigo} disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}>
+                        <Select value={selectedFipeModeloCodigo} onValueChange={(value) => setSelectedFipeModeloCodigo(value)} disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}>
                             <SelectTrigger id="fipe_modelo"><SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} /></SelectTrigger>
                             <SelectContent>
-                                {fipeModelos.map(modelo => <SelectItem key={modelo.codigo.toString()} value={modelo.codigo.toString()}>{modelo.nome}</SelectItem>)}
+                                {fipeModelos.map(modelo => <SelectItem key={modelo.codigo} value={modelo.codigo}>{modelo.nome}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     </div>
@@ -424,7 +391,7 @@ export default function NovoVeiculoPage() {
                             <p><strong>Marca:</strong> {fipeVeiculoDetalhes.Marca} / <strong>Modelo:</strong> {fipeVeiculoDetalhes.Modelo}</p>
                             <p><strong>Ano Modelo:</strong> {fipeVeiculoDetalhes.AnoModelo} / <strong>Combustível:</strong> {fipeVeiculoDetalhes.Combustivel}</p>
                             <p><strong>Código FIPE:</strong> {fipeVeiculoDetalhes.CodigoFipe}</p>
-                            <p><strong>Mês Referência:</strong> {fipeVeiculoDetalhes.MesReferencia} / <strong>Data Consulta:</strong> {format(parse(fipeVeiculoDetalhes.DataConsulta, "EEEE, d 'de' MMMM 'de' yyyy HH:mm", new Date(), { locale: ptBR }), "dd/MM/yyyy HH:mm")}</p>
+                            <p><strong>Mês Referência:</strong> {fipeVeiculoDetalhes.MesReferencia} / <strong>Data Consulta:</strong> {fipeVeiculoDetalhes.DataConsulta ? format(parse(fipeVeiculoDetalhes.DataConsulta, "EEEE, d 'de' MMMM 'de' yyyy HH:mm", new Date(), { locale: ptBR }), "dd/MM/yyyy HH:mm") : 'N/A'}</p>
                         </CardContent>
                     </Card>
                 )}
@@ -587,3 +554,4 @@ Supabase Integration Notes:
 - `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe` exist.
 - `VeiculoMotoristas` table: Used for linking drivers (PessoasFisicas) and their CNHs to vehicles.
 */
+
