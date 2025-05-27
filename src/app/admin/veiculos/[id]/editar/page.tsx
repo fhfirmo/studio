@@ -30,6 +30,7 @@ interface VehicleDataFromDB {
   combustivel?: string | null;
   marca: string; 
   modelo: string; 
+  versao?: string | null; // Added based on schema
   ano_fabricacao?: number | null;
   ano_modelo?: number | null;
   cor?: string | null;
@@ -128,38 +129,44 @@ async function fetchFipeDetalhesVeiculoParallelum(marcaCodigo: string, modeloCod
 
 async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase
-    .from('Veiculos')
-    .select(`
-      *,
-      VeiculoMotoristas (
-        id_veiculo_motorista,
-        id_motorista,
-        categoria_cnh,
-        PessoasFisicas!inner ( id_pessoa_fisica, nome_completo, cpf ),
-        CNHs!inner (id_cnh, numero_registro, categoria, data_validade)
-      )
-    `)
-    .eq('id_veiculo', parseInt(vehicleId, 10))
-    .single();
-
-  if (error) { console.error("Error fetching vehicle for edit:", error); return null; }
-  if (!data) return null;
-
-  return {
-      ...data,
-      id_veiculo: data.id_veiculo.toString(),
-      id_proprietario_pessoa_fisica: data.id_proprietario_pessoa_fisica?.toString() || null,
-      id_proprietario_entidade: data.id_proprietario_entidade?.toString() || null,
-      VeiculoMotoristas: (data.VeiculoMotoristas || []).map((vm: any) => ({
-        id_veiculo_motorista: vm.id_veiculo_motorista.toString(),
-        id_motorista: vm.PessoasFisicas.id_pessoa_fisica.toString(),
-        PessoasFisicas: vm.PessoasFisicas,
-        id_cnh: vm.CNHs.id_cnh.toString(),
-        CNHs: vm.CNHs,
-        categoria_cnh: vm.categoria_cnh
-      }))
-  } as VehicleDataFromDB;
+  // Supabase: Fetch from public.Veiculos, joining with PessoasFisicas/Entidades for owner, ModelosVeiculo for model details (if still used),
+  // and VeiculoMotoristas (joining with PessoasFisicas and CNHs)
+  console.log(`Fetching vehicle data for ID: ${vehicleId} (placeholder edit page)`);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // Example placeholder: adapt if your data source changes
+  if (vehicleId === "1" || vehicleId === "vei_001") {
+    return {
+      id_veiculo: vehicleId,
+      placa_atual: "ABC-1234",
+      placa_anterior: "XYZ-7890",
+      chassi: "9BWZZZ377VT000001",
+      tipo_especie: "Carro passeio - Automóvel de passeio",
+      combustivel: "Flex",
+      marca: "Fiat",
+      modelo: "Uno Mille",
+      versao: "EX",
+      ano_fabricacao: 2020,
+      ano_modelo: 2020,
+      cor: "Vermelho",
+      codigo_renavam: "01234567890",
+      estado_crlv: "SP",
+      numero_serie_crlv: "DOC0000123",
+      data_expedicao_crlv: "2023-01-15",
+      data_validade_crlv: "2024-01-15",
+      id_proprietario_pessoa_fisica: "1", // Corresponds to a pf_... id
+      data_aquisicao: "2020-05-10",
+      codigo_fipe: "001004-9",
+      valor_fipe: 6022.00,
+      data_consulta_fipe: "2021-06-07",
+      mes_referencia_fipe: "junho de 2021",
+      observacao: "Veículo em bom estado, revisões em dia.",
+      VeiculoMotoristas: [
+        { id_veiculo_motorista: "vm_001", id_motorista: "1", PessoasFisicas: { nome_completo: "João Motorista", cpf: "111.111.111-11"}, id_cnh: "cnh_001", CNHs: { numero_registro: "REG123", categoria: "B", data_validade: "2028-10-10"}, categoria_cnh: "B"},
+      ]
+    };
+  }
+  return null;
 }
 
 
@@ -275,7 +282,7 @@ export default function EditarVeiculoPage() {
             id_motorista: vm.id_motorista,
             nome_motorista: vm.PessoasFisicas.nome_completo,
             id_cnh: vm.id_cnh,
-            numero_cnh: `${vm.CNHs.numero_registro} (Cat: ${vm.CNHs.categoria}, Val: ${isValidDate(new Date(vm.CNHs.data_validade)) ? format(new Date(vm.CNHs.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})`,
+            numero_cnh: `${vm.CNHs.numero_registro} (Cat: ${vm.CNHs.categoria}, Val: ${vm.CNHs.data_validade && isValidDate(parseISO(vm.CNHs.data_validade)) ? format(parseISO(vm.CNHs.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})`,
             categoria_cnh: vm.categoria_cnh,
         })));
         setVehicleFound(true);
@@ -296,7 +303,7 @@ export default function EditarVeiculoPage() {
       }
       const { data: cnhData, error: cnhError } = await supabase.from('CNHs').select('id_cnh, numero_registro, categoria, data_validade').eq('id_pessoa_fisica', motoristaModalData.id_motorista);
       if (cnhError) { toast({ title: "Erro CNHs", description: cnhError.message, variant: "destructive" }); setAvailableCNHsForSelectedMotorista([]); }
-      else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${isValidDate(new Date(cnh.data_validade!)) ? format(new Date(cnh.data_validade!), 'dd/MM/yyyy') : 'Data Inválida'})` })));
+      else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${cnh.data_validade && isValidDate(parseISO(cnh.data_validade)) ? format(parseISO(cnh.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})` })));
     };
     if(motoristaModalData.id_motorista) fetchCNHs();
   }, [motoristaModalData.id_motorista, toast]);
@@ -373,7 +380,7 @@ export default function EditarVeiculoPage() {
   };
 
   const handleRemoveStagedMotorista = (idToRemove: string) => {
-    setStagedMotoristas(prev => prev.filter(m => (m.tempId || m.id_veiculo_motorista) !== idToRemove));
+    setStagedMotoristas(prev => prev.filter(m => (m.id_veiculo_motorista || m.tempId) !== idToRemove));
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -394,7 +401,7 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao field removed
+      versao: null, // Explicitly sending null for versao as it's not in the main form
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -406,11 +413,11 @@ export default function EditarVeiculoPage() {
       id_proprietario_pessoa_fisica: formData.tipo_proprietario === 'pessoa_fisica' ? parseInt(formData.id_proprietario) : null,
       id_proprietario_entidade: formData.tipo_proprietario === 'organizacao' ? parseInt(formData.id_proprietario) : null,
       data_aquisicao: formData.data_aquisicao ? format(formData.data_aquisicao, "yyyy-MM-dd") : null,
+      observacao: formData.observacao || null,
       codigo_fipe: formData.codigo_fipe || null,
       valor_fipe: formData.valor_fipe ? parseFloat(formData.valor_fipe) : null,
       data_consulta_fipe: formData.data_consulta_fipe ? format(formData.data_consulta_fipe, "yyyy-MM-dd") : null,
       mes_referencia_fipe: formData.mes_referencia_fipe || null,
-      observacao: formData.observacao || null,
     };
 
     try {
@@ -448,8 +455,8 @@ export default function EditarVeiculoPage() {
       router.push('/admin/veiculos'); 
 
     } catch (error: any) {
-      console.error('Erro ao atualizar veículo:', error);
-      toast({ title: "Erro ao Atualizar", description: error.message, variant: "destructive" });
+      console.error('Erro ao atualizar veículo:', JSON.stringify(error, null, 2), error);
+      toast({ title: "Erro ao Atualizar", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -546,7 +553,6 @@ export default function EditarVeiculoPage() {
             <div className="space-y-2"><Label htmlFor="chassi_edit">Chassi <span className="text-destructive">*</span></Label><Input id="chassi_edit" name="chassi" value={formData.chassi} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="marca_edit">Marca <span className="text-destructive">*</span></Label><Input id="marca_edit" name="marca" value={formData.marca} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="modelo_edit">Modelo <span className="text-destructive">*</span></Label><Input id="modelo_edit" name="modelo" value={formData.modelo} onChange={handleChange} required /></div>
-            {/* Versao field removed */}
             <div className="space-y-2"><Label htmlFor="ano_fabricacao_edit">Ano Fabricação <span className="text-destructive">*</span></Label><Input id="ano_fabricacao_edit" name="ano_fabricacao" type="number" value={formData.ano_fabricacao} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="ano_modelo_edit">Ano Modelo</Label><Input id="ano_modelo_edit" name="ano_modelo" type="number" value={formData.ano_modelo} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="cor_edit">Cor</Label><Input id="cor_edit" name="cor" value={formData.cor} onChange={handleChange} /></div>
@@ -560,7 +566,7 @@ export default function EditarVeiculoPage() {
                 </Select>
             </div>
             <div className="space-y-2"><Label htmlFor="combustivel_edit">Combustível</Label><Input id="combustivel_edit" name="combustivel" value={formData.combustivel} onChange={handleChange} /></div>
-            <div className="space-y-2"><Label htmlFor="codigo_fipe_edit">Código FIPE</Label><Input id="codigo_fipe_edit" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Preenchido pela busca FIPE" /></div>
+            <div className="space-y-2"><Label htmlFor="codigo_fipe_form_edit">Código FIPE</Label><Input id="codigo_fipe_form_edit" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Preenchido pela busca FIPE" /></div>
           </CardContent>
         </Card>
 
@@ -698,10 +704,9 @@ export default function EditarVeiculoPage() {
 Supabase Integration Notes:
 - On load (Edit page): Fetch vehicle data, including its `VeiculoMotoristas` and their related CNH/PessoaFisica details.
 - FIPE API (Parallelum): Multi-step fetch is available. 
-- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe` exist.
+- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe` exist. The `versao` column should also be present if you intend to save it.
 - On submit: Update `Veiculos`. Then, manage `VeiculoMotoristas` (delete all for vehicle, then re-insert staged ones).
 - `marca`, `modelo` are direct text inputs, populated by FIPE lookup or manually.
-- `versao` field removed from main form as per prompt.
 - `tipo_especie` is now a select dropdown.
 */
 

@@ -16,7 +16,7 @@ import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, Dia
 import { Car, Save, XCircle, User, Building, UserPlus, Users, Trash2, CalendarDays, Shield, FileText, DollarSignIcon, Search as SearchIcon, Loader2, Tags, HelpCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
-import { format, parse, isValid as isValidDate } from "date-fns";
+import { format, parse, isValid as isValidDate, parseISO } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
 interface GenericOption { value: string; label: string; }
@@ -116,7 +116,6 @@ export default function NovoVeiculoPage() {
   const [isLoadingFipeModelosAnos, setIsLoadingFipeModelosAnos] = useState(false);
   const [isLoadingFipeDetalhes, setIsLoadingFipeDetalhes] = useState(false);
 
-  // Fetch FIPE Marcas on mount
   useEffect(() => {
     const loadMarcas = async () => {
       setIsLoadingFipeMarcas(true);
@@ -127,14 +126,13 @@ export default function NovoVeiculoPage() {
     loadMarcas();
   }, []);
 
-  // Fetch FIPE Modelos/Anos when marca changes
   useEffect(() => {
     const loadModelosAnos = async () => {
       if (selectedFipeMarcaCodigo) {
         setIsLoadingFipeModelosAnos(true);
         setFipeModelos([]); setFipeAnos([]); 
         setSelectedFipeModeloCodigo(''); setSelectedFipeAnoCodigo('');
-        setFipeVeiculoDetalhes(null);
+        setFipeVeiculoDetalhes(null); // Reset details when marca changes
         const data = await fetchFipeModelosAnosParallelum(selectedFipeMarcaCodigo);
         if (data) {
           setFipeModelos(data.modelos);
@@ -148,7 +146,6 @@ export default function NovoVeiculoPage() {
     if (selectedFipeMarcaCodigo) loadModelosAnos();
   }, [selectedFipeMarcaCodigo, toast]);
   
-  // Fetch PessoasFisicas and Organizacoes for proprietario select
   useEffect(() => {
     const fetchData = async () => {
       if (!supabase) return;
@@ -166,7 +163,6 @@ export default function NovoVeiculoPage() {
     fetchData();
   }, [toast]);
 
-  // Fetch CNHs for selected motorista in modal
   useEffect(() => {
     const fetchCNHs = async () => {
       if (!supabase || !motoristaModalData.id_motorista) {
@@ -174,9 +170,9 @@ export default function NovoVeiculoPage() {
       }
       const { data: cnhData, error: cnhError } = await supabase.from('CNHs').select('id_cnh, numero_registro, categoria, data_validade').eq('id_pessoa_fisica', motoristaModalData.id_motorista);
       if (cnhError) { toast({ title: "Erro CNHs", description: cnhError.message, variant: "destructive" }); setAvailableCNHsForSelectedMotorista([]); }
-      else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${isValidDate(new Date(cnh.data_validade!)) ? format(new Date(cnh.data_validade!), 'dd/MM/yyyy') : 'Data Inválida'})` })));
+      else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${cnh.data_validade && isValidDate(parseISO(cnh.data_validade)) ? format(parseISO(cnh.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})` })));
     };
-    if (motoristaModalData.id_motorista) fetchCNHs();
+    if(motoristaModalData.id_motorista) fetchCNHs();
   }, [motoristaModalData.id_motorista, toast]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -222,12 +218,12 @@ export default function NovoVeiculoPage() {
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
       modelo: fipeVeiculoDetalhes.Modelo || prev.modelo, 
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, // Often AnoModelo is used as AnoFabricacao for FIPE
+      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao,
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
       valor_fipe: fipeVeiculoDetalhes.Valor ? fipeVeiculoDetalhes.Valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
       mes_referencia_fipe: fipeVeiculoDetalhes.MesReferencia?.trim() || prev.mes_referencia_fipe,
-      data_consulta_fipe: new Date(), // Set to current date
+      data_consulta_fipe: new Date(),
     }));
     toast({ title: "Formulário Preenchido", description: "Dados da FIPE aplicados ao formulário principal." });
   };
@@ -272,23 +268,23 @@ export default function NovoVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao field is removed
+      versao: null, // Explicitly sending null for versao as it was removed from the form
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
-      codigo_renavam: formData.codigo_renavam,
-      estado_crlv: formData.estado_crlv || null,
-      numero_serie_crlv: formData.numero_serie_crlv || null,
-      data_expedicao_crlv: formData.data_expedicao_crlv ? format(formData.data_expedicao_crlv, "yyyy-MM-dd") : null,
-      data_validade_crlv: formData.data_validade_crlv ? format(formData.data_validade_crlv, "yyyy-MM-dd") : null,
+      codigo_renavam: formData.codigo_renavam, // CRLV field
+      estado_crlv: formData.estado_crlv || null, // CRLV field
+      numero_serie_crlv: formData.numero_serie_crlv || null, // CRLV field
+      data_expedicao_crlv: formData.data_expedicao_crlv ? format(formData.data_expedicao_crlv, "yyyy-MM-dd") : null, // CRLV field
+      data_validade_crlv: formData.data_validade_crlv ? format(formData.data_validade_crlv, "yyyy-MM-dd") : null, // CRLV field
       id_proprietario_pessoa_fisica: formData.tipo_proprietario === 'pessoa_fisica' ? parseInt(formData.id_proprietario) : null,
       id_proprietario_entidade: formData.tipo_proprietario === 'organizacao' ? parseInt(formData.id_proprietario) : null,
       data_aquisicao: formData.data_aquisicao ? format(formData.data_aquisicao, "yyyy-MM-dd") : null,
+      observacao: formData.observacao || null,
       codigo_fipe: formData.codigo_fipe || null,
       valor_fipe: formData.valor_fipe ? parseFloat(formData.valor_fipe) : null,
       data_consulta_fipe: formData.data_consulta_fipe ? format(formData.data_consulta_fipe, "yyyy-MM-dd") : null,
       mes_referencia_fipe: formData.mes_referencia_fipe || null,
-      observacao: formData.observacao || null,
     };
 
     try {
@@ -321,8 +317,8 @@ export default function NovoVeiculoPage() {
       router.push('/admin/veiculos');
 
     } catch (error: any) {
-      console.error('Erro ao cadastrar veículo:', error);
-      toast({ title: "Erro ao Cadastrar Veículo", description: error.message, variant: "destructive" });
+      console.error('Erro ao cadastrar veículo:', JSON.stringify(error, null, 2), error);
+      toast({ title: "Erro ao Cadastrar Veículo", description: error.message || "Ocorreu um erro. Verifique RLS e os dados do formulário.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -413,7 +409,6 @@ export default function NovoVeiculoPage() {
             <div className="space-y-2"><Label htmlFor="chassi">Chassi <span className="text-destructive">*</span></Label><Input id="chassi" name="chassi" value={formData.chassi} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="marca">Marca <span className="text-destructive">*</span></Label><Input id="marca" name="marca" value={formData.marca} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="modelo">Modelo <span className="text-destructive">*</span></Label><Input id="modelo" name="modelo" value={formData.modelo} onChange={handleChange} required /></div>
-            {/* Versão field removed from here */}
             <div className="space-y-2"><Label htmlFor="ano_fabricacao">Ano Fabricação <span className="text-destructive">*</span></Label><Input id="ano_fabricacao" name="ano_fabricacao" type="number" value={formData.ano_fabricacao} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="ano_modelo">Ano Modelo</Label><Input id="ano_modelo" name="ano_modelo" type="number" value={formData.ano_modelo} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="cor">Cor</Label><Input id="cor" name="cor" value={formData.cor} onChange={handleChange} /></div>
@@ -427,7 +422,7 @@ export default function NovoVeiculoPage() {
                 </Select>
             </div>
             <div className="space-y-2"><Label htmlFor="combustivel">Combustível</Label><Input id="combustivel" name="combustivel" value={formData.combustivel} onChange={handleChange} /></div>
-            <div className="space-y-2"><Label htmlFor="codigo_fipe">Código FIPE</Label><Input id="codigo_fipe" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Preenchido pela busca FIPE" /></div>
+            <div className="space-y-2"><Label htmlFor="codigo_fipe_form">Código FIPE</Label><Input id="codigo_fipe_form" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Preenchido pela busca FIPE" /></div>
           </CardContent>
         </Card>
 
@@ -559,12 +554,13 @@ export default function NovoVeiculoPage() {
 }
 /*
 Supabase Integration Notes:
-- New FIPE API (Parallelum): Requires multi-step fetch.
-- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe` exist.
-- `VeiculoMotoristas` table: Used for linking drivers (PessoasFisicas) and their CNHs to vehicles.
-- `marca`, `modelo` are now direct text inputs, populated by FIPE lookup or manually.
-- `versao` field removed from main form as per prompt, but `public."Veiculos"` schema still shows it as nullable.
-- `tipo_especie` is now a select dropdown.
+- FIPE API (Parallelum): Multi-step fetch logic is now implemented.
+- `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`, and `versao` (if you still have it - your prompt implies it was removed but schema shows it) exist and are correctly typed.
+- `VeiculoMotoristas` table: For linking drivers and CNHs.
+- `handleSubmit`: Needs to send all direct vehicle fields to `Veiculos`. For `VeiculoMotoristas`, it involves separate inserts.
+- Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista) will fetch from Supabase.
 */
+
+    
 
     
