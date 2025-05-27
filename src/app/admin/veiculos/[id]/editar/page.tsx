@@ -50,15 +50,15 @@ interface VehicleDataFromDB {
     PessoasFisicas: { nome_completo: string; cpf: string; }; 
     id_cnh: string;
     CNHs: { numero_registro: string; categoria: string; data_validade: string }; 
-    categoria_cnh: string; 
+    categoria_cnh: string; // This is categoria_cnh from VeiculoMotoristas
   }[];
 }
 
 interface GenericOption { value: string; label: string; }
 
 interface StagedMotorista {
-  id_veiculo_motorista?: string; 
-  tempId?: string; 
+  id_veiculo_motorista?: string; // Present if it's an existing record from DB
+  tempId?: string; // Used for client-side key for new items before save
   id_motorista: string;
   nome_motorista: string;
   id_cnh: string;
@@ -140,6 +140,8 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
   }
 
   console.log(`Fetching vehicle data for ID: ${numericId} from Supabase`);
+  // Supabase: Fetch from public.Veiculos
+  // Ensure to JOIN or select related data if needed for pre-filling (e.g., ModelosVeiculo if id_modelo was still a FK)
   const { data, error } = await supabase
     .from('Veiculos')
     .select(`
@@ -154,7 +156,7 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
       )
     `)
     .eq('id_veiculo', numericId)
-    .single<VehicleDataFromDB>(); 
+    .single<VehicleDataFromDB>(); // Specify the return type
 
   if (error) {
     console.error("Erro ao buscar dados do veículo:", JSON.stringify(error, null, 2));
@@ -193,9 +195,6 @@ export default function EditarVeiculoPage() {
   const [isLoadingFipeMarcas, setIsLoadingFipeMarcas] = useState(false);
   const [isLoadingFipeModelosAnos, setIsLoadingFipeModelosAnos] = useState(false);
   const [isLoadingFipeDetalhes, setIsLoadingFipeDetalhes] = useState(false);
-
-  console.log("Render Edit: selectedFipeModeloCodigo", selectedFipeModeloCodigo, "fipeModelos", fipeModelos.length);
-
 
   useEffect(() => {
     const loadMarcas = async () => {
@@ -282,14 +281,15 @@ export default function EditarVeiculoPage() {
           mes_referencia_fipe: data.mes_referencia_fipe || '',
           observacao: data.observacao || '',
         });
+        // Pre-fill staged motoristas from existing data
         setStagedMotoristas((data.VeiculoMotoristas || []).map(vm => ({
-            id_veiculo_motorista: vm.id_veiculo_motorista,
+            id_veiculo_motorista: vm.id_veiculo_motorista, // Keep the original DB ID
             tempId: vm.id_veiculo_motorista, // Use actual ID as tempId for existing ones
             id_motorista: vm.id_motorista.toString(),
             nome_motorista: vm.PessoasFisicas.nome_completo,
             id_cnh: vm.id_cnh.toString(),
             numero_cnh: `${vm.CNHs.numero_registro} (Cat: ${vm.CNHs.categoria}, Val: ${vm.CNHs.data_validade && isValidDate(parseISO(vm.CNHs.data_validade)) ? format(parseISO(vm.CNHs.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})`,
-            categoria_cnh: vm.categoria_cnh,
+            categoria_cnh: vm.categoria_cnh, // This is categoria_cnh from VeiculoMotoristas
         })));
         setVehicleFound(true);
       } else {
@@ -356,7 +356,7 @@ export default function EditarVeiculoPage() {
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
       modelo: fipeVeiculoDetalhes.Modelo || prev.modelo,
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, 
+      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, // Often FIPE AnoModelo is used for both
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
       valor_fipe: fipeVeiculoDetalhes.Valor ? fipeVeiculoDetalhes.Valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
@@ -375,7 +375,7 @@ export default function EditarVeiculoPage() {
     if (!selectedMotorista || !selectedCNH) { toast({title: "Erro", description: "Motorista ou CNH não encontrado.", variant: "destructive"}); return; }
 
     setStagedMotoristas(prev => [...prev, {
-      tempId: Date.now().toString(), 
+      tempId: Date.now().toString(), // For new items, generate a temp client-side ID
       id_motorista: motoristaModalData.id_motorista, nome_motorista: selectedMotorista.label,
       id_cnh: motoristaModalData.id_cnh, numero_cnh: selectedCNH.label,
       categoria_cnh: motoristaModalData.categoria_cnh_veiculo
@@ -406,6 +406,7 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
+      // versao removed from payload
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -433,13 +434,17 @@ export default function EditarVeiculoPage() {
       if (veiculoError) throw veiculoError;
 
       // Sync VeiculoMotoristas: Delete existing and insert new staged ones
+      // This is a common pattern but can be optimized for large numbers of drivers.
+      // For more complex scenarios, consider diffing or using an Edge Function for transactional updates.
       const { error: deleteMotoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
         .eq('id_veiculo', parseInt(vehicleId));
       
       if (deleteMotoristasError) {
+        // Log warning but proceed if main vehicle update was successful. User can retry driver linking.
         console.warn("Erro ao deletar motoristas antigos:", JSON.stringify(deleteMotoristasError, null, 2));
+        toast({ title: "Aviso", description: "Erro ao limpar motoristas antigos. Por favor, verifique os vínculos dos motoristas.", variant: "default", duration: 6000 });
       }
 
       if (stagedMotoristas.length > 0) {
@@ -448,6 +453,7 @@ export default function EditarVeiculoPage() {
           id_motorista: parseInt(m.id_motorista),
           id_cnh: parseInt(m.id_cnh),
           categoria_cnh: m.categoria_cnh,
+          // data_vinculacao will use DB default if not provided
         }));
         const { error: insertMotoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (insertMotoristasError) {
@@ -535,14 +541,14 @@ export default function EditarVeiculoPage() {
                                     return <span className="text-muted-foreground">Carregando...</span>;
                                     }
                                     if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
-                                    const selectedModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
-                                    if (selectedModel && selectedModel.nome) {
-                                        return <span className="text-foreground">{selectedModel.nome}</span>;
-                                    } else if (selectedModel && !selectedModel.nome) {
-                                        return <span className="text-muted-foreground">Modelo Cód: {selectedFipeModeloCodigo} (sem nome)</span>;
-                                    } else {
-                                        return <span className="text-muted-foreground">Cód: {selectedFipeModeloCodigo}</span>;
-                                    }
+                                      const selectedModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
+                                      if (selectedModel && selectedModel.nome) {
+                                          return <span className="text-foreground">{selectedModel.nome}</span>;
+                                      } else if (selectedModel && !selectedModel.nome) {
+                                          return <span className="text-muted-foreground">Modelo Cód: {selectedFipeModeloCodigo} (sem nome)</span>;
+                                      } else {
+                                          return <span className="text-muted-foreground">Cód: {selectedFipeModeloCodigo}</span>;
+                                      }
                                     }
                                     return <SelectValue placeholder="Selecione o Modelo" />;
                                 })()}
@@ -605,7 +611,6 @@ export default function EditarVeiculoPage() {
           <CardHeader><CardTitle>Dados Principais do Veículo</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="space-y-2"><Label htmlFor="placa_atual_edit">Placa Atual <span className="text-destructive">*</span></Label><Input id="placa_atual_edit" name="placa_atual" value={formData.placa_atual} onChange={handleChange} required /></div>
-            <div className="space-y-2"><Label htmlFor="placa_anterior_edit">Placa Anterior</Label><Input id="placa_anterior_edit" name="placa_anterior" value={formData.placa_anterior} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="chassi_edit">Chassi <span className="text-destructive">*</span></Label><Input id="chassi_edit" name="chassi" value={formData.chassi} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="marca_edit">Marca <span className="text-destructive">*</span></Label><Input id="marca_edit" name="marca" value={formData.marca} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="modelo_edit">Modelo <span className="text-destructive">*</span></Label><Input id="modelo_edit" name="modelo" value={formData.modelo} onChange={handleChange} required /></div>
@@ -628,6 +633,7 @@ export default function EditarVeiculoPage() {
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados do CRLV</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-2"><Label htmlFor="placa_anterior_edit">Placa Anterior</Label><Input id="placa_anterior_edit" name="placa_anterior" value={formData.placa_anterior} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="codigo_renavam_edit">Código Renavam <span className="text-destructive">*</span></Label><Input id="codigo_renavam_edit" name="codigo_renavam" value={formData.codigo_renavam} onChange={handleChange} required /></div>
             <div className="space-y-2"><Label htmlFor="estado_crlv_edit">Estado CRLV</Label><Input id="estado_crlv_edit" name="estado_crlv" value={formData.estado_crlv} onChange={handleChange} maxLength={2} /></div>
             <div className="space-y-2"><Label htmlFor="numero_serie_crlv_edit">Nº Série CRLV</Label><Input id="numero_serie_crlv_edit" name="numero_serie_crlv" value={formData.numero_serie_crlv} onChange={handleChange} /></div>
@@ -759,12 +765,12 @@ export default function EditarVeiculoPage() {
 /*
 Supabase Integration Notes:
 - Database schema:
-  - `Veiculos` table needs: `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
-  - `tipo_especie` is now a dropdown.
+  - `Veiculos` table has `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
+  - `tipo_especie` is a dropdown.
+  - `versao` column has been removed from Veiculos.
 - FIPE API (Parallelum): Multi-step fetch logic (Marca -> Modelo/Ano -> Detalhes) is implemented.
 - `handleSubmit`: Saves vehicle data including FIPE fields and linked motoristas (to `VeiculoMotoristas`).
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista).
 */
 
     
-

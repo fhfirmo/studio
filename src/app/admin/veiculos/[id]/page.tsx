@@ -1,5 +1,5 @@
 
-"use client"; // Make it a client component to handle state for modals if needed
+"use client"; 
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label as InfoItemLabel } from "@/components/ui/label"; 
-import { Car, Edit3, Trash2, AlertTriangle, Info, Gauge, Palette, Fingerprint, FileText, CalendarDays, Users, Shield, DollarSignIcon } from "lucide-react";
+import { Car, Edit3, Trash2, AlertTriangle, Info, Gauge, Palette, Fingerprint, FileText, CalendarDays, Users, Shield, DollarSign } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ interface VehicleDetails {
   combustivel: string | null;
   marca: string;
   modelo: string;
-  versao: string | null;
+  // versao: string | null; // Removed as per recent update
   ano_fabricacao: number | null;
   ano_modelo: number | null;
   cor: string | null;
@@ -39,8 +39,10 @@ interface VehicleDetails {
   proprietario_tipo: 'Pessoa Física' | 'Organização' | 'N/A';
   proprietario_link: string | null;
   data_aquisicao: string | null;
+  codigo_fipe: string | null;
   valor_fipe: number | null;
   data_consulta_fipe: string | null;
+  mes_referencia_fipe: string | null;
   observacao: string | null;
   motoristas_vinculados: {
     id_veiculo_motorista: string;
@@ -102,7 +104,7 @@ async function getVehicleDetailsFromDB(vehicleId: string): Promise<VehicleDetail
     combustivel: data.combustivel,
     marca: data.marca,
     modelo: data.modelo,
-    versao: data.versao,
+    // versao: data.versao, // Removed
     ano_fabricacao: data.ano_fabricacao,
     ano_modelo: data.ano_modelo,
     cor: data.cor,
@@ -115,8 +117,10 @@ async function getVehicleDetailsFromDB(vehicleId: string): Promise<VehicleDetail
     proprietario_tipo,
     proprietario_link,
     data_aquisicao: data.data_aquisicao,
+    codigo_fipe: data.codigo_fipe,
     valor_fipe: data.valor_fipe,
     data_consulta_fipe: data.data_consulta_fipe,
+    mes_referencia_fipe: data.mes_referencia_fipe,
     observacao: data.observacao,
     motoristas_vinculados: (data.VeiculoMotoristas || []).map((vm: any) => ({
         id_veiculo_motorista: vm.id_veiculo_motorista.toString(),
@@ -173,12 +177,14 @@ export default function VehicleDetailsPage() {
     if (!vehicle || !supabase) return;
     setIsLoading(true);
     try {
+      // First, delete related VeiculoMotoristas entries
       const { error: motoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
         .eq('id_veiculo', parseInt(vehicle.id));
       if (motoristasError) throw motoristasError;
 
+      // Then delete the Veiculo itself
       const { error: veiculoError } = await supabase
         .from('Veiculos')
         .delete()
@@ -189,8 +195,9 @@ export default function VehicleDetailsPage() {
       router.push('/admin/veiculos');
     } catch (error: any) {
       toast({title: "Erro ao Excluir", description: error.message, variant: "destructive"});
-      setIsLoading(false);
+      setIsLoading(false); // Only set isLoading to false on error, successful navigation unmounts
     }
+    // No finally block for setIsLoading(false) here because router.push will unmount
   };
 
   if (isLoading) return <div className="container mx-auto px-4 py-12 text-center">Carregando...</div>;
@@ -211,11 +218,9 @@ export default function VehicleDetailsPage() {
             <CardHeader><CardTitle className="flex items-center text-xl"><Info className="mr-2 h-5 w-5 text-primary" /> Informações Gerais</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
               <InfoItem label="Placa Atual" value={vehicle.placa_atual} />
-              <InfoItem label="Placa Anterior" value={vehicle.placa_anterior} />
               <InfoItem label="Chassi" value={vehicle.chassi} />
               <InfoItem label="Marca" value={vehicle.marca} />
               <InfoItem label="Modelo" value={vehicle.modelo} />
-              <InfoItem label="Versão" value={vehicle.versao} />
               <InfoItem label="Ano Fabricação" value={vehicle.ano_fabricacao?.toString()} />
               <InfoItem label="Ano Modelo" value={vehicle.ano_modelo?.toString()} />
               <InfoItem label="Cor" value={vehicle.cor} />
@@ -228,6 +233,7 @@ export default function VehicleDetailsPage() {
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><FileText className="mr-2 h-5 w-5 text-primary" /> Dados do CRLV</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+              <InfoItem label="Placa Anterior" value={vehicle.placa_anterior} />
               <InfoItem label="Código Renavam" value={vehicle.codigo_renavam} />
               <InfoItem label="Estado CRLV" value={vehicle.estado_crlv} />
               <InfoItem label="Nº Série CRLV" value={vehicle.numero_serie_crlv} />
@@ -246,16 +252,16 @@ export default function VehicleDetailsPage() {
             </CardContent>
           </Card>
 
-          {/* Dados FIPE Card */}
            <Card className="shadow-lg">
-            <CardHeader><CardTitle className="flex items-center text-xl"><DollarSignIcon className="mr-2 h-5 w-5 text-primary" /> Dados FIPE</CardTitle></CardHeader>
-            <CardContent className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
+            <CardHeader><CardTitle className="flex items-center text-xl"><DollarSign className="mr-2 h-5 w-5 text-primary" /> Dados de Mercado (FIPE)</CardTitle></CardHeader>
+            <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+                <InfoItem label="Código FIPE" value={vehicle.codigo_fipe} />
                 <InfoItem label="Valor Tabela FIPE" value={formatCurrency(vehicle.valor_fipe)} />
+                <InfoItem label="Mês Referência FIPE" value={vehicle.mes_referencia_fipe} />
                 <InfoItem label="Data Consulta FIPE" value={formatDate(vehicle.data_consulta_fipe)} icon={CalendarDays}/>
             </CardContent>
           </Card>
           
-          {/* Motoristas Vinculados Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><Users className="mr-2 h-5 w-5 text-primary"/> Motoristas Vinculados</CardTitle></CardHeader>
             <CardContent>
@@ -280,7 +286,6 @@ export default function VehicleDetailsPage() {
             </CardContent>
           </Card>
 
-          {/* Observação Card */}
           <Card className="shadow-lg">
             <CardHeader><CardTitle className="flex items-center text-xl"><FileText className="mr-2 h-5 w-5 text-primary" /> Observação</CardTitle></CardHeader>
             <CardContent><p className="text-foreground whitespace-pre-wrap">{vehicle.observacao || "Nenhuma observação."}</p></CardContent>
@@ -309,14 +314,20 @@ export default function VehicleDetailsPage() {
 }
 
 const InfoItem = ({ label, value, icon: Icon, className }: { label: string, value: string | React.ReactNode | null | undefined, icon?: React.ElementType, className?: string }) => {
+  // Do not render the item if the value is essentially empty (null, undefined, or just whitespace), unless it's explicitly "N/A"
   if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '' && value !== "N/A")) return null;
+  
+  const displayValue = (typeof value === 'string' && value.trim() === '')
+    ? <span className="italic text-muted-foreground">sem informação</span>
+    : value;
+
   return (
     <div className={cn("mb-3", className)}>
       <InfoItemLabel className="text-sm font-medium text-muted-foreground flex items-center">
         {Icon && <Icon className="mr-2 h-4 w-4 flex-shrink-0 text-primary/80" />}
         {label}
       </InfoItemLabel>
-      <div className="text-foreground mt-0.5">{typeof value === 'string' ? <p>{value}</p> : value}</div>
+      <div className="text-foreground mt-0.5">{typeof displayValue === 'string' ? <p>{displayValue}</p> : displayValue}</div>
     </div>
   );
 };
