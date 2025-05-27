@@ -17,13 +17,14 @@ interface VeiculoSupabase {
   placa_atual: string;
   marca: string;
   modelo: string;
-  versao: string | null;
+  // versao: string | null; // Removed
   ano_fabricacao: number | null;
   tipo_especie: string | null;
   combustivel: string | null;
   codigo_renavam: string | null;
-  PessoasFisicas?: { nome_completo: string } | null; // Proprietário PF
-  Entidades?: { nome: string } | null;      // Proprietário PJ
+  chassi?: string | null; // Added for potential search
+  PessoasFisicas?: { nome_completo: string } | null;
+  Entidades?: { nome: string } | null;
 }
 
 interface VeiculoRow {
@@ -31,7 +32,7 @@ interface VeiculoRow {
   placa_atual: string;
   marca: string;
   modelo: string;
-  versao: string | null;
+  // versao: string | null; // Removed
   ano_fabricacao: number | null;
   tipo_especie: string | null;
   combustivel: string | null;
@@ -63,23 +64,25 @@ export default function GerenciamentoVeiculosPage() {
         placa_atual,
         marca,
         modelo,
-        versao,
+        -- versao, -- Removed
         ano_fabricacao,
         tipo_especie,
         combustivel,
         codigo_renavam,
+        chassi, -- Added for search
         PessoasFisicas!Veiculos_id_proprietario_pessoa_fisica_fkey ( nome_completo ),
         Entidades!Veiculos_id_proprietario_entidade_fkey ( nome )
       `)
       .order('placa_atual', { ascending: true });
 
     if (searchTerm) {
+      const LIKESearchTerm = `%${searchTerm}%`;
       query = query.or(
-        `placa_atual.ilike.%${searchTerm}%,` +
-        `marca.ilike.%${searchTerm}%,` + 
-        `modelo.ilike.%${searchTerm}%,` +
-        `chassi.ilike.%${searchTerm}%,` + 
-        `codigo_renavam.ilike.%${searchTerm}%`
+        `placa_atual.ilike.${LIKESearchTerm},` +
+        `marca.ilike.${LIKESearchTerm},` + 
+        `modelo.ilike.${LIKESearchTerm},` +
+        `chassi.ilike.${LIKESearchTerm},` + 
+        `codigo_renavam.ilike.${LIKESearchTerm}`
       );
     }
 
@@ -100,7 +103,7 @@ export default function GerenciamentoVeiculosPage() {
         placa_atual: v.placa_atual,
         marca: v.marca,
         modelo: v.modelo,
-        versao: v.versao,
+        // versao: v.versao, // Removed
         ano_fabricacao: v.ano_fabricacao,
         tipo_especie: v.tipo_especie,
         combustivel: v.combustivel,
@@ -132,7 +135,7 @@ export default function GerenciamentoVeiculosPage() {
     if (!veiculoToDelete || !supabase) return;
     
     setIsLoading(true);
-    // First, delete related VeiculoMotoristas entries
+    
     const { error: motoristasError } = await supabase
       .from('VeiculoMotoristas')
       .delete()
@@ -141,7 +144,6 @@ export default function GerenciamentoVeiculosPage() {
     if (motoristasError) {
       console.error('Falha ao excluir motoristas vinculados:', motoristasError.message);
       toast({ title: "Erro ao Excluir Vínculos", description: `Falha ao remover motoristas do veículo: ${motoristasError.message}`, variant: "destructive" });
-      // Decide if you want to proceed or stop
     }
     
     const { error } = await supabase
@@ -184,7 +186,7 @@ export default function GerenciamentoVeiculosPage() {
       <Card className="shadow-lg mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Veículos</CardTitle>
-          <CardDescription>Filtre por Placa, Marca, Modelo, Chassi ou Renavam.</CardDescription>
+          <CardDescription>Filtre por Placa, Marca, Modelo, Chassi, Renavam ou Proprietário.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
@@ -219,19 +221,22 @@ export default function GerenciamentoVeiculosPage() {
                   <TableHead>Placa</TableHead>
                   <TableHead>Marca</TableHead>
                   <TableHead>Modelo</TableHead>
-                  <TableHead className="hidden md:table-cell">Versão</TableHead>
+                  {/* <TableHead className="hidden md:table-cell">Versão</TableHead> -- Removed */}
                   <TableHead className="hidden md:table-cell">Ano Fab.</TableHead>
+                  <TableHead className="hidden lg:table-cell">Tipo/Espécie</TableHead>
+                  <TableHead className="hidden lg:table-cell">Combustível</TableHead>
                   <TableHead className="hidden lg:table-cell">Renavam</TableHead>
                   <TableHead className="hidden md:table-cell">Proprietário</TableHead>
+                  <TableHead className="hidden lg:table-cell">Tipo Proprietário</TableHead>
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && veiculos.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center h-24">Carregando veículos...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="text-center h-24">Carregando veículos...</TableCell></TableRow>
                 ) : !isLoading && veiculos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center h-24 text-muted-foreground">
                       {searchTerm ? `Nenhum veículo encontrado para "${searchTerm}".` : "Nenhum veículo cadastrado."}
                     </TableCell>
                   </TableRow>
@@ -242,10 +247,13 @@ export default function GerenciamentoVeiculosPage() {
                       <TableCell className="font-semibold">{veiculo.placa_atual}</TableCell>
                       <TableCell>{veiculo.marca}</TableCell>
                       <TableCell>{veiculo.modelo}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.versao || "N/A"}</TableCell>
+                      {/* <TableCell className="hidden md:table-cell">{veiculo.versao || "N/A"}</TableCell> -- Removed */}
                       <TableCell className="hidden md:table-cell">{veiculo.ano_fabricacao || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.tipo_especie || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.combustivel || "N/A"}</TableCell>
                       <TableCell className="hidden lg:table-cell">{veiculo.codigo_renavam || "N/A"}</TableCell>
                       <TableCell className="hidden md:table-cell">{veiculo.nome_proprietario}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.tipo_proprietario}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa_atual}`}>
                            <Link href={`/admin/veiculos/${veiculo.id}`}>
@@ -303,7 +311,7 @@ export default function GerenciamentoVeiculosPage() {
     
 /* Supabase Integration Notes:
 - `fetchVeiculos`: Query 'Veiculos'. JOIN PessoasFisicas (id_proprietario_pessoa_fisica) and Entidades (id_proprietario_entidade) for owner name.
-- No more JOIN with ModelosVeiculo as marca/modelo/versao are direct fields.
+- `versao` column is removed from select and display.
 - Search term can now filter on marca, modelo, codigo_renavam, chassi.
 - `confirmDeleteVeiculo`: Must also delete related records in `VeiculoMotoristas` before deleting the vehicle itself, or ensure ON DELETE CASCADE is set on the FK in `VeiculoMotoristas`.
 */
