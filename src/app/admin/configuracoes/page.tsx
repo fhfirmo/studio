@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Settings, Building2, CarIcon, ShieldHalf, Library, CheckSquare, ChevronRight } from "lucide-react";
+import { Settings, Building2, ShieldHalf, Library, CheckSquare, ChevronRight } from "lucide-react"; // Removed CarIcon
 
 interface ConfigCardProps {
   title: string;
@@ -51,17 +51,11 @@ export default function ConfiguracoesPage() {
       linkHref: "/admin/configuracoes/tipos-entidade",
       linkText: "Gerenciar Tipos de Entidade"
     },
-    {
-      title: "Modelos de Veículo",
-      description: "Gerencie marcas, modelos e versões de veículos.",
-      icon: CarIcon,
-      linkHref: "/admin/configuracoes/modelos-veiculo",
-      linkText: "Gerenciar Modelos de Veículo"
-    },
+    // Modelos de Veículo REMOVED
     {
       title: "Seguradoras",
       description: "Cadastre e gerencie as companhias seguradoras parceiras.",
-      icon: Library, // Using Library as a placeholder for insurer/company
+      icon: Library,
       linkHref: "/admin/configuracoes/seguradoras",
       linkText: "Gerenciar Seguradoras"
     },
@@ -75,11 +69,10 @@ export default function ConfiguracoesPage() {
     {
       title: "Assistências de Seguro",
       description: "Gerencie os serviços de assistência oferecidos nos seguros.",
-      icon: CheckSquare, // Using CheckSquare as placeholder for services/assistances
+      icon: CheckSquare,
       linkHref: "/admin/configuracoes/assistencias",
       linkText: "Gerenciar Assistências"
     },
-    // Add more configuration items here as needed
   ];
 
   return (
@@ -106,15 +99,8 @@ export default function ConfiguracoesPage() {
           />
         ))}
       </div>
-      {/* 
-        Further Supabase Integration Comments:
-        - Each 'Gerenciar' button/link navigates to a specific CRUD page for that lookup table.
-        - Those individual CRUD pages (e.g., /admin/configuracoes/tipos-entidade) will handle:
-          - Listing existing entries from the respective Supabase table (e.g., public."TiposEntidade").
-          - Allowing creation of new entries.
-          - Allowing editing of existing entries.
-          - Allowing deletion of entries (with caution, considering relationships).
-      */}
     </div>
   );
 }
+
+    

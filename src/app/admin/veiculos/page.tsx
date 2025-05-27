@@ -15,31 +15,33 @@ import { useToast } from "@/hooks/use-toast";
 interface VeiculoSupabase {
   id_veiculo: number;
   placa_atual: string;
-  marca: string | null;
+  marca: string;
+  modelo: string;
+  versao: string | null;
   ano_fabricacao: number | null;
   tipo_especie: string | null;
   combustivel: string | null;
-  ModelosVeiculo: { nome_modelo: string } | null;
-  PessoasFisicas: { nome_completo: string } | null;
-  Entidades: { nome: string } | null;
+  codigo_renavam: string | null;
+  PessoasFisicas?: { nome_completo: string } | null; // Proprietário PF
+  Entidades?: { nome: string } | null;      // Proprietário PJ
 }
 
 interface VeiculoRow {
   id: number;
-  placa: string;
-  modelo: string | null;
-  marca: string | null;
-  ano: number | null;
-  tipoEspecie: string | null;
+  placa_atual: string;
+  marca: string;
+  modelo: string;
+  versao: string | null;
+  ano_fabricacao: number | null;
+  tipo_especie: string | null;
   combustivel: string | null;
-  nomeProprietario: string | null;
-  tipoProprietario: 'Pessoa Física' | 'Organização' | 'N/A';
+  codigo_renavam: string | null;
+  nome_proprietario: string | null;
+  tipo_proprietario: 'Pessoa Física' | 'Organização' | 'N/A';
 }
 
-const initialVeiculos: VeiculoRow[] = [];
-
 export default function GerenciamentoVeiculosPage() {
-  const [veiculos, setVeiculos] = useState<VeiculoRow[]>(initialVeiculos);
+  const [veiculos, setVeiculos] = useState<VeiculoRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -48,10 +50,8 @@ export default function GerenciamentoVeiculosPage() {
 
   const fetchVeiculos = async () => {
     if (!supabase) {
-      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
-      setIsLoading(false);
-      setVeiculos([]);
-      return;
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setIsLoading(false); setVeiculos([]); return;
     }
     setIsLoading(true);
     console.log(`fetchVeiculos: Iniciando busca com termo: "${searchTerm}"`);
@@ -62,53 +62,52 @@ export default function GerenciamentoVeiculosPage() {
         id_veiculo,
         placa_atual,
         marca,
+        modelo,
+        versao,
         ano_fabricacao,
         tipo_especie,
         combustivel,
-        ModelosVeiculo ( nome_modelo ), 
-        PessoasFisicas ( nome_completo ),
-        Entidades ( nome )
+        codigo_renavam,
+        PessoasFisicas!Veiculos_id_proprietario_pessoa_fisica_fkey ( nome_completo ),
+        Entidades!Veiculos_id_proprietario_entidade_fkey ( nome )
       `)
       .order('placa_atual', { ascending: true });
 
     if (searchTerm) {
-      // Simplified search: only on direct columns of Veiculos for now
-      // Searching on related tables with .or() can be complex if relations are null
       query = query.or(
         `placa_atual.ilike.%${searchTerm}%,` +
         `marca.ilike.%${searchTerm}%,` + 
-        `chassi.ilike.%${searchTerm}%` // Assuming chassi is a direct and searchable column
+        `modelo.ilike.%${searchTerm}%,` +
+        `chassi.ilike.%${searchTerm}%,` + 
+        `codigo_renavam.ilike.%${searchTerm}%`
       );
-      console.log("fetchVeiculos: Filtro OR aplicado para placa_atual, marca, chassi.");
     }
 
     const { data, error } = await query;
 
     if (error) {
-      // Log the full error object for better debugging
       console.error("Erro ao buscar veículos - Detalhes Completos:", JSON.stringify(error, null, 2));
-      console.error("Erro ao buscar veículos (objeto original):", error);
       toast({ 
         title: "Erro ao Buscar Dados", 
-        description: error.message || `Erro desconhecido ao buscar veículos. Código: ${error.code || 'N/A'}. Verifique o console e as RLS.`, 
+        description: error.message || `Erro desconhecido. Verifique o console e as RLS.`, 
         variant: "destructive",
         duration: 7000 
       });
       setVeiculos([]);
     } else {
-      console.log("fetchVeiculos: Dados recebidos do Supabase:", data);
       const formattedData: VeiculoRow[] = (data || []).map((v: VeiculoSupabase) => ({
         id: v.id_veiculo,
-        placa: v.placa_atual,
-        modelo: v.ModelosVeiculo?.nome_modelo || 'N/A',
+        placa_atual: v.placa_atual,
         marca: v.marca,
-        ano: v.ano_fabricacao,
-        tipoEspecie: v.tipo_especie,
+        modelo: v.modelo,
+        versao: v.versao,
+        ano_fabricacao: v.ano_fabricacao,
+        tipo_especie: v.tipo_especie,
         combustivel: v.combustivel,
-        nomeProprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome || 'N/A',
-        tipoProprietario: v.PessoasFisicas ? 'Pessoa Física' : (v.Entidades ? 'Organização' : 'N/A'),
+        codigo_renavam: v.codigo_renavam,
+        nome_proprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome || 'N/A',
+        tipo_proprietario: v.PessoasFisicas ? 'Pessoa Física' : (v.Entidades ? 'Organização' : 'N/A'),
       }));
-      console.log("fetchVeiculos: Dados formatados:", formattedData);
       setVeiculos(formattedData);
     }
     setIsLoading(false);
@@ -125,7 +124,7 @@ export default function GerenciamentoVeiculosPage() {
   };
 
   const handleDeleteClick = (veiculo: VeiculoRow) => {
-    setVeiculoToDelete({ id: veiculo.id, placa: veiculo.placa, modelo: veiculo.modelo });
+    setVeiculoToDelete({ id: veiculo.id, placa: veiculo.placa_atual, modelo: veiculo.modelo });
     setIsAlertOpen(true);
   };
 
@@ -133,6 +132,18 @@ export default function GerenciamentoVeiculosPage() {
     if (!veiculoToDelete || !supabase) return;
     
     setIsLoading(true);
+    // First, delete related VeiculoMotoristas entries
+    const { error: motoristasError } = await supabase
+      .from('VeiculoMotoristas')
+      .delete()
+      .eq('id_veiculo', veiculoToDelete.id);
+
+    if (motoristasError) {
+      console.error('Falha ao excluir motoristas vinculados:', motoristasError.message);
+      toast({ title: "Erro ao Excluir Vínculos", description: `Falha ao remover motoristas do veículo: ${motoristasError.message}`, variant: "destructive" });
+      // Decide if you want to proceed or stop
+    }
+    
     const { error } = await supabase
       .from('Veiculos')
       .delete()
@@ -173,13 +184,13 @@ export default function GerenciamentoVeiculosPage() {
       <Card className="shadow-lg mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Veículos</CardTitle>
-          <CardDescription>Filtre veículos por placa, marca ou chassi.</CardDescription>
+          <CardDescription>Filtre por Placa, Marca, Modelo, Chassi ou Renavam.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Pesquisar por Placa, Marca ou Chassi..."
+              placeholder="Pesquisar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
@@ -204,46 +215,44 @@ export default function GerenciamentoVeiculosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
+                  <TableHead className="w-[60px] hidden sm:table-cell">ID</TableHead>
                   <TableHead>Placa</TableHead>
+                  <TableHead>Marca</TableHead>
                   <TableHead>Modelo</TableHead>
-                  <TableHead className="hidden md:table-cell">Marca</TableHead>
-                  <TableHead className="hidden md:table-cell">Ano</TableHead>
-                  <TableHead className="hidden lg:table-cell">Tipo/Espécie</TableHead>
-                  <TableHead className="hidden lg:table-cell">Combustível</TableHead>
+                  <TableHead className="hidden md:table-cell">Versão</TableHead>
+                  <TableHead className="hidden md:table-cell">Ano Fab.</TableHead>
+                  <TableHead className="hidden lg:table-cell">Renavam</TableHead>
                   <TableHead className="hidden md:table-cell">Proprietário</TableHead>
-                  <TableHead className="hidden lg:table-cell">Tipo Proprietário</TableHead>
                   <TableHead className="text-right w-[240px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && veiculos.length === 0 ? ( // Show loading only if list is empty
-                  <TableRow><TableCell colSpan={10} className="text-center h-24">Carregando veículos...</TableCell></TableRow>
+                {isLoading && veiculos.length === 0 ? (
+                  <TableRow><TableCell colSpan={9} className="text-center h-24">Carregando veículos...</TableCell></TableRow>
                 ) : !isLoading && veiculos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center h-24 text-muted-foreground">
-                      {searchTerm ? `Nenhum veículo encontrado para "${searchTerm}".` : "Nenhum veículo cadastrado no momento."}
+                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
+                      {searchTerm ? `Nenhum veículo encontrado para "${searchTerm}".` : "Nenhum veículo cadastrado."}
                     </TableCell>
                   </TableRow>
                 ) : (
                   veiculos.map((veiculo) => (
                     <TableRow key={veiculo.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{veiculo.id}</TableCell>
-                      <TableCell className="font-semibold">{veiculo.placa}</TableCell>
-                      <TableCell>{veiculo.modelo || "N/A"}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.marca || "N/A"}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.ano || "N/A"}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{veiculo.tipoEspecie || "N/A"}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{veiculo.combustivel || "N/A"}</TableCell>
-                      <TableCell className="hidden md:table-cell">{veiculo.nomeProprietario || "N/A"}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{veiculo.tipoProprietario}</TableCell>
+                      <TableCell className="font-semibold">{veiculo.placa_atual}</TableCell>
+                      <TableCell>{veiculo.marca}</TableCell>
+                      <TableCell>{veiculo.modelo}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.versao || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.ano_fabricacao || "N/A"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{veiculo.codigo_renavam || "N/A"}</TableCell>
+                      <TableCell className="hidden md:table-cell">{veiculo.nome_proprietario}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
-                        <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa}`}>
+                        <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do veículo ${veiculo.placa_atual}`}>
                            <Link href={`/admin/veiculos/${veiculo.id}`}>
                             <Info className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Detalhes</span>
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm" asChild aria-label={`Editar veículo ${veiculo.placa}`}>
+                        <Button variant="outline" size="sm" asChild aria-label={`Editar veículo ${veiculo.placa_atual}`}>
                           <Link href={`/admin/veiculos/${veiculo.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
                           </Link>
@@ -252,7 +261,8 @@ export default function GerenciamentoVeiculosPage() {
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDeleteClick(veiculo)}
-                          aria-label={`Excluir veículo ${veiculo.placa}`}
+                          aria-label={`Excluir veículo ${veiculo.placa_atual}`}
+                          disabled={isLoading}
                         >
                           <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
                         </Button>
@@ -275,30 +285,27 @@ export default function GerenciamentoVeiculosPage() {
                 <AlertDialogTitle>Confirmar Exclusão de Veículo</AlertDialogTitle>
               </div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o veículo <strong>{veiculoToDelete.placa} - {veiculoToDelete.modelo || ''}</strong> (ID: {veiculoToDelete.id})? Esta ação é irreversível.
+                Tem certeza que deseja excluir o veículo <strong>{veiculoToDelete.placa} - {veiculoToDelete.modelo || ''}</strong> (ID: {veiculoToDelete.id})? Esta ação é irreversível e também removerá os motoristas vinculados.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setVeiculoToDelete(null); }}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteVeiculo} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setVeiculoToDelete(null); }} disabled={isLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteVeiculo} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
                 Confirmar Exclusão
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
-      {/* 
-        Supabase Integration Notes:
-        - `fetchVeiculos` needs to correctly query 'Veiculos' and JOIN/nest `ModelosVeiculo`, `PessoasFisicas`, `Entidades`.
-        - Search term (`searchTerm`) in `fetchVeiculos` should ideally filter on `placa_atual`, `ModelosVeiculo.nome_modelo`, 
-          `PessoasFisicas.nome_completo`, and `Entidades.nome_fantasia`. This requires careful construction of the .or() clause
-          or using a database function/view for optimized search.
-        - `confirmDeleteVeiculo` should call Supabase to delete from 'Veiculos' table.
-        - RLS policies on all involved tables (`Veiculos`, `ModelosVeiculo`, `PessoasFisicas`, `Entidades`) must allow
-          the logged-in user (admin/supervisor/operator) to perform SELECT and DELETE operations.
-      */}
     </div>
   );
 }
+    
+/* Supabase Integration Notes:
+- `fetchVeiculos`: Query 'Veiculos'. JOIN PessoasFisicas (id_proprietario_pessoa_fisica) and Entidades (id_proprietario_entidade) for owner name.
+- No more JOIN with ModelosVeiculo as marca/modelo/versao are direct fields.
+- Search term can now filter on marca, modelo, codigo_renavam, chassi.
+- `confirmDeleteVeiculo`: Must also delete related records in `VeiculoMotoristas` before deleting the vehicle itself, or ensure ON DELETE CASCADE is set on the FK in `VeiculoMotoristas`.
+*/
 
     
