@@ -8,21 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
-import { Car, Save, XCircle, AlertTriangle, User, Building, UserPlus, Users, Trash2, CalendarDays, Shield, FileText, DollarSignIcon } from 'lucide-react';
+import { Car, Save, XCircle, AlertTriangle, User, Building, UserPlus, Users, Trash2, CalendarDays, Shield, FileText, DollarSignIcon, Search as SearchIcon, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, isValid } from "date-fns";
+import { format, parse, isValid as isValidDate } from "date-fns";
+import { ptBR } from 'date-fns/locale';
 
 interface GenericOption { value: string; label: string; }
-const placeholderPessoasFisicas: GenericOption[] = [{ value: "pf_1", label: "João Silva (123.456.789-00)" }];
-const placeholderOrganizacoes: GenericOption[] = [{ value: "org_1", label: "Empresa Alfa (00.111.222/0001-33)" }];
-const placeholderCNHs: GenericOption[] = [{value: "cnh_1", label: "987654321 (Cat: AB, Val: 2028-10-10)"}];
-
 
 interface VehicleDataFromDB {
   id_veiculo: string;
@@ -40,27 +37,29 @@ interface VehicleDataFromDB {
   codigo_renavam: string;
   estado_crlv?: string | null;
   numero_serie_crlv?: string | null;
-  data_expedicao_crlv?: string | null; // YYYY-MM-DD
-  data_validade_crlv?: string | null;  // YYYY-MM-DD
+  data_expedicao_crlv?: string | null; 
+  data_validade_crlv?: string | null;  
   id_proprietario_pessoa_fisica?: string | null;
   id_proprietario_entidade?: string | null;
-  data_aquisicao?: string | null;      // YYYY-MM-DD
+  data_aquisicao?: string | null;      
+  codigo_fipe?: string | null;
   valor_fipe?: number | null;
-  data_consulta_fipe?: string | null; // YYYY-MM-DD
+  data_consulta_fipe?: string | null; 
+  mes_referencia_fipe?: string | null;
   observacao?: string | null;
   VeiculoMotoristas?: {
     id_veiculo_motorista: string;
     id_motorista: string;
-    PessoasFisicas: { nome_completo: string; cpf: string; }; // Joined motorista name
+    PessoasFisicas: { nome_completo: string; cpf: string; };
     id_cnh: string;
-    CNHs: { numero_registro: string; categoria: string; data_validade: string }; // Joined CNH info
-    categoria_cnh: string; // Categoria para este veículo
+    CNHs: { numero_registro: string; categoria: string; data_validade: string };
+    categoria_cnh: string;
   }[];
 }
 
 interface StagedMotorista {
-  id_veiculo_motorista?: string; // Present if it's an existing record
-  tempId?: string; // For new client-side additions
+  id_veiculo_motorista?: string; 
+  tempId?: string; 
   id_motorista: string;
   nome_motorista: string;
   id_cnh: string;
@@ -75,15 +74,36 @@ const initialFormData = {
   data_expedicao_crlv: undefined as Date | undefined, data_validade_crlv: undefined as Date | undefined,
   tipo_proprietario: '' as 'pessoa_fisica' | 'organizacao' | '', id_proprietario: '',
   data_aquisicao: undefined as Date | undefined,
-  valor_fipe: '', data_consulta_fipe: undefined as Date | undefined, observacao: '',
+  codigo_fipe: '', valor_fipe: '', data_consulta_fipe: undefined as Date | undefined, mes_referencia_fipe: '',
+  observacao: '',
 };
 
-// Placeholder function to fetch vehicle data
+interface FipeApiResponseItem {
+  valor: string; marca: string; modelo: string; anoModelo: number; combustivel: string;
+  codigoFipe: string; mesReferencia: string; tipoVeiculo: number; siglaCombustivel: string; dataConsulta: string;
+}
+
+async function fetchFipeData(codigoFipe: string): Promise<FipeApiResponseItem | null> {
+  if (!codigoFipe) return null;
+  const cleanedCodigoFipe = codigoFipe.replace(/\D/g, '');
+  if (!cleanedCodigoFipe) return null;
+  console.log(`Fetching FIPE data for code: ${cleanedCodigoFipe}`);
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${cleanedCodigoFipe}`);
+    if (!response.ok) {
+      console.error(`FIPE API error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    const data: FipeApiResponseItem[] = await response.json();
+    return data && data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error("Error fetching FIPE data:", error);
+    return null;
+  }
+}
+
 async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | null> {
   if (!supabase) return null;
-  console.log(`Fetching vehicle data for ID: ${vehicleId} (placeholder)`);
-  
-  // Simulate Supabase fetch
   const { data, error } = await supabase
     .from('Veiculos')
     .select(`
@@ -107,9 +127,6 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
       id_veiculo: data.id_veiculo.toString(),
       id_proprietario_pessoa_fisica: data.id_proprietario_pessoa_fisica?.toString() || null,
       id_proprietario_entidade: data.id_proprietario_entidade?.toString() || null,
-      ano_fabricacao: data.ano_fabricacao,
-      ano_modelo: data.ano_modelo,
-      valor_fipe: data.valor_fipe,
       VeiculoMotoristas: (data.VeiculoMotoristas || []).map((vm: any) => ({
         id_veiculo_motorista: vm.id_veiculo_motorista.toString(),
         id_motorista: vm.PessoasFisicas.id_pessoa_fisica.toString(),
@@ -129,34 +146,37 @@ export default function EditarVeiculoPage() {
   const { toast } = useToast(); 
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isFipeLoading, setIsFipeLoading] = useState(false);
   const [vehicleFound, setVehicleFound] = useState<boolean | null>(null);
   const [formData, setFormData] = useState(initialFormData);
   const [stagedMotoristas, setStagedMotoristas] = useState<StagedMotorista[]>([]);
   
+  const [availablePessoasFisicas, setAvailablePessoasFisicas] = useState<GenericOption[]>([]);
+  const [availableOrganizacoes, setAvailableOrganizacoes] = useState<GenericOption[]>([]);
+  const [availableMotoristas, setAvailableMotoristas] = useState<GenericOption[]>([]);
+  const [availableCNHsForSelectedMotorista, setAvailableCNHsForSelectedMotorista] = useState<GenericOption[]>([]);
+
   const [isMotoristaModalOpen, setIsMotoristaModalOpen] = useState(false);
   const [motoristaModalData, setMotoristaModalData] = useState({
     id_motorista: '', id_cnh: '', categoria_cnh_veiculo: ''
   });
-  const [availableMotoristas, setAvailableMotoristas] = useState<GenericOption[]>(placeholderPessoasFisicas);
-  const [availableCNHsForSelectedMotorista, setAvailableCNHsForSelectedMotorista] = useState<GenericOption[]>([]);
-
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      if (!vehicleId || !supabase) {
-        setIsLoading(false);
-        setVehicleFound(false);
-        return;
-      }
+      if (!vehicleId || !supabase) { setIsLoading(false); setVehicleFound(false); return; }
       setIsLoading(true);
 
-      // Fetch PessoasFisicas for motorista select
-      const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf');
-      if (pfError) toast({ title: "Erro ao carregar Pessoas Físicas", description: pfError.message, variant: "destructive" });
-      else setAvailableMotoristas(pfData.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: `${pf.nome_completo} (${pf.cpf})` })));
-      
-      // Fetch Organizacoes (if needed for proprietario select) - similar logic
+      const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo');
+      if (pfError) toast({ title: "Erro Pessoas Físicas", description: pfError.message, variant: "destructive" });
+      else {
+         setAvailablePessoasFisicas(pfData.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: `${pf.nome_completo} (${pf.cpf})` })));
+         setAvailableMotoristas(pfData.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: `${pf.nome_completo} (${pf.cpf})` })));
+      }
 
+      const { data: orgData, error: orgError } = await supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome');
+      if (orgError) toast({ title: "Erro Organizações", description: orgError.message, variant: "destructive" });
+      else setAvailableOrganizacoes(orgData.map(org => ({ value: org.id_entidade.toString(), label: `${org.nome} (${org.cnpj})` })));
+      
       const data = await getVehicleById(vehicleId);
       if (data) {
         setFormData({
@@ -174,13 +194,15 @@ export default function EditarVeiculoPage() {
           codigo_renavam: data.codigo_renavam || '',
           estado_crlv: data.estado_crlv || '',
           numero_serie_crlv: data.numero_serie_crlv || '',
-          data_expedicao_crlv: data.data_expedicao_crlv ? parseISO(data.data_expedicao_crlv) : undefined,
-          data_validade_crlv: data.data_validade_crlv ? parseISO(data.data_validade_crlv) : undefined,
+          data_expedicao_crlv: data.data_expedicao_crlv && isValidDate(parse(data.data_expedicao_crlv, "yyyy-MM-dd", new Date())) ? parse(data.data_expedicao_crlv, "yyyy-MM-dd", new Date()) : undefined,
+          data_validade_crlv: data.data_validade_crlv && isValidDate(parse(data.data_validade_crlv, "yyyy-MM-dd", new Date())) ? parse(data.data_validade_crlv, "yyyy-MM-dd", new Date()) : undefined,
           tipo_proprietario: data.id_proprietario_pessoa_fisica ? 'pessoa_fisica' : (data.id_proprietario_entidade ? 'organizacao' : ''),
           id_proprietario: (data.id_proprietario_pessoa_fisica || data.id_proprietario_entidade || '').toString(),
-          data_aquisicao: data.data_aquisicao ? parseISO(data.data_aquisicao) : undefined,
+          data_aquisicao: data.data_aquisicao && isValidDate(parse(data.data_aquisicao, "yyyy-MM-dd", new Date())) ? parse(data.data_aquisicao, "yyyy-MM-dd", new Date()) : undefined,
+          codigo_fipe: data.codigo_fipe || '',
           valor_fipe: data.valor_fipe?.toString() || '',
-          data_consulta_fipe: data.data_consulta_fipe ? parseISO(data.data_consulta_fipe) : undefined,
+          data_consulta_fipe: data.data_consulta_fipe && isValidDate(parse(data.data_consulta_fipe, "yyyy-MM-dd", new Date())) ? parse(data.data_consulta_fipe, "yyyy-MM-dd", new Date()) : undefined,
+          mes_referencia_fipe: data.mes_referencia_fipe || '',
           observacao: data.observacao || '',
         });
         setStagedMotoristas((data.VeiculoMotoristas || []).map(vm => ({
@@ -188,7 +210,7 @@ export default function EditarVeiculoPage() {
             id_motorista: vm.id_motorista,
             nome_motorista: vm.PessoasFisicas.nome_completo,
             id_cnh: vm.id_cnh,
-            numero_cnh: `${vm.CNHs.numero_registro} (Cat: ${vm.CNHs.categoria}, Val: ${format(parseISO(vm.CNHs.data_validade), 'dd/MM/yyyy')})`,
+            numero_cnh: `${vm.CNHs.numero_registro} (Cat: ${vm.CNHs.categoria}, Val: ${isValidDate(new Date(vm.CNHs.data_validade)) ? format(new Date(vm.CNHs.data_validade), 'dd/MM/yyyy') : 'Data Inválida'})`,
             categoria_cnh: vm.categoria_cnh,
         })));
         setVehicleFound(true);
@@ -208,7 +230,7 @@ export default function EditarVeiculoPage() {
       }
       const { data: cnhData, error: cnhError } = await supabase.from('CNHs').select('id_cnh, numero_registro, categoria, data_validade').eq('id_pessoa_fisica', motoristaModalData.id_motorista);
       if (cnhError) { toast({ title: "Erro CNHs", description: cnhError.message, variant: "destructive" }); setAvailableCNHsForSelectedMotorista([]); }
-      else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${format(parseISO(cnh.data_validade!), 'dd/MM/yyyy')})` })));
+      else setAvailableCNHsForSelectedMotorista(cnhData.map(cnh => ({ value: cnh.id_cnh.toString(), label: `${cnh.numero_registro} (Cat: ${cnh.categoria}, Val: ${isValidDate(new Date(cnh.data_validade!)) ? format(new Date(cnh.data_validade!), 'dd/MM/yyyy') : 'Data Inválida'})` })));
     };
     fetchCNHs();
   }, [motoristaModalData.id_motorista, toast]);
@@ -229,6 +251,28 @@ export default function EditarVeiculoPage() {
     setFormData(prev => ({ ...prev, [name]: date }));
   };
 
+  const handleFipeBlur = async () => {
+    if (!formData.codigo_fipe) return;
+    setIsFipeLoading(true);
+    const fipeData = await fetchFipeData(formData.codigo_fipe);
+    if (fipeData) {
+      setFormData(prev => ({
+        ...prev,
+        marca: fipeData.marca || prev.marca,
+        modelo: fipeData.modelo || prev.modelo,
+        ano_modelo: fipeData.anoModelo?.toString() || prev.ano_modelo,
+        combustivel: fipeData.combustivel || prev.combustivel,
+        valor_fipe: fipeData.valor ? fipeData.valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
+        data_consulta_fipe: fipeData.dataConsulta ? parse(fipeData.dataConsulta, "EEEE, d 'de' MMMM 'de' yyyy HH:mm", new Date(), { locale: ptBR }) : prev.data_consulta_fipe,
+        mes_referencia_fipe: fipeData.mesReferencia?.trim() || prev.mes_referencia_fipe,
+      }));
+      toast({ title: "Dados FIPE Carregados", description: "Campos atualizados com base no código FIPE." });
+    } else {
+      toast({ title: "Código FIPE não encontrado", description: "Não foi possível buscar dados para o código informado.", variant: "default" });
+    }
+    setIsFipeLoading(false);
+  };
+
   const handleAddMotorista = () => {
      if (!motoristaModalData.id_motorista || !motoristaModalData.id_cnh || !motoristaModalData.categoria_cnh_veiculo) {
       toast({ title: "Campos Incompletos", description: "Selecione motorista, CNH e categoria para o veículo.", variant: "destructive"}); return;
@@ -247,17 +291,15 @@ export default function EditarVeiculoPage() {
     setMotoristaModalData({ id_motorista: '', id_cnh: '', categoria_cnh_veiculo: '' });
   };
 
-  const handleRemoveStagedMotorista = (idToRemove: string) => { // Can be tempId or id_veiculo_motorista
+  const handleRemoveStagedMotorista = (idToRemove: string) => {
     setStagedMotoristas(prev => prev.filter(m => (m.tempId || m.id_veiculo_motorista) !== idToRemove));
   };
-
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!supabase || !vehicleId) { toast({ title: "Erro de Configuração", variant: "destructive" }); return; }
     setIsLoading(true);
 
-    // Basic validation
     if (!formData.placa_atual || !formData.marca || !formData.modelo || !formData.ano_fabricacao || !formData.codigo_renavam || !formData.tipo_proprietario || !formData.id_proprietario) {
       toast({ title: "Campos Obrigatórios", description: "Placa, Marca, Modelo, Ano Fabricação, Renavam e Proprietário são obrigatórios.", variant: "destructive" });
       setIsLoading(false); return;
@@ -283,9 +325,12 @@ export default function EditarVeiculoPage() {
       id_proprietario_pessoa_fisica: formData.tipo_proprietario === 'pessoa_fisica' ? parseInt(formData.id_proprietario) : null,
       id_proprietario_entidade: formData.tipo_proprietario === 'organizacao' ? parseInt(formData.id_proprietario) : null,
       data_aquisicao: formData.data_aquisicao ? format(formData.data_aquisicao, "yyyy-MM-dd") : null,
-      valor_fipe: formData.valor_fipe ? parseFloat(formData.valor_fipe.replace(',', '.')) : null,
+      codigo_fipe: formData.codigo_fipe || null,
+      valor_fipe: formData.valor_fipe ? parseFloat(formData.valor_fipe) : null,
       data_consulta_fipe: formData.data_consulta_fipe ? format(formData.data_consulta_fipe, "yyyy-MM-dd") : null,
+      mes_referencia_fipe: formData.mes_referencia_fipe || null,
       observacao: formData.observacao || null,
+      // updated_by: (await supabase.auth.getUser()).data.user?.id, // Uncomment and test
     };
 
     try {
@@ -296,7 +341,7 @@ export default function EditarVeiculoPage() {
 
       if (veiculoError) throw veiculoError;
 
-      // Handle VeiculoMotoristas: Delete existing and insert new ones
+      // Handle VeiculoMotoristas: Delete existing for this vehicle and insert new ones from stagedMotoristas
       const { error: deleteMotoristasError } = await supabase
         .from('VeiculoMotoristas')
         .delete()
@@ -304,7 +349,6 @@ export default function EditarVeiculoPage() {
       
       if (deleteMotoristasError) {
         console.warn("Erro ao deletar motoristas antigos:", deleteMotoristasError);
-        // Potentially don't throw, but log and continue if main update was fine
       }
 
       if (stagedMotoristas.length > 0) {
@@ -313,6 +357,7 @@ export default function EditarVeiculoPage() {
           id_motorista: parseInt(m.id_motorista),
           id_cnh: parseInt(m.id_cnh),
           categoria_cnh: m.categoria_cnh,
+          // created_by / updated_by logic might be needed here too
         }));
         const { error: insertMotoristasError } = await supabase.from('VeiculoMotoristas').insert(motoristasPayload);
         if (insertMotoristasError) {
@@ -354,6 +399,32 @@ export default function EditarVeiculoPage() {
       </header>
 
       <form onSubmit={handleSubmit}>
+        {/* Dados FIPE Card */}
+        <Card className="shadow-lg mb-6">
+            <CardHeader><CardTitle className="flex items-center"><SearchIcon className="mr-2 h-5 w-5 text-primary"/> Consulta Tabela FIPE (Opcional)</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                <div className="space-y-2">
+                    <Label htmlFor="codigo_fipe">Código FIPE</Label>
+                    <Input 
+                        id="codigo_fipe" 
+                        name="codigo_fipe" 
+                        value={formData.codigo_fipe} 
+                        onChange={handleChange} 
+                        onBlur={handleFipeBlur}
+                        placeholder="Ex: 001004-9"
+                        disabled={isFipeLoading}
+                    />
+                    {isFipeLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-1" />}
+                </div>
+                <Button type="button" onClick={handleFipeBlur} disabled={isFipeLoading || !formData.codigo_fipe} className="self-end md:self-center md:mt-6">
+                  <SearchIcon className="mr-2 h-4 w-4" /> {isFipeLoading ? 'Consultando...' : 'Consultar FIPE'}
+                </Button>
+                <div className="space-y-2 md:col-span-2">
+                    <p className="text-xs text-muted-foreground">Digite o Código FIPE e clique em "Consultar FIPE" ou saia do campo para tentar preencher automaticamente os campos Marca, Modelo, Ano Modelo, Combustível e Valor FIPE.</p>
+                </div>
+            </CardContent>
+        </Card>
+
         {/* Dados Principais do Veículo Card */}
         <Card className="shadow-lg mb-6">
           <CardHeader><CardTitle>Dados Principais do Veículo</CardTitle></CardHeader>
@@ -404,7 +475,7 @@ export default function EditarVeiculoPage() {
                 <Select name="id_proprietario" value={formData.id_proprietario} onValueChange={(v) => handleSelectChange('id_proprietario', v)} required>
                   <SelectTrigger id="id_proprietario"><SelectValue placeholder={`Selecione ${formData.tipo_proprietario === 'pessoa_fisica' ? 'Pessoa Física' : 'Organização'}`} /></SelectTrigger>
                   <SelectContent>
-                    {(formData.tipo_proprietario === 'pessoa_fisica' ? placeholderPessoasFisicas : placeholderOrganizacoes).map(opt => (
+                    {(formData.tipo_proprietario === 'pessoa_fisica' ? availablePessoasFisicas : availableOrganizacoes).map(opt => (
                       <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -415,12 +486,13 @@ export default function EditarVeiculoPage() {
           </CardContent>
         </Card>
 
-        {/* Dados FIPE Card */}
+        {/* Dados FIPE Display Card */}
         <Card className="shadow-lg mb-6">
-            <CardHeader><CardTitle>Dados FIPE (Opcional)</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2"><Label htmlFor="valor_fipe">Valor Tabela FIPE (R$)</Label><Input id="valor_fipe" name="valor_fipe" value={formData.valor_fipe} onChange={handleChange} placeholder="Ex: 75000,00"/></div>
-                <div className="space-y-2"><Label htmlFor="data_consulta_fipe">Data da Consulta FIPE</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{formData.data_consulta_fipe ? format(formData.data_consulta_fipe, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={formData.data_consulta_fipe} onSelect={(d) => handleDateChange('data_consulta_fipe', d)}/></PopoverContent></Popover></div>
+            <CardHeader><CardTitle className="flex items-center"><DollarSignIcon className="mr-2 h-5 w-5 text-primary"/> Dados de Mercado (FIPE)</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2"><Label htmlFor="valor_fipe_display">Valor Tabela FIPE (R$)</Label><Input id="valor_fipe_display" name="valor_fipe" value={formData.valor_fipe} onChange={handleChange} placeholder="Preenchido pela API FIPE"/></div>
+                <div className="space-y-2"><Label htmlFor="mes_referencia_fipe_display">Mês Referência FIPE</Label><Input id="mes_referencia_fipe_display" name="mes_referencia_fipe" value={formData.mes_referencia_fipe} onChange={handleChange} placeholder="Preenchido pela API FIPE"/></div>
+                <div className="space-y-2"><Label htmlFor="data_consulta_fipe_display">Data da Consulta FIPE</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal" disabled>{formData.data_consulta_fipe ? format(formData.data_consulta_fipe, "dd/MM/yyyy") : <span>Preenchido pela API FIPE</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={formData.data_consulta_fipe} /></PopoverContent></Popover></div>
             </CardContent>
         </Card>
 
@@ -501,14 +573,11 @@ export default function EditarVeiculoPage() {
     </div>
   );
 }
-
 /*
 Supabase Integration Notes:
-- `getVehicleById` placeholder needs to be replaced with actual Supabase fetch, including JOINs for VeiculoMotoristas -> PessoasFisicas & CNHs.
-- On submit:
-  - Update `Veiculos` table.
-  - Manage `VeiculoMotoristas`: Determine new, existing, and removed driver links. This might involve deleting all existing for the vehicle and re-inserting from `stagedMotoristas`, or a more complex diffing logic.
-- Ensure RLS policies are in place for `Veiculos` and `VeiculoMotoristas`.
+- FIPE API: `fetchFipeData` calls BrasilAPI.
+- Data parsing: `valor` from FIPE needs currency parsing. `dataConsulta` needs date parsing.
+- Database: Ensure `Veiculos` table has `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`.
+- On load (Edit page): Fetch vehicle data, including its `VeiculoMotoristas` and their related CNH/PessoaFisica details.
+- On submit: Update `Veiculos`. Then, manage `VeiculoMotoristas` (delete all for vehicle, then re-insert staged ones).
 */
-
-    
