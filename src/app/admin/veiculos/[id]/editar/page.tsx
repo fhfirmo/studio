@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
-import { Car, Save, XCircle, AlertTriangle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSign } from 'lucide-react'; // Changed DollarSignIcon
+import { Car, Save, XCircle, AlertTriangle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parse, isValid as isValidDate, parseISO } from "date-fns";
@@ -78,7 +78,7 @@ const initialFormData = {
 };
 
 const tipoEspecieOptions: GenericOption[] = [
-  { value: "", label: "Selecione o Tipo/Espécie" },
+  { value: "--select--", label: "Selecione o Tipo/Espécie" },
   { value: "Moto - Motocicleta", label: "Moto - Motocicleta" },
   { value: "Carro passeio - Automóvel de passeio", label: "Carro passeio - Automóvel de passeio" },
   { value: "Van - Utilitário/ Comercial Leve", label: "Van - Utilitário/ Comercial Leve" },
@@ -88,7 +88,7 @@ const tipoEspecieOptions: GenericOption[] = [
 
 // Parallelum FIPE API types
 interface FipeMarca { codigo: string; nome: string; }
-interface FipeModelo { codigo: number; nome: string; }
+interface FipeModelo { codigo: string; nome: string; }
 interface FipeAno { codigo: string; nome: string; }
 interface FipeModelosAnosResponse { modelos: FipeModelo[]; anos: FipeAno[]; }
 interface FipeVeiculoDetalhesResponse {
@@ -112,7 +112,8 @@ async function fetchFipeModelosAnosParallelum(marcaCodigo: string): Promise<Fipe
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCodigo}/modelos`);
     if (!response.ok) { console.error(`Parallelum FIPE Modelos/Anos API error: ${response.status} ${response.statusText}`); return null; }
     const data = await response.json();
-    return data;
+    const modelosWithStringCodes = (data.modelos || []).map((m: any) => ({ ...m, codigo: String(m.codigo) }));
+    return { modelos: modelosWithStringCodes, anos: data.anos || [] };
   } catch (error) { console.error("Error fetching FIPE Modelos/Anos:", error); return null; }
 }
 
@@ -193,6 +194,9 @@ export default function EditarVeiculoPage() {
   const [isLoadingFipeModelosAnos, setIsLoadingFipeModelosAnos] = useState(false);
   const [isLoadingFipeDetalhes, setIsLoadingFipeDetalhes] = useState(false);
 
+  console.log("Render Edit: selectedFipeModeloCodigo", selectedFipeModeloCodigo, "fipeModelos", fipeModelos.length);
+
+
   useEffect(() => {
     const loadMarcas = async () => {
       setIsLoadingFipeMarcas(true);
@@ -224,8 +228,10 @@ export default function EditarVeiculoPage() {
   }, [selectedFipeMarcaCodigo, toast]);
 
   useEffect(() => {
-    setSelectedFipeAnoCodigo('');
-    setFipeVeiculoDetalhes(null);
+    if (selectedFipeModeloCodigo) {
+        setSelectedFipeAnoCodigo('');
+        setFipeVeiculoDetalhes(null);
+    }
   }, [selectedFipeModeloCodigo]);
 
   useEffect(() => {
@@ -278,6 +284,7 @@ export default function EditarVeiculoPage() {
         });
         setStagedMotoristas((data.VeiculoMotoristas || []).map(vm => ({
             id_veiculo_motorista: vm.id_veiculo_motorista,
+            tempId: vm.id_veiculo_motorista, // Use actual ID as tempId for existing ones
             id_motorista: vm.id_motorista.toString(),
             nome_motorista: vm.PessoasFisicas.nome_completo,
             id_cnh: vm.id_cnh.toString(),
@@ -368,7 +375,6 @@ export default function EditarVeiculoPage() {
     if (!selectedMotorista || !selectedCNH) { toast({title: "Erro", description: "Motorista ou CNH não encontrado.", variant: "destructive"}); return; }
 
     setStagedMotoristas(prev => [...prev, {
-      id_veiculo_motorista: undefined, 
       tempId: Date.now().toString(), 
       id_motorista: motoristaModalData.id_motorista, nome_motorista: selectedMotorista.label,
       id_cnh: motoristaModalData.id_cnh, numero_cnh: selectedCNH.label,
@@ -396,7 +402,7 @@ export default function EditarVeiculoPage() {
       placa_atual: formData.placa_atual,
       placa_anterior: formData.placa_anterior || null,
       chassi: formData.chassi,
-      tipo_especie: formData.tipo_especie || null,
+      tipo_especie: formData.tipo_especie === "--select--" ? null : formData.tipo_especie || null,
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
@@ -524,22 +530,22 @@ export default function EditarVeiculoPage() {
                             disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
                         >
                            <SelectTrigger id="fipe_modelo_edit" className="w-full">
-                              {(() => {
-                                if (isLoadingFipeModelosAnos && !selectedFipeModeloCodigo) {
-                                  return <span className="text-muted-foreground">Carregando...</span>;
-                                }
-                                if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
-                                  const selectedModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
-                                  if (selectedModel && selectedModel.nome) {
-                                    return <span className="text-foreground">{selectedModel.nome}</span>;
-                                  } else if (selectedModel && !selectedModel.nome) {
-                                    return <span className="text-muted-foreground">Modelo Cód: {selectedFipeModeloCodigo} (sem nome)</span>;
-                                  } else {
-                                    return <span className="text-muted-foreground">Cód: {selectedFipeModeloCodigo}</span>;
-                                  }
-                                }
-                                return <SelectValue placeholder="Selecione o Modelo" />;
-                              })()}
+                                {(() => {
+                                    if (isLoadingFipeModelosAnos && !selectedFipeModeloCodigo) {
+                                    return <span className="text-muted-foreground">Carregando...</span>;
+                                    }
+                                    if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
+                                    const selectedModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
+                                    if (selectedModel && selectedModel.nome) {
+                                        return <span className="text-foreground">{selectedModel.nome}</span>;
+                                    } else if (selectedModel && !selectedModel.nome) {
+                                        return <span className="text-muted-foreground">Modelo Cód: {selectedFipeModeloCodigo} (sem nome)</span>;
+                                    } else {
+                                        return <span className="text-muted-foreground">Cód: {selectedFipeModeloCodigo}</span>;
+                                    }
+                                    }
+                                    return <SelectValue placeholder="Selecione o Modelo" />;
+                                })()}
                            </SelectTrigger>
                             <SelectContent>
                                 {fipeModelos.map(modelo => (
@@ -584,7 +590,7 @@ export default function EditarVeiculoPage() {
                     <Card className="mt-4 bg-muted/50 p-4">
                         <CardHeader className="p-0 pb-2"><CardTitle className="text-md flex items-center"><HelpCircle className="mr-2 h-4 w-4 text-primary"/> Detalhes FIPE Encontrados:</CardTitle></CardHeader>
                         <CardContent className="p-0 text-sm space-y-1">
-                             <p><strong>Valor:</strong> {fipeVeiculoDetalhes.Valor}</p>
+                            <p><strong>Valor:</strong> {fipeVeiculoDetalhes.Valor}</p>
                             <p><strong>Marca:</strong> {fipeVeiculoDetalhes.Marca} / <strong>Modelo:</strong> {fipeVeiculoDetalhes.Modelo}</p>
                             <p><strong>Ano Modelo:</strong> {fipeVeiculoDetalhes.AnoModelo} / <strong>Combustível:</strong> {fipeVeiculoDetalhes.Combustivel}</p>
                             <p><strong>Código FIPE:</strong> {fipeVeiculoDetalhes.CodigoFipe}</p>
@@ -607,9 +613,9 @@ export default function EditarVeiculoPage() {
             <div className="space-y-2"><Label htmlFor="ano_modelo_edit">Ano Modelo</Label><Input id="ano_modelo_edit" name="ano_modelo" type="number" value={formData.ano_modelo} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="cor_edit">Cor</Label><Input id="cor_edit" name="cor" value={formData.cor} onChange={handleChange} /></div>
             <div className="space-y-2">
-                <Label htmlFor="tipo_especie_edit">Tipo/Espécie</Label>
+                <Label htmlFor="tipo_especie_trigger_edit">Tipo/Espécie</Label>
                  <Select name="tipo_especie" value={formData.tipo_especie} onValueChange={(v) => handleSelectChange('tipo_especie', v)}>
-                    <SelectTrigger id="tipo_especie_edit"><SelectValue placeholder="Selecione o Tipo/Espécie" /></SelectTrigger>
+                    <SelectTrigger id="tipo_especie_trigger_edit"><SelectValue placeholder="Selecione o Tipo/Espécie" /></SelectTrigger>
                     <SelectContent>
                         {tipoEspecieOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                     </SelectContent>
@@ -761,3 +767,4 @@ Supabase Integration Notes:
 */
 
     
+

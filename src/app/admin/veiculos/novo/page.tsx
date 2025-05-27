@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
-import { Car, Save, XCircle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSign } from 'lucide-react'; // Changed DollarSignIcon
+import { Car, Save, XCircle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parse, isValid as isValidDate, parseISO } from "date-fns";
@@ -42,7 +42,7 @@ const initialFormData = {
 };
 
 const tipoEspecieOptions: GenericOption[] = [
-  { value: "", label: "Selecione o Tipo/Espécie" },
+  { value: "--select--", label: "Selecione o Tipo/Espécie" },
   { value: "Moto - Motocicleta", label: "Moto - Motocicleta" },
   { value: "Carro passeio - Automóvel de passeio", label: "Carro passeio - Automóvel de passeio" },
   { value: "Van - Utilitário/ Comercial Leve", label: "Van - Utilitário/ Comercial Leve" },
@@ -52,7 +52,7 @@ const tipoEspecieOptions: GenericOption[] = [
 
 // Parallelum FIPE API types
 interface FipeMarca { codigo: string; nome: string; }
-interface FipeModelo { codigo: number; nome: string; }
+interface FipeModelo { codigo: string; nome: string; } // Changed codigo to string to match API
 interface FipeAno { codigo: string; nome: string; }
 interface FipeModelosAnosResponse { modelos: FipeModelo[]; anos: FipeAno[]; }
 interface FipeVeiculoDetalhesResponse {
@@ -76,7 +76,9 @@ async function fetchFipeModelosAnosParallelum(marcaCodigo: string): Promise<Fipe
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCodigo}/modelos`);
     if (!response.ok) { console.error(`Parallelum FIPE Modelos/Anos API error: ${response.status} ${response.statusText}`); return null; }
     const data = await response.json();
-    return data;
+    // Ensure modelos have string codes for consistency
+    const modelosWithStringCodes = (data.modelos || []).map((m: any) => ({ ...m, codigo: String(m.codigo) }));
+    return { modelos: modelosWithStringCodes, anos: data.anos || [] };
   } catch (error) { console.error("Error fetching FIPE Modelos/Anos:", error); return null; }
 }
 
@@ -108,7 +110,7 @@ export default function NovoVeiculoPage() {
 
   // FIPE Parallelum API State
   const [fipeMarcas, setFipeMarcas] = useState<FipeMarca[]>([]);
-  const [fipeModelos, setFipeModelos] = useState<FipeModelo[]>([]); // Corrected to FipeModelo[]
+  const [fipeModelos, setFipeModelos] = useState<FipeModelo[]>([]);
   const [fipeAnos, setFipeAnos] = useState<FipeAno[]>([]);
   const [selectedFipeMarcaCodigo, setSelectedFipeMarcaCodigo] = useState('');
   const [selectedFipeModeloCodigo, setSelectedFipeModeloCodigo] = useState('');
@@ -118,10 +120,13 @@ export default function NovoVeiculoPage() {
   const [isLoadingFipeModelosAnos, setIsLoadingFipeModelosAnos] = useState(false);
   const [isLoadingFipeDetalhes, setIsLoadingFipeDetalhes] = useState(false);
 
+  console.log("Render: selectedFipeModeloCodigo", selectedFipeModeloCodigo, "fipeModelos", fipeModelos.length);
+
+
   useEffect(() => {
     const loadMarcas = async () => {
       setIsLoadingFipeMarcas(true);
-      const marcasData = await fetchFipeMarcasParallelum(); // Renamed to avoid conflict
+      const marcasData = await fetchFipeMarcasParallelum(); 
       setFipeMarcas(marcasData);
       setIsLoadingFipeMarcas(false);
     };
@@ -137,8 +142,8 @@ export default function NovoVeiculoPage() {
         setFipeVeiculoDetalhes(null); 
         const data = await fetchFipeModelosAnosParallelum(selectedFipeMarcaCodigo);
         if (data) {
-          setFipeModelos(data.modelos || []); // Ensure it's an array
-          setFipeAnos(data.anos || []);     // Ensure it's an array
+          setFipeModelos(data.modelos || []); 
+          setFipeAnos(data.anos || []);     
         } else {
           toast({ title: "Erro ao buscar modelos/anos FIPE", description: "Não foi possível carregar os modelos e anos para a marca selecionada.", variant: "destructive" });
         }
@@ -149,11 +154,15 @@ export default function NovoVeiculoPage() {
   }, [selectedFipeMarcaCodigo, toast]);
   
   useEffect(() => {
-    setSelectedFipeAnoCodigo('');
-    setFipeVeiculoDetalhes(null);
+    // Reset ano and details if modelo changes
+    if (selectedFipeModeloCodigo) { // Only reset ano if a modelo is actually selected
+        setSelectedFipeAnoCodigo('');
+        setFipeVeiculoDetalhes(null);
+    }
   }, [selectedFipeModeloCodigo]);
 
   useEffect(() => {
+    // Reset details if ano changes (to force re-fetch of details)
     setFipeVeiculoDetalhes(null);
   }, [selectedFipeAnoCodigo]);
 
@@ -230,12 +239,12 @@ export default function NovoVeiculoPage() {
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
       modelo: fipeVeiculoDetalhes.Modelo || prev.modelo,
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, // Often same as anoModelo
+      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao,
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
       valor_fipe: fipeVeiculoDetalhes.Valor ? fipeVeiculoDetalhes.Valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
       mes_referencia_fipe: fipeVeiculoDetalhes.MesReferencia?.trim() || prev.mes_referencia_fipe,
-      data_consulta_fipe: new Date(),
+      data_consulta_fipe: new Date(), // Set current date for data_consulta_fipe
     }));
     toast({ title: "Formulário Preenchido", description: "Dados da FIPE aplicados ao formulário principal." });
   };
@@ -276,7 +285,7 @@ export default function NovoVeiculoPage() {
       placa_atual: formData.placa_atual,
       placa_anterior: formData.placa_anterior || null,
       chassi: formData.chassi,
-      tipo_especie: formData.tipo_especie || null,
+      tipo_especie: formData.tipo_especie === "--select--" ? null : formData.tipo_especie || null,
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
@@ -392,22 +401,22 @@ export default function NovoVeiculoPage() {
                             disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
                         >
                            <SelectTrigger id="fipe_modelo" className="w-full">
-                              {(() => {
-                                if (isLoadingFipeModelosAnos && !selectedFipeModeloCodigo) {
-                                  return <span className="text-muted-foreground">Carregando...</span>;
-                                }
-                                if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
-                                  const selectedModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
-                                  if (selectedModel && selectedModel.nome) {
-                                    return <span className="text-foreground">{selectedModel.nome}</span>;
-                                  } else if (selectedModel && !selectedModel.nome) {
-                                    return <span className="text-muted-foreground">Modelo Cód: {selectedFipeModeloCodigo} (sem nome)</span>;
-                                  } else {
-                                    return <span className="text-muted-foreground">Cód: {selectedFipeModeloCodigo}</span>;
-                                  }
-                                }
-                                return <SelectValue placeholder="Selecione o Modelo" />;
-                              })()}
+                                {(() => {
+                                    if (isLoadingFipeModelosAnos && !selectedFipeModeloCodigo) {
+                                    return <span className="text-muted-foreground">Carregando...</span>;
+                                    }
+                                    if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
+                                    const selectedModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
+                                    if (selectedModel && selectedModel.nome) {
+                                        return <span className="text-foreground">{selectedModel.nome}</span>;
+                                    } else if (selectedModel && !selectedModel.nome) {
+                                        return <span className="text-muted-foreground">Modelo Cód: {selectedFipeModeloCodigo} (sem nome)</span>;
+                                    } else {
+                                        return <span className="text-muted-foreground">Cód: {selectedFipeModeloCodigo}</span>;
+                                    }
+                                    }
+                                    return <SelectValue placeholder="Selecione o Modelo" />;
+                                })()}
                            </SelectTrigger>
                             <SelectContent>
                                 {fipeModelos.map(modelo => (
@@ -475,9 +484,9 @@ export default function NovoVeiculoPage() {
             <div className="space-y-2"><Label htmlFor="ano_modelo">Ano Modelo</Label><Input id="ano_modelo" name="ano_modelo" type="number" value={formData.ano_modelo} onChange={handleChange} /></div>
             <div className="space-y-2"><Label htmlFor="cor">Cor</Label><Input id="cor" name="cor" value={formData.cor} onChange={handleChange} /></div>
             <div className="space-y-2">
-                <Label htmlFor="tipo_especie">Tipo/Espécie</Label>
+                <Label htmlFor="tipo_especie_trigger">Tipo/Espécie</Label> {/* Changed id to _trigger for clarity with Select's id */}
                  <Select name="tipo_especie" value={formData.tipo_especie} onValueChange={(v) => handleSelectChange('tipo_especie', v)}>
-                    <SelectTrigger id="tipo_especie"><SelectValue placeholder="Selecione o Tipo/Espécie" /></SelectTrigger>
+                    <SelectTrigger id="tipo_especie_trigger"><SelectValue placeholder="Selecione o Tipo/Espécie" /></SelectTrigger>
                     <SelectContent>
                         {tipoEspecieOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                     </SelectContent>
@@ -619,10 +628,10 @@ Supabase Integration Notes:
 - Database schema:
   - `Veiculos` table needs: `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
   - `tipo_especie` is now a dropdown.
-  - `versao` column removed based on prompt.
 - FIPE API (Parallelum): Multi-step fetch logic (Marca -> Modelo/Ano -> Detalhes) is implemented.
 - `handleSubmit`: Saves vehicle data including FIPE fields and linked motoristas (to `VeiculoMotoristas`).
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista).
 */
 
     
+
