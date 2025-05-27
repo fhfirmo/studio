@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
-import { Car, Save, XCircle, AlertTriangle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSignIcon } from 'lucide-react';
+import { Car, Save, XCircle, AlertTriangle, User, Building, UserPlus, Users, Trash2, CalendarDays, Tags, Search as SearchIcon, Loader2, HelpCircle, DollarSign } from 'lucide-react'; // Changed DollarSignIcon
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parse, isValid as isValidDate, parseISO } from "date-fns";
@@ -28,7 +28,6 @@ interface VehicleDataFromDB {
   combustivel?: string | null;
   marca: string; 
   modelo: string; 
-  // versao?: string | null; // Removed
   ano_fabricacao?: number | null;
   ano_modelo?: number | null;
   cor?: string | null;
@@ -45,21 +44,21 @@ interface VehicleDataFromDB {
   data_consulta_fipe?: string | null; 
   mes_referencia_fipe?: string | null;
   observacao?: string | null;
-  VeiculoMotoristas?: { // Assuming this is how Supabase returns the join
+  VeiculoMotoristas?: { 
     id_veiculo_motorista: string;
     id_motorista: string;
-    PessoasFisicas: { nome_completo: string; cpf: string; }; // From the join
+    PessoasFisicas: { nome_completo: string; cpf: string; }; 
     id_cnh: string;
-    CNHs: { numero_registro: string; categoria: string; data_validade: string }; // From the join
-    categoria_cnh: string; // Categoria da CNH para este veículo específico
+    CNHs: { numero_registro: string; categoria: string; data_validade: string }; 
+    categoria_cnh: string; 
   }[];
 }
 
 interface GenericOption { value: string; label: string; }
 
 interface StagedMotorista {
-  id_veiculo_motorista?: string; // Present if it's an existing record from DB
-  tempId?: string; // Used for new items not yet in DB
+  id_veiculo_motorista?: string; 
+  tempId?: string; 
   id_motorista: string;
   nome_motorista: string;
   id_cnh: string;
@@ -154,7 +153,7 @@ async function getVehicleById(vehicleId: string): Promise<VehicleDataFromDB | nu
       )
     `)
     .eq('id_veiculo', numericId)
-    .single<VehicleDataFromDB>(); // Use type assertion here
+    .single<VehicleDataFromDB>(); 
 
   if (error) {
     console.error("Erro ao buscar dados do veículo:", JSON.stringify(error, null, 2));
@@ -197,8 +196,8 @@ export default function EditarVeiculoPage() {
   useEffect(() => {
     const loadMarcas = async () => {
       setIsLoadingFipeMarcas(true);
-      const marcas = await fetchFipeMarcasParallelum();
-      setFipeMarcas(marcas);
+      const marcasData = await fetchFipeMarcasParallelum();
+      setFipeMarcas(marcasData);
       setIsLoadingFipeMarcas(false);
     };
     loadMarcas();
@@ -213,8 +212,8 @@ export default function EditarVeiculoPage() {
         setFipeVeiculoDetalhes(null);
         const data = await fetchFipeModelosAnosParallelum(selectedFipeMarcaCodigo);
         if (data) {
-          setFipeModelos(data.modelos);
-          setFipeAnos(data.anos);
+          setFipeModelos(data.modelos || []);
+          setFipeAnos(data.anos || []);
         } else {
           toast({ title: "Erro ao buscar modelos/anos FIPE", variant: "destructive" });
         }
@@ -239,7 +238,6 @@ export default function EditarVeiculoPage() {
       if (!vehicleId || !supabase) { setIsLoading(false); setVehicleFound(false); return; }
       setIsLoading(true);
 
-      // Fetch options for selects
       const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo');
       if (pfError) toast({ title: "Erro Pessoas Físicas", description: pfError.message, variant: "destructive" });
       else {
@@ -251,7 +249,6 @@ export default function EditarVeiculoPage() {
       if (orgError) toast({ title: "Erro Organizações", description: orgError.message, variant: "destructive" });
       else setAvailableOrganizacoes(orgData.map(org => ({ value: org.id_entidade.toString(), label: `${org.nome} (${org.cnpj})` })));
       
-      // Fetch vehicle data
       const data = await getVehicleById(vehicleId);
       if (data) {
         setFormData({
@@ -297,7 +294,6 @@ export default function EditarVeiculoPage() {
     fetchInitialData();
   }, [vehicleId, toast]);
 
-  // Fetch CNHs for selected motorista in modal
   useEffect(() => {
     const fetchCNHs = async () => {
       if (!supabase || !motoristaModalData.id_motorista) {
@@ -437,7 +433,6 @@ export default function EditarVeiculoPage() {
         .eq('id_veiculo', parseInt(vehicleId));
       
       if (deleteMotoristasError) {
-        // Log the error but don't necessarily stop the process if main update was fine
         console.warn("Erro ao deletar motoristas antigos:", JSON.stringify(deleteMotoristasError, null, 2));
       }
 
@@ -530,7 +525,6 @@ export default function EditarVeiculoPage() {
                         >
                            <SelectTrigger id="fipe_modelo_edit" className="w-full">
                               {(() => {
-                                // console.log("Render FIPE Modelo Trigger - selectedFipeModeloCodigo:", selectedFipeModeloCodigo, "fipeModelos:", fipeModelos.length);
                                 if (isLoadingFipeModelosAnos && !selectedFipeModeloCodigo) {
                                   return <span className="text-muted-foreground">Carregando...</span>;
                                 }
@@ -667,7 +661,7 @@ export default function EditarVeiculoPage() {
         </Card>
         
         <Card className="shadow-lg mb-6">
-            <CardHeader><CardTitle className="flex items-center"><DollarSignIcon className="mr-2 h-5 w-5 text-primary"/> Dados de Mercado (FIPE Preenchidos)</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/> Dados de Mercado (FIPE Preenchidos)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2"><Label htmlFor="codigo_fipe_form_edit">Código FIPE</Label><Input id="codigo_fipe_form_edit" name="codigo_fipe" value={formData.codigo_fipe} onChange={handleChange} placeholder="Preenchido pela busca FIPE" /></div>
                 <div className="space-y-2"><Label htmlFor="valor_fipe_form_edit">Valor Tabela FIPE (R$)</Label><Input id="valor_fipe_form_edit" name="valor_fipe" value={formData.valor_fipe} onChange={handleChange} /></div>
@@ -761,7 +755,6 @@ Supabase Integration Notes:
 - Database schema:
   - `Veiculos` table needs: `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
   - `tipo_especie` is now a dropdown.
-  - `versao` column is removed from main form; FIPE details might contain version info displayed in the FIPE card.
 - FIPE API (Parallelum): Multi-step fetch logic (Marca -> Modelo/Ano -> Detalhes) is implemented.
 - `handleSubmit`: Saves vehicle data including FIPE fields and linked motoristas (to `VeiculoMotoristas`).
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista).
