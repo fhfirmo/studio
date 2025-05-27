@@ -17,14 +17,13 @@ interface VeiculoSupabase {
   placa_atual: string;
   marca: string;
   modelo: string;
-  // versao: string | null; // Removed
   ano_fabricacao: number | null;
   tipo_especie: string | null;
   combustivel: string | null;
   codigo_renavam: string | null;
-  chassi?: string | null; // Added for potential search
-  PessoasFisicas?: { nome_completo: string } | null;
-  Entidades?: { nome: string } | null;
+  chassi?: string | null;
+  PessoasFisicas?: { nome_completo: string } | null; // For owner if Pessoa Fisica
+  Entidades?: { nome: string } | null;          // For owner if Entidade
 }
 
 interface VeiculoRow {
@@ -32,7 +31,6 @@ interface VeiculoRow {
   placa_atual: string;
   marca: string;
   modelo: string;
-  // versao: string | null; // Removed
   ano_fabricacao: number | null;
   tipo_especie: string | null;
   combustivel: string | null;
@@ -55,7 +53,19 @@ export default function GerenciamentoVeiculosPage() {
       setIsLoading(false); setVeiculos([]); return;
     }
     setIsLoading(true);
-    console.log(`fetchVeiculos: Iniciando busca com termo: "${searchTerm}"`);
+    console.log(`GerenciamentoVeiculosPage: Iniciando busca com termo: "${searchTerm}"`);
+
+    // Diagnostic: Get user role
+    try {
+      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role');
+      if (roleError) {
+        console.error("GerenciamentoVeiculosPage: Erro ao chamar RPC get_user_role:", JSON.stringify(roleError, null, 2));
+      } else {
+        console.log("GerenciamentoVeiculosPage: Papel do usuário (antes da query de Veiculos):", roleData);
+      }
+    } catch(e) {
+      console.error("GerenciamentoVeiculosPage: Exceção ao chamar RPC get_user_role:", e);
+    }
     
     let query = supabase
       .from('Veiculos')
@@ -64,14 +74,13 @@ export default function GerenciamentoVeiculosPage() {
         placa_atual,
         marca,
         modelo,
-        -- versao, -- Removed
         ano_fabricacao,
         tipo_especie,
         combustivel,
         codigo_renavam,
-        chassi, -- Added for search
-        PessoasFisicas!Veiculos_id_proprietario_pessoa_fisica_fkey ( nome_completo ),
-        Entidades!Veiculos_id_proprietario_entidade_fkey ( nome )
+        chassi,
+        PessoasFisicas ( nome_completo ), 
+        Entidades ( nome )
       `)
       .order('placa_atual', { ascending: true });
 
@@ -83,6 +92,7 @@ export default function GerenciamentoVeiculosPage() {
         `modelo.ilike.${LIKESearchTerm},` +
         `chassi.ilike.${LIKESearchTerm},` + 
         `codigo_renavam.ilike.${LIKESearchTerm}`
+        // Note: Searching on related owner name client-side after fetch for now, or use a DB view/function for server-side search on owner.
       );
     }
 
@@ -92,25 +102,39 @@ export default function GerenciamentoVeiculosPage() {
       console.error("Erro ao buscar veículos - Detalhes Completos:", JSON.stringify(error, null, 2));
       toast({ 
         title: "Erro ao Buscar Dados", 
-        description: error.message || `Erro desconhecido. Verifique o console e as RLS.`, 
+        description: error.message || `Erro desconhecido ao buscar veículos. Verifique o console e as RLS. Código: ${error.code || 'N/A'}`, 
         variant: "destructive",
-        duration: 7000 
+        duration: 10000 
       });
       setVeiculos([]);
     } else {
-      const formattedData: VeiculoRow[] = (data || []).map((v: VeiculoSupabase) => ({
-        id: v.id_veiculo,
-        placa_atual: v.placa_atual,
-        marca: v.marca,
-        modelo: v.modelo,
-        // versao: v.versao, // Removed
-        ano_fabricacao: v.ano_fabricacao,
-        tipo_especie: v.tipo_especie,
-        combustivel: v.combustivel,
-        codigo_renavam: v.codigo_renavam,
-        nome_proprietario: v.PessoasFisicas?.nome_completo || v.Entidades?.nome || 'N/A',
-        tipo_proprietario: v.PessoasFisicas ? 'Pessoa Física' : (v.Entidades ? 'Organização' : 'N/A'),
-      }));
+      console.log("GerenciamentoVeiculosPage: Dados brutos de veículos recebidos do Supabase:", data);
+      const formattedData: VeiculoRow[] = (data || []).map((v: VeiculoSupabase) => {
+        let nomeProprietario: string | null = null;
+        let tipoProprietario: VeiculoRow['tipo_proprietario'] = 'N/A';
+
+        if (v.PessoasFisicas) {
+          nomeProprietario = v.PessoasFisicas.nome_completo;
+          tipoProprietario = 'Pessoa Física';
+        } else if (v.Entidades) {
+          nomeProprietario = v.Entidades.nome;
+          tipoProprietario = 'Organização';
+        }
+        
+        return {
+          id: v.id_veiculo,
+          placa_atual: v.placa_atual,
+          marca: v.marca,
+          modelo: v.modelo,
+          ano_fabricacao: v.ano_fabricacao,
+          tipo_especie: v.tipo_especie,
+          combustivel: v.combustivel,
+          codigo_renavam: v.codigo_renavam,
+          nome_proprietario: nomeProprietario,
+          tipo_proprietario: tipoProprietario,
+        };
+      });
+      console.log("GerenciamentoVeiculosPage: Dados formatados para a tabela:", formattedData);
       setVeiculos(formattedData);
     }
     setIsLoading(false);
@@ -136,24 +160,27 @@ export default function GerenciamentoVeiculosPage() {
     
     setIsLoading(true);
     
+    // 1. Delete related VeiculoMotoristas entries
     const { error: motoristasError } = await supabase
       .from('VeiculoMotoristas')
       .delete()
       .eq('id_veiculo', veiculoToDelete.id);
 
     if (motoristasError) {
-      console.error('Falha ao excluir motoristas vinculados:', motoristasError.message);
-      toast({ title: "Erro ao Excluir Vínculos", description: `Falha ao remover motoristas do veículo: ${motoristasError.message}`, variant: "destructive" });
+      console.error('Falha ao excluir motoristas vinculados:', JSON.stringify(motoristasError, null, 2));
+      toast({ title: "Erro ao Excluir Vínculos", description: `Falha ao remover motoristas do veículo: ${motoristasError.message || 'Erro desconhecido'}.`, variant: "destructive" });
+      // Decide if you want to stop or proceed with vehicle deletion
     }
     
+    // 2. Delete the Veiculo itself
     const { error } = await supabase
       .from('Veiculos')
       .delete()
       .eq('id_veiculo', veiculoToDelete.id);
 
     if (error) {
-      console.error('Falha ao excluir veículo:', error.message);
-      toast({ title: "Erro ao Excluir", description: `Falha ao excluir veículo: ${error.message}`, variant: "destructive" });
+      console.error('Falha ao excluir veículo:', JSON.stringify(error, null, 2));
+      toast({ title: "Erro ao Excluir", description: `Falha ao excluir veículo: ${error.message || 'Erro desconhecido'}. Verifique RLS e dependências.`, variant: "destructive" });
     } else {
       toast({ title: "Veículo Excluído!", description: `O veículo ${veiculoToDelete.placa} - ${veiculoToDelete.modelo || ''} foi excluído.` });
       fetchVeiculos(); 
@@ -221,7 +248,6 @@ export default function GerenciamentoVeiculosPage() {
                   <TableHead>Placa</TableHead>
                   <TableHead>Marca</TableHead>
                   <TableHead>Modelo</TableHead>
-                  {/* <TableHead className="hidden md:table-cell">Versão</TableHead> -- Removed */}
                   <TableHead className="hidden md:table-cell">Ano Fab.</TableHead>
                   <TableHead className="hidden lg:table-cell">Tipo/Espécie</TableHead>
                   <TableHead className="hidden lg:table-cell">Combustível</TableHead>
@@ -232,7 +258,7 @@ export default function GerenciamentoVeiculosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && veiculos.length === 0 ? (
+                {isLoading && veiculos.length === 0 && !searchTerm ? (
                   <TableRow><TableCell colSpan={10} className="text-center h-24">Carregando veículos...</TableCell></TableRow>
                 ) : !isLoading && veiculos.length === 0 ? (
                   <TableRow>
@@ -247,7 +273,6 @@ export default function GerenciamentoVeiculosPage() {
                       <TableCell className="font-semibold">{veiculo.placa_atual}</TableCell>
                       <TableCell>{veiculo.marca}</TableCell>
                       <TableCell>{veiculo.modelo}</TableCell>
-                      {/* <TableCell className="hidden md:table-cell">{veiculo.versao || "N/A"}</TableCell> -- Removed */}
                       <TableCell className="hidden md:table-cell">{veiculo.ano_fabricacao || "N/A"}</TableCell>
                       <TableCell className="hidden lg:table-cell">{veiculo.tipo_especie || "N/A"}</TableCell>
                       <TableCell className="hidden lg:table-cell">{veiculo.combustivel || "N/A"}</TableCell>
@@ -310,10 +335,15 @@ export default function GerenciamentoVeiculosPage() {
 }
     
 /* Supabase Integration Notes:
-- `fetchVeiculos`: Query 'Veiculos'. JOIN PessoasFisicas (id_proprietario_pessoa_fisica) and Entidades (id_proprietario_entidade) for owner name.
-- `versao` column is removed from select and display.
-- Search term can now filter on marca, modelo, codigo_renavam, chassi.
-- `confirmDeleteVeiculo`: Must also delete related records in `VeiculoMotoristas` before deleting the vehicle itself, or ensure ON DELETE CASCADE is set on the FK in `VeiculoMotoristas`.
+- `fetchVeiculos`: 
+  - Query 'Veiculos'. 
+  - Selects direct columns like placa_atual, marca, modelo, ano_fabricacao, tipo_especie, combustivel, codigo_renavam, chassi.
+  - Fetches related owner name using: PessoasFisicas ( nome_completo ) and Entidades ( nome ). Supabase infers relationships from FKs id_proprietario_pessoa_fisica and id_proprietario_entidade.
+- Search: Filters by placa_atual, marca, modelo, chassi, codigo_renavam on the 'Veiculos' table.
+- Delete Veiculo: 
+  - First, explicitly delete related records in `VeiculoMotoristas` (ON DELETE CASCADE on `VeiculoMotoristas.id_veiculo` would also work).
+  - Then, delete the record from `Veiculos`.
+- RLS: Ensure the logged-in user (admin/supervisor/operator) has SELECT permissions on `Veiculos`, `PessoasFisicas`, and `Entidades`. Ensure DELETE permissions are also set up for `Veiculos` and `VeiculoMotoristas`.
 */
 
     
