@@ -50,7 +50,7 @@ const tipoEspecieOptions: GenericOption[] = [
 ];
 
 interface FipeMarca { codigo: string; nome: string; }
-interface FipeModelo { codigo: string; nome: string; }
+interface FipeModelo { codigo: number; nome: string; } // API returns codigo as number for modelos
 interface FipeAno { codigo: string; nome: string; }
 interface FipeModelosAnosResponse { modelos: FipeModelo[]; anos: FipeAno[]; }
 interface FipeVeiculoDetalhesResponse {
@@ -73,7 +73,8 @@ async function fetchFipeModelosAnosParallelum(marcaCodigo: string): Promise<Fipe
   try {
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCodigo}/modelos`);
     if (!response.ok) { console.error(`Parallelum FIPE Modelos/Anos API error: ${response.status} ${response.statusText}`); return null; }
-    return await response.json();
+    const data = await response.json();
+    return data;
   } catch (error) { console.error("Error fetching FIPE Modelos/Anos:", error); return null; }
 }
 
@@ -225,7 +226,7 @@ export default function NovoVeiculoPage() {
       marca: fipeVeiculoDetalhes.Marca || prev.marca,
       modelo: fipeVeiculoDetalhes.Modelo || prev.modelo,
       ano_modelo: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_modelo,
-      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao, // Often FIPE AnoModelo is used for AnoFabricacao
+      ano_fabricacao: fipeVeiculoDetalhes.AnoModelo?.toString() || prev.ano_fabricacao,
       combustivel: fipeVeiculoDetalhes.Combustivel || prev.combustivel,
       codigo_fipe: fipeVeiculoDetalhes.CodigoFipe || prev.codigo_fipe,
       valor_fipe: fipeVeiculoDetalhes.Valor ? fipeVeiculoDetalhes.Valor.replace(/R\$ /g, '').replace(/\./g, '').replace(',', '.') : prev.valor_fipe,
@@ -275,7 +276,6 @@ export default function NovoVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao: formData.versao || null, // versao was removed from form and DB
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -336,6 +336,14 @@ export default function NovoVeiculoPage() {
       setIsLoading(false);
     }
   };
+  
+  // For debugging the Modelo FIPE dropdown display issue
+  // console.log("RENDER NovoVeiculoPage: selectedFipeModeloCodigo:", selectedFipeModeloCodigo, "fipeModelos length:", fipeModelos.length, "isLoadingFipeModelosAnos:", isLoadingFipeModelosAnos);
+  // if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
+  //   const foundModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
+  //   console.log("RENDER NovoVeiculoPage: Found model for selected code:", foundModel);
+  // }
+
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -365,7 +373,6 @@ export default function NovoVeiculoPage() {
                         <Select 
                             value={selectedFipeMarcaCodigo} 
                             onValueChange={(value) => {
-                                console.log("NovoPagina - Marca FIPE selecionada (codigo):", value);
                                 setSelectedFipeMarcaCodigo(value);
                             }} 
                             disabled={isLoadingFipeMarcas}
@@ -381,19 +388,23 @@ export default function NovoVeiculoPage() {
                         <Select 
                             value={selectedFipeModeloCodigo} 
                             onValueChange={(value) => {
-                                console.log("NovoPagina - Modelo FIPE selecionado (codigo):", value);
+                                console.log("NovoVeiculoPage: FIPE Modelo SELECIONADO (onValueChange):", value);
                                 setSelectedFipeModeloCodigo(value);
                             }}
                             disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
                         >
                            <SelectTrigger id="fipe_modelo" className="w-full">
                                 {selectedFipeModeloCodigo && fipeModelos.length > 0 ? 
-                                    (fipeModelos.find(m => m.codigo === selectedFipeModeloCodigo)?.nome || <span className="text-muted-foreground">Selecione o Modelo</span>)
+                                    (fipeModelos.find(m => String(m.codigo) === selectedFipeModeloCodigo)?.nome || <span className="text-muted-foreground">Selecione o Modelo</span>)
                                     : <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} />
                                 }
                            </SelectTrigger>
                             <SelectContent>
-                                {fipeModelos.map(modelo => <SelectItem key={modelo.codigo} value={modelo.codigo}>{modelo.nome}</SelectItem>)}
+                                {fipeModelos.map(modelo => (
+                                  <SelectItem key={modelo.codigo} value={String(modelo.codigo)}>
+                                      {modelo.nome}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -402,16 +413,12 @@ export default function NovoVeiculoPage() {
                         <Select 
                             value={selectedFipeAnoCodigo} 
                             onValueChange={(value) => {
-                                 console.log("NovoPagina - Ano FIPE selecionado (codigo):", value);
                                 setSelectedFipeAnoCodigo(value);
                             }}
                             disabled={!selectedFipeMarcaCodigo || !selectedFipeModeloCodigo || isLoadingFipeModelosAnos}
                         >
                             <SelectTrigger id="fipe_ano" className="w-full">
-                               {selectedFipeAnoCodigo && fipeAnos.length > 0 ?
-                                 (fipeAnos.find(a => a.codigo === selectedFipeAnoCodigo)?.nome || <span className="text-muted-foreground">Selecione o Ano</span>)
-                                 : <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
-                               }
+                               <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
                             </SelectTrigger>
                             <SelectContent>
                                 {fipeAnos.map(ano => <SelectItem key={ano.codigo} value={ano.codigo}>{ano.nome}</SelectItem>)}

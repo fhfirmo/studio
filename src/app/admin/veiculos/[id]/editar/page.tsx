@@ -86,7 +86,7 @@ const tipoEspecieOptions: GenericOption[] = [
 ];
 
 interface FipeMarca { codigo: string; nome: string; }
-interface FipeModelo { codigo: string; nome: string; }
+interface FipeModelo { codigo: number; nome: string; }
 interface FipeAno { codigo: string; nome: string; }
 interface FipeModelosAnosResponse { modelos: FipeModelo[]; anos: FipeAno[]; }
 interface FipeVeiculoDetalhesResponse {
@@ -109,7 +109,8 @@ async function fetchFipeModelosAnosParallelum(marcaCodigo: string): Promise<Fipe
   try {
     const response = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCodigo}/modelos`);
     if (!response.ok) { console.error(`Parallelum FIPE Modelos/Anos API error: ${response.status} ${response.statusText}`); return null; }
-    return await response.json();
+    const data = await response.json();
+    return data;
   } catch (error) { console.error("Error fetching FIPE Modelos/Anos:", error); return null; }
 }
 
@@ -398,7 +399,6 @@ export default function EditarVeiculoPage() {
       combustivel: formData.combustivel || null,
       marca: formData.marca,
       modelo: formData.modelo,
-      // versao: null, // Campo removido
       ano_fabricacao: formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : null,
       ano_modelo: formData.ano_modelo ? parseInt(formData.ano_modelo) : null,
       cor: formData.cor || null,
@@ -465,6 +465,13 @@ export default function EditarVeiculoPage() {
       setIsLoading(false);
     }
   };
+  
+  // For debugging the Modelo FIPE dropdown display issue
+  // console.log("RENDER EditarVeiculoPage - selectedFipeModeloCodigo:", selectedFipeModeloCodigo, "fipeModelos length:", fipeModelos.length, "isLoadingFipeModelosAnos:", isLoadingFipeModelosAnos);
+  // if (selectedFipeModeloCodigo && fipeModelos.length > 0) {
+  //   const foundModel = fipeModelos.find(m => String(m.codigo) === String(selectedFipeModeloCodigo));
+  //   console.log("RENDER EditarVeiculoPage: Found model for selected code:", foundModel);
+  // }
 
   if (isLoading && vehicleFound === null) {
     return <div className="container mx-auto px-4 py-8 md:py-12 text-center">Carregando...</div>;
@@ -500,7 +507,6 @@ export default function EditarVeiculoPage() {
                         <Select 
                             value={selectedFipeMarcaCodigo} 
                             onValueChange={(value) => {
-                                console.log("EditPage - Marca FIPE selecionada:", value);
                                 setSelectedFipeMarcaCodigo(value);
                             }}
                             disabled={isLoadingFipeMarcas}
@@ -516,19 +522,23 @@ export default function EditarVeiculoPage() {
                         <Select 
                             value={selectedFipeModeloCodigo} 
                             onValueChange={(value) => {
-                                console.log("EditPage - Modelo FIPE selecionado:", value);
+                                console.log("EditarVeiculoPage: FIPE Modelo SELECIONADO (onValueChange):", value);
                                 setSelectedFipeModeloCodigo(value);
                             }}
                             disabled={!selectedFipeMarcaCodigo || isLoadingFipeModelosAnos}
                         >
                            <SelectTrigger id="fipe_modelo_edit" className="w-full">
                                 {selectedFipeModeloCodigo && fipeModelos.length > 0 ? 
-                                    (fipeModelos.find(m => m.codigo === selectedFipeModeloCodigo)?.nome || <span className="text-muted-foreground">Selecione o Modelo</span>)
+                                    (fipeModelos.find(m => String(m.codigo) === selectedFipeModeloCodigo)?.nome || <span className="text-muted-foreground">Selecione o Modelo</span>)
                                     : <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Modelo"} />
                                 }
                            </SelectTrigger>
                             <SelectContent>
-                                {fipeModelos.map(modelo => <SelectItem key={modelo.codigo} value={modelo.codigo}>{modelo.nome}</SelectItem>)}
+                                {fipeModelos.map(modelo => (
+                                  <SelectItem key={modelo.codigo} value={String(modelo.codigo)}>
+                                      {modelo.nome}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -537,16 +547,12 @@ export default function EditarVeiculoPage() {
                         <Select 
                             value={selectedFipeAnoCodigo} 
                             onValueChange={(value) => {
-                                console.log("EditPage - Ano FIPE selecionado:", value);
                                 setSelectedFipeAnoCodigo(value);
                             }}
                             disabled={!selectedFipeMarcaCodigo || !selectedFipeModeloCodigo || isLoadingFipeModelosAnos}
                         >
                             <SelectTrigger id="fipe_ano_edit" className="w-full">
-                               {selectedFipeAnoCodigo && fipeAnos.length > 0 ?
-                                 (fipeAnos.find(a => a.codigo === selectedFipeAnoCodigo)?.nome || <span className="text-muted-foreground">Selecione o Ano</span>)
-                                 : <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
-                               }
+                               <SelectValue placeholder={isLoadingFipeModelosAnos ? "Carregando..." : "Selecione o Ano"} />
                             </SelectTrigger>
                             <SelectContent>
                                 {fipeAnos.map(ano => <SelectItem key={ano.codigo} value={ano.codigo}>{ano.nome}</SelectItem>)}
@@ -738,7 +744,7 @@ export default function EditarVeiculoPage() {
 /*
 Supabase Integration Notes:
 - On load (Edit page): Fetch vehicle data, including its `VeiculoMotoristas` and their related CNH/PessoaFisica details.
-- FIPE API (Parallelum): Multi-step fetch is now implemented.
+- FIPE API (Parallelum): Multi-step fetch logic is now implemented.
 - `Veiculos` table: Ensure columns `codigo_fipe`, `valor_fipe`, `data_consulta_fipe`, `mes_referencia_fipe`.
 - On submit: Update `Veiculos`. Then, manage `VeiculoMotoristas` (delete all for vehicle, then re-insert staged ones).
 - `marca`, `modelo` are direct text inputs, populated by FIPE lookup or manually.
