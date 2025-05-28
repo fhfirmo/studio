@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent, useEffect } from 'react';
@@ -37,7 +38,7 @@ interface SeguroDataForForm {
   valorIndenizacao: string;
   franquia: string;
   dataContratacao: Date | undefined;
-  observacoes: string;
+  observacoes: string; // Stays in UI form, but not sent to Seguros table
   id_titular_pessoa_fisica: string | null;
   id_titular_entidade: string | null;
   id_veiculo: string | null;
@@ -72,6 +73,11 @@ async function getSeguroById(seguroId: string, toast: any): Promise<SeguroDataFo
     return null;
   }
 
+  // Assuming 'observacoes' is NOT a column in 'Seguros' based on the error.
+  // If it was intended for another table or just UI notes, we handle it here.
+  // For now, we'll keep it in the form state but not try to save it directly to 'Seguros'.
+  const uiObservacoes = (seguroData as any).observacoes || ''; // If observacoes was ever part of an older schema
+
   return {
     id_seguro: seguroData.id_seguro.toString(),
     numeroApolice: seguroData.numero_apolice,
@@ -81,7 +87,7 @@ async function getSeguroById(seguroId: string, toast: any): Promise<SeguroDataFo
     valorIndenizacao: seguroData.valor_indenizacao?.toString() || '',
     franquia: seguroData.franquia?.toString() || '',
     dataContratacao: seguroData.data_contratacao && isValid(parseISO(seguroData.data_contratacao)) ? parseISO(seguroData.data_contratacao) : undefined,
-    observacoes: seguroData.observacoes || '',
+    observacoes: uiObservacoes, // Keep for UI if needed, but won't be in payload for 'Seguros' table
     id_titular_pessoa_fisica: seguroData.id_titular_pessoa_fisica?.toString() || null,
     id_titular_entidade: seguroData.id_titular_entidade?.toString() || null,
     id_veiculo: seguroData.id_veiculo?.toString() || '--none--',
@@ -148,7 +154,7 @@ export default function EditarSeguroPage() {
       supabase.from('Veiculos').select('id_veiculo, placa_atual, modelo, marca').order('placa_atual')
         .then(({ data, error }) => {
           if (error) toast({ title: "Erro Veículos", description: error.message, variant: "destructive" });
-          else setVeiculosOptions(data.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca} ${v.modelo})` })));
+          else setVeiculosOptions(data.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca || ''} ${v.modelo || ''})`.trim() })));
           setIsLoadingVeiculos(false);
         });
 
@@ -172,7 +178,7 @@ export default function EditarSeguroPage() {
       supabase.from('Assistencias').select('id_assistencia, nome_assistencia, tipo_assistencia').order('nome_assistencia')
         .then(({data, error}) => {
             if (error) toast({ title: "Erro Assistências", description: error.message, variant: "destructive" });
-            else setAssistenciasOptions(data.map(a => ({ id: a.id_assistencia.toString(), nome: a.nome_assistencia, tipo_assistencia: a.tipo_assistencia })));
+            else setAssistenciasOptions(data.map(a => ({ id: a.id_assistencia.toString(), nome: a.nome_assistencia, tipo_assistencia: a.tipo_assistencia || undefined })));
             setIsLoadingAssistencias(false);
         });
       
@@ -256,7 +262,7 @@ export default function EditarSeguroPage() {
       valor_indenizacao: formData.valorIndenizacao ? parseFloat(formData.valorIndenizacao.replace(',', '.')) : null,
       franquia: formData.franquia ? parseFloat(formData.franquia.replace(',', '.')) : null,
       data_contratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
-      observacoes: formData.observacoes || null,
+      // observacoes: formData.observacoes || null, // Removed as column doesn't exist in Seguros
       id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? parseInt(formData.id_titular_pessoa_fisica!) : null,
       id_titular_entidade: tipoTitular === 'organizacao' ? parseInt(formData.id_titular_entidade!) : null,
       id_veiculo: formData.id_veiculo && formData.id_veiculo !== '--none--' ? parseInt(formData.id_veiculo) : null,
@@ -272,20 +278,20 @@ export default function EditarSeguroPage() {
 
       // Handle Coberturas: Delete existing and insert new ones
       const { error: deleteCoberturasError } = await supabase.from('SeguroCoberturas').delete().eq('id_seguro', parseInt(seguroId));
-      if (deleteCoberturasError) console.warn("Erro ao deletar coberturas antigas:", deleteCoberturasError.message);
+      if (deleteCoberturasError) console.warn("Erro ao deletar coberturas antigas:", JSON.stringify(deleteCoberturasError, null, 2));
       if (formData.coberturasSelecionadas.length > 0) {
         const seguroCoberturasPayload = formData.coberturasSelecionadas.map(cobId => ({ id_seguro: parseInt(seguroId), id_cobertura: parseInt(cobId) }));
         const { error: scError } = await supabase.from('SeguroCoberturas').insert(seguroCoberturasPayload);
-        if (scError) console.warn("Erro ao salvar novas Coberturas:", scError.message);
+        if (scError) console.warn("Erro ao salvar novas Coberturas:", JSON.stringify(scError, null, 2));
       }
 
       // Handle Assistencias: Delete existing and insert new ones
       const { error: deleteAssistenciasError } = await supabase.from('SeguroAssistencias').delete().eq('id_seguro', parseInt(seguroId));
-      if (deleteAssistenciasError) console.warn("Erro ao deletar assistências antigas:", deleteAssistenciasError.message);
+      if (deleteAssistenciasError) console.warn("Erro ao deletar assistências antigas:", JSON.stringify(deleteAssistenciasError, null, 2));
       if (formData.assistenciasSelecionadas.length > 0) {
         const seguroAssistenciasPayload = formData.assistenciasSelecionadas.map(assId => ({ id_seguro: parseInt(seguroId), id_assistencia: parseInt(assId) }));
         const { error: saError } = await supabase.from('SeguroAssistencias').insert(seguroAssistenciasPayload);
-        if (saError) console.warn("Erro ao salvar novas Assistências:", saError.message);
+        if (saError) console.warn("Erro ao salvar novas Assistências:", JSON.stringify(saError, null, 2));
       }
 
       toast({ title: "Seguro Atualizado!", description: "Os dados do seguro foram salvos com sucesso." });
@@ -540,3 +546,4 @@ export default function EditarSeguroPage() {
 //   5. INSERT new selected assistencias into public.SeguroAssistencias.
 //   (Ideally, steps 1-5 should be in a transaction via a Supabase Edge Function).
 // - RLS: Ensure user has permissions for all these operations.
+

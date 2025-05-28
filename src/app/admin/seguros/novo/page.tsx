@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent, useEffect } from 'react';
@@ -21,20 +22,12 @@ import { useToast } from "@/hooks/use-toast";
 interface GenericOption {
   id: string;
   nome: string;
-  [key: string]: any; // Allow other properties like 'cpf', 'cnpj', 'description'
+  [key: string]: any; 
 }
 
 interface AssistenciaOption extends GenericOption {
   tipo_assistencia?: string;
 }
-
-const initialPessoasFisicas: GenericOption[] = [];
-const initialOrganizacoes: GenericOption[] = [];
-const initialVeiculos: GenericOption[] = [];
-const initialSeguradoras: GenericOption[] = [];
-const initialCoberturas: GenericOption[] = [];
-const initialAssistencias: AssistenciaOption[] = [];
-
 
 export default function NovoSeguroPage() {
   const router = useRouter();
@@ -50,19 +43,19 @@ export default function NovoSeguroPage() {
     valorIndenizacao: '',
     franquia: '',
     dataContratacao: new Date() as Date | undefined,
-    observacoes: '',
-    id_titular: '',
-    id_veiculo: '',
+    observacoes: '', // This will remain in UI state but not sent to DB
+    id_titular: '', // Generic ID for selected titular
+    id_veiculo: '--none--', // Default to no vehicle
     coberturasSelecionadas: [] as string[],
     assistenciasSelecionadas: [] as string[],
   });
 
-  const [pessoasFisicasOptions, setPessoasFisicasOptions] = useState<GenericOption[]>(initialPessoasFisicas);
-  const [organizacoesOptions, setOrganizacoesOptions] = useState<GenericOption[]>(initialOrganizacoes);
-  const [veiculosOptions, setVeiculosOptions] = useState<GenericOption[]>(initialVeiculos);
-  const [seguradorasOptions, setSeguradorasOptions] = useState<GenericOption[]>(initialSeguradoras);
-  const [coberturasOptions, setCoberturasOptions] = useState<GenericOption[]>(initialCoberturas);
-  const [assistenciasOptions, setAssistenciasOptions] = useState<AssistenciaOption[]>(initialAssistencias);
+  const [pessoasFisicasOptions, setPessoasFisicasOptions] = useState<GenericOption[]>([]);
+  const [organizacoesOptions, setOrganizacoesOptions] = useState<GenericOption[]>([]);
+  const [veiculosOptions, setVeiculosOptions] = useState<GenericOption[]>([]);
+  const [seguradorasOptions, setSeguradorasOptions] = useState<GenericOption[]>([]);
+  const [coberturasOptions, setCoberturasOptions] = useState<GenericOption[]>([]);
+  const [assistenciasOptions, setAssistenciasOptions] = useState<AssistenciaOption[]>([]);
 
   const [isLoadingPessoasFisicas, setIsLoadingPessoasFisicas] = useState(false);
   const [isLoadingOrganizacoes, setIsLoadingOrganizacoes] = useState(false);
@@ -77,40 +70,52 @@ export default function NovoSeguroPage() {
       if (!supabase) return;
 
       setIsLoadingPessoasFisicas(true);
-      const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo');
-      if (pfError) toast({ title: "Erro ao Carregar Pessoas Físicas", description: pfError.message, variant: "destructive" });
-      else setPessoasFisicasOptions(pfData.map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
-      setIsLoadingPessoasFisicas(false);
+      supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro ao Carregar Pessoas Físicas", description: error.message, variant: "destructive" });
+          else setPessoasFisicasOptions(data.map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
+          setIsLoadingPessoasFisicas(false);
+        });
 
       setIsLoadingOrganizacoes(true);
-      const { data: orgData, error: orgError } = await supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome');
-      if (orgError) toast({ title: "Erro ao Carregar Organizações", description: orgError.message, variant: "destructive" });
-      else setOrganizacoesOptions(orgData.map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
-      setIsLoadingOrganizacoes(false);
+      supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro ao Carregar Organizações", description: error.message, variant: "destructive" });
+          else setOrganizacoesOptions(data.map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
+          setIsLoadingOrganizacoes(false);
+        });
       
       setIsLoadingVeiculos(true);
-      const { data: veiculosData, error: veiculosError } = await supabase.from('Veiculos').select('id_veiculo, placa_atual, modelo, marca').order('placa_atual');
-      if (veiculosError) toast({ title: "Erro ao Carregar Veículos", description: veiculosError.message, variant: "destructive" });
-      else setVeiculosOptions(veiculosData.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca} ${v.modelo})` })));
-      setIsLoadingVeiculos(false);
+      supabase.from('Veiculos').select('id_veiculo, placa_atual, modelo, marca').order('placa_atual')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro ao Carregar Veículos", description: error.message, variant: "destructive" });
+          else setVeiculosOptions(data.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca || ''} ${v.modelo || ''})`.trim() })));
+          setIsLoadingVeiculos(false);
+        });
 
       setIsLoadingSeguradoras(true);
-      const { data: segData, error: segError } = await supabase.from('Seguradoras').select('id_seguradora, nome_seguradora').order('nome_seguradora');
-      if (segError) toast({ title: "Erro ao Carregar Seguradoras", description: segError.message, variant: "destructive" });
-      else setSeguradorasOptions(segData.map(s => ({ id: s.id_seguradora.toString(), nome: s.nome_seguradora })));
-      setIsLoadingSeguradoras(false);
+      supabase.from('Seguradoras').select('id_seguradora, nome_seguradora').order('nome_seguradora')
+        .then(({data, error}) => {
+            if (error) toast({ title: "Erro ao Carregar Seguradoras", description: error.message, variant: "destructive" });
+            else setSeguradorasOptions(data.map(s => ({ id: s.id_seguradora.toString(), nome: s.nome_seguradora })));
+            setIsLoadingSeguradoras(false);
+        });
 
       setIsLoadingCoberturas(true);
-      const { data: cobData, error: cobError } = await supabase.from('Coberturas').select('id_cobertura, nome_cobertura').order('nome_cobertura');
-      if (cobError) toast({ title: "Erro ao Carregar Coberturas", description: cobError.message, variant: "destructive" });
-      else setCoberturasOptions(cobData.map(c => ({ id: c.id_cobertura.toString(), nome: c.nome_cobertura })));
-      setIsLoadingCoberturas(false);
+      supabase.from('Coberturas').select('id_cobertura, nome_cobertura').order('nome_cobertura')
+        .then(({data, error}) => {
+            if (error) toast({ title: "Erro ao Carregar Coberturas", description: error.message, variant: "destructive" });
+            else setCoberturasOptions(data.map(c => ({ id: c.id_cobertura.toString(), nome: c.nome_cobertura })));
+            setIsLoadingCoberturas(false);
+        });
 
       setIsLoadingAssistencias(true);
-      const { data: assData, error: assError } = await supabase.from('Assistencias').select('id_assistencia, nome_assistencia, tipo_assistencia').order('nome_assistencia');
-      if (assError) toast({ title: "Erro ao Carregar Assistências", description: assError.message, variant: "destructive" });
-      else setAssistenciasOptions(assData.map(a => ({ id: a.id_assistencia.toString(), nome: a.nome_assistencia, tipo_assistencia: a.tipo_assistencia })));
-      setIsLoadingAssistencias(false);
+      supabase.from('Assistencias').select('id_assistencia, nome_assistencia, tipo_assistencia').order('nome_assistencia')
+        .then(({data, error}) => {
+            if (error) toast({ title: "Erro ao Carregar Assistências", description: error.message, variant: "destructive" });
+            else setAssistenciasOptions(data.map(a => ({ id: a.id_assistencia.toString(), nome: a.nome_assistencia, tipo_assistencia: a.tipo_assistencia || undefined })));
+            setIsLoadingAssistencias(false);
+        });
     };
     fetchDropdownData();
   }, [toast]);
@@ -172,7 +177,7 @@ export default function NovoSeguroPage() {
       valor_indenizacao: formData.valorIndenizacao ? parseFloat(formData.valorIndenizacao.replace(',', '.')) : null,
       franquia: formData.franquia ? parseFloat(formData.franquia.replace(',', '.')) : null,
       data_contratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
-      observacoes: formData.observacoes || null,
+      // observacoes: formData.observacoes || null, // Removed as column doesn't exist
       id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? parseInt(formData.id_titular) : null,
       id_titular_entidade: tipoTitular === 'organizacao' ? parseInt(formData.id_titular) : null,
       id_veiculo: formData.id_veiculo && formData.id_veiculo !== '--none--' ? parseInt(formData.id_veiculo) : null,
@@ -197,7 +202,7 @@ export default function NovoSeguroPage() {
                 id_cobertura: parseInt(cobId),
             }));
             const { error: scError } = await supabase.from('SeguroCoberturas').insert(seguroCoberturasPayload);
-            if (scError) console.warn("Erro ao salvar Coberturas:", scError.message); // Non-critical, log and continue
+             if (scError) console.warn("Erro ao salvar Coberturas:", JSON.stringify(scError, null, 2)); 
         }
 
         if (formData.assistenciasSelecionadas.length > 0) {
@@ -206,7 +211,7 @@ export default function NovoSeguroPage() {
                 id_assistencia: parseInt(assId),
             }));
             const { error: saError } = await supabase.from('SeguroAssistencias').insert(seguroAssistenciasPayload);
-             if (saError) console.warn("Erro ao salvar Assistências:", saError.message); // Non-critical, log and continue
+             if (saError) console.warn("Erro ao salvar Assistências:", JSON.stringify(saError, null, 2));
         }
         
         toast({ title: "Seguro Cadastrado!", description: "Novo seguro adicionado com sucesso." });
@@ -445,3 +450,4 @@ export default function NovoSeguroPage() {
 //   3. INSERT selected assistencias into public.SeguroAssistencias (id_seguro, id_assistencia).
 //   (Ideally, these three steps should be in a transaction via a Supabase Edge Function).
 // - RLS: Ensure user has INSERT permissions on Seguros, SeguroCoberturas, SeguroAssistencias and SELECT on related tables.
+
