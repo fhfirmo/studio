@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ShieldCheck, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle } from "lucide-react";
+import { ShieldCheck, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle, Loader2 } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, isValid } from 'date-fns';
@@ -20,26 +20,24 @@ interface SeguroSupabase {
   vigencia_fim: string;
   valor_indenizacao: number | null;
   Seguradoras: { nome_seguradora: string } | null;
-  Veiculos: { placa_atual: string, ModelosVeiculo: { nome_modelo: string } | null } | null;
-  PessoasFisicas: { nome_completo: string } | null; // Titular PF
-  Entidades: { nome: string } | null; // Titular PJ
+  Veiculos: { placa_atual: string, marca?: string, modelo?: string } | null; // marca and modelo are now direct on Veiculos
+  PessoasFisicas: { nome_completo: string } | null;
+  Entidades: { nome: string } | null;
 }
 
 interface SeguroRow {
-  id: number; // Corresponds to id_seguro
+  id: number;
   numeroApolice: string;
   veiculoDesc: string | null;
   seguradoraNome: string | null;
   dataInicio: string;
   dataFim: string;
-  valorIndenizacao: number | null;
+  valorIndenizacao: string | null; // Formatted currency
   titularNome: string | null;
 }
 
-const initialSeguros: SeguroRow[] = []; // Start empty
-
 export default function GerenciamentoSegurosPage() {
-  const [seguros, setSeguros] = useState<SeguroRow[]>(initialSeguros);
+  const [seguros, setSeguros] = useState<SeguroRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -54,17 +52,30 @@ export default function GerenciamentoSegurosPage() {
     } catch (e) { return "Data inválida"; }
   };
 
-  const formatCurrency = (value: number | null) => {
+  const formatCurrency = (value: number | null | undefined) => {
     if (value === null || value === undefined) return "N/A";
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
   const fetchSeguros = async () => {
     if (!supabase) {
-      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao Supabase.", variant: "destructive" });
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
       setIsLoading(false); setSeguros([]); return;
     }
     setIsLoading(true);
+    console.log(`GerenciamentoSegurosPage: Fetching Seguros. Search: "${searchTerm}"`);
+
+    // Diagnostic: Check current user role via RPC
+    try {
+      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role');
+      if (roleError) {
+        console.error("GerenciamentoSegurosPage: Erro ao chamar RPC get_user_role:", JSON.stringify(roleError, null, 2));
+      } else {
+        console.log("GerenciamentoSegurosPage: Papel do usuário:", roleData);
+      }
+    } catch (e: any) {
+      console.error("GerenciamentoSegurosPage: Exceção ao chamar RPC get_user_role:", e.message);
+    }
     
     let query = supabase
       .from('Seguros')
@@ -75,36 +86,45 @@ export default function GerenciamentoSegurosPage() {
         vigencia_fim,
         valor_indenizacao,
         Seguradoras ( nome_seguradora ),
-        Veiculos ( placa_atual, ModelosVeiculo ( nome_modelo ) ),
-        PessoasFisicas ( nome_completo ),
-        Entidades ( nome )
+        Veiculos ( placa_atual, marca, modelo ), 
+        PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey ( nome_completo ),
+        Entidades!Seguros_id_titular_entidade_fkey ( nome )
       `)
       .order('numero_apolice', { ascending: true });
 
     if (searchTerm) {
+      const LIKESearchTerm = `%${searchTerm}%`;
       query = query.or(
-        `numero_apolice.ilike.%${searchTerm}%,` +
-        `Veiculos.placa_atual.ilike.%${searchTerm}%`
+        `numero_apolice.ilike.${LIKESearchTerm},` +
+        `Veiculos.placa_atual.ilike.${LIKESearchTerm}` 
+        // Note: Searching on titular name would require a more complex query or a database view.
       );
     }
 
     const { data, error } = await query;
 
     if (error) {
-      console.error("Erro ao buscar seguros:", error);
-      toast({ title: "Erro ao Buscar Dados", description: error.message, variant: "destructive" });
+      console.error("Erro ao buscar seguros:", JSON.stringify(error, null, 2), error);
+      toast({ 
+          title: "Erro ao Buscar Dados", 
+          description: error.message || "Falha ao carregar seguros. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.", 
+          variant: "destructive",
+          duration: 10000 
+      });
       setSeguros([]);
     } else {
-      const formattedData: SeguroRow[] = data.map((s: SeguroSupabase) => ({
+      console.log("GerenciamentoSegurosPage: Dados brutos de seguros recebidos:", data);
+      const formattedData: SeguroRow[] = (data || []).map((s: SeguroSupabase) => ({
         id: s.id_seguro,
         numeroApolice: s.numero_apolice,
-        veiculoDesc: s.Veiculos ? `${s.Veiculos.placa_atual} (${s.Veiculos.ModelosVeiculo?.nome_modelo || 'N/A'})` : 'N/A',
+        veiculoDesc: s.Veiculos ? `${s.Veiculos.placa_atual} (${s.Veiculos.marca || ''} ${s.Veiculos.modelo || ''})`.trim() : 'N/A',
         seguradoraNome: s.Seguradoras?.nome_seguradora || 'N/A',
         dataInicio: formatDateForDisplay(s.vigencia_inicio),
         dataFim: formatDateForDisplay(s.vigencia_fim),
-        valorIndenizacao: s.valor_indenizacao,
+        valorIndenizacao: formatCurrency(s.valor_indenizacao),
         titularNome: s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A',
       }));
+      console.log("GerenciamentoSegurosPage: Dados formatados para a tabela:", formattedData);
       setSeguros(formattedData);
     }
     setIsLoading(false);
@@ -112,6 +132,7 @@ export default function GerenciamentoSegurosPage() {
   
   useEffect(() => {
     fetchSeguros();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const handleSearchSubmit = (event: FormEvent) => {
@@ -127,20 +148,41 @@ export default function GerenciamentoSegurosPage() {
   const confirmDeleteSeguro = async () => {
     if (!seguroToDelete || !supabase) return;
     
-    const { error } = await supabase
-      .from('Seguros')
-      .delete()
-      .eq('id_seguro', seguroToDelete.id);
+    setIsLoading(true); // Disable buttons during operation
 
-    if (error) {
-      console.error('Falha ao excluir seguro:', error.message);
-      toast({ title: "Erro ao Excluir", description: `Falha ao excluir seguro: ${error.message}`, variant: "destructive" });
-    } else {
+    // It's often better to handle cascading deletes (SeguroCoberturas, SeguroAssistencias)
+    // via database constraints (ON DELETE CASCADE) or an Edge Function for atomicity.
+    // For client-side, we'll attempt to delete these first, then the main seguro.
+    try {
+      console.log(`Attempting to delete related SeguroCoberturas for id_seguro: ${seguroToDelete.id}`);
+      const { error: coberturasError } = await supabase.from('SeguroCoberturas').delete().eq('id_seguro', seguroToDelete.id);
+      if (coberturasError) console.warn("Erro ao deletar SeguroCoberturas (pode não existir):", JSON.stringify(coberturasError, null, 2));
+
+      console.log(`Attempting to delete related SeguroAssistencias for id_seguro: ${seguroToDelete.id}`);
+      const { error: assistenciasError } = await supabase.from('SeguroAssistencias').delete().eq('id_seguro', seguroToDelete.id);
+      if (assistenciasError) console.warn("Erro ao deletar SeguroAssistencias (pode não existir):", JSON.stringify(assistenciasError, null, 2));
+
+      console.log(`Attempting to delete Seguro ID: ${seguroToDelete.id}`);
+      const { error } = await supabase
+        .from('Seguros')
+        .delete()
+        .eq('id_seguro', seguroToDelete.id);
+
+      if (error) {
+        throw error; // This will be caught by the outer catch block
+      }
+
       toast({ title: "Seguro Excluído!", description: `O seguro ${seguroToDelete.numeroApolice} foi excluído.` });
       fetchSeguros(); 
+    
+    } catch (error: any) {
+        console.error('Falha ao excluir seguro:', JSON.stringify(error, null, 2));
+        toast({ title: "Erro ao Excluir", description: error.message || "Falha ao excluir o seguro. Verifique RLS e dependências.", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
+        setIsAlertOpen(false);
+        setSeguroToDelete(null);
     }
-    setIsAlertOpen(false);
-    setSeguroToDelete(null);
   };
 
   return (
@@ -179,7 +221,7 @@ export default function GerenciamentoSegurosPage() {
               disabled={isLoading}
             />
             <Button type="submit" disabled={isLoading}>
-              <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
+              <Search className="mr-2 h-4 w-4" /> {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando...</> : 'Buscar'}
             </Button>
           </form>
         </CardContent>
@@ -209,9 +251,15 @@ export default function GerenciamentoSegurosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={9} className="text-center h-24">Carregando...</TableCell></TableRow>
-                ) : seguros.length > 0 ? (
+                {isLoading && seguros.length === 0 && !searchTerm ? (
+                  <TableRow><TableCell colSpan={9} className="text-center h-24"><Loader2 className="inline-block mr-2 h-5 w-5 animate-spin" />Carregando...</TableCell></TableRow>
+                ) : !isLoading && seguros.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
+                      {searchTerm ? `Nenhum seguro encontrado para "${searchTerm}".` : "Nenhum seguro cadastrado."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
                   seguros.map((seguro) => (
                     <TableRow key={seguro.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{seguro.id}</TableCell>
@@ -221,7 +269,7 @@ export default function GerenciamentoSegurosPage() {
                       <TableCell>{seguro.seguradoraNome}</TableCell>
                       <TableCell>{seguro.dataInicio}</TableCell>
                       <TableCell>{seguro.dataFim}</TableCell>
-                      <TableCell className="hidden lg:table-cell text-right">{formatCurrency(seguro.valorIndenizacao)}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-right">{seguro.valorIndenizacao}</TableCell>
                       <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="ghost" size="sm" asChild aria-label={`Detalhes do seguro ${seguro.numeroApolice}`}>
                            <Link href={`/admin/seguros/${seguro.id}`}>
@@ -238,18 +286,13 @@ export default function GerenciamentoSegurosPage() {
                           size="sm"
                           onClick={() => handleDeleteClick(seguro)}
                           aria-label={`Excluir seguro ${seguro.numeroApolice}`}
+                          disabled={isLoading}
                         >
                           <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
-                      Nenhum seguro cadastrado no momento.
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -258,7 +301,7 @@ export default function GerenciamentoSegurosPage() {
       </Card>
 
       {seguroToDelete && (
-        <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+        <AlertDialog open={isAlertOpen} onOpenChange={(open) => {if (!isLoading) setIsAlertOpen(open)}}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <div className="flex items-center">
@@ -266,18 +309,29 @@ export default function GerenciamentoSegurosPage() {
                 <AlertDialogTitle>Confirmar Exclusão de Seguro</AlertDialogTitle>
               </div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o seguro com apólice <strong>{seguroToDelete.numeroApolice}</strong> (ID: {seguroToDelete.id})? Esta ação é irreversível.
+                Tem certeza que deseja excluir o seguro com apólice <strong>{seguroToDelete.numeroApolice}</strong> (ID: {seguroToDelete.id})? Esta ação é irreversível e também removerá as coberturas e assistências associadas.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setSeguroToDelete(null); }}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteSeguro} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                Confirmar Exclusão
+              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setSeguroToDelete(null); }} disabled={isLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteSeguro} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
+                {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</> : "Confirmar Exclusão"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
+      {/* Supabase Integration Notes:
+        - Fetch from 'Seguros'.
+        - JOINs/Nested Selects needed for:
+          - 'Seguradoras' (for nome_seguradora)
+          - 'Veiculos' (for placa_atual, marca, modelo) -> FK: Seguros.id_veiculo = Veiculos.id_veiculo
+          - 'PessoasFisicas' (for nome_completo as titular) -> FK: Seguros.id_titular_pessoa_fisica = PessoasFisicas.id_pessoa_fisica
+          - 'Entidades' (for nome as titular) -> FK: Seguros.id_titular_entidade = Entidades.id_entidade
+        - Search: On numero_apolice (Seguros) and Veiculos.placa_atual.
+        - Delete: Deletes from 'Seguros'. Ensure related 'SeguroCoberturas' and 'SeguroAssistencias' are handled (CASCADE or explicit deletes before main record).
+        - RLS: Ensure user has SELECT permissions on all these tables and DELETE on Seguros (and related junction tables if explicit delete).
+      */}
     </div>
   );
 }
