@@ -7,10 +7,12 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea'; // Assuming Textarea is available
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileEdit, Save, XCircle, AlertTriangle, Link2, User, Building, Car, ShieldCheck, FileText } from 'lucide-react';
-// import { useToast } from "@/hooks/use-toast";
+import { FileEdit, Save, XCircle, AlertTriangle, Link2, User, Building, Car, ShieldCheck, FileText, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
 const documentTypes = [
   { value: "contrato", label: "Contrato" },
@@ -24,79 +26,28 @@ const documentTypes = [
   { value: "outro", label: "Outro" },
 ];
 
-const placeholderPessoasFisicas = [
-  { id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00" },
-  { id: "pf_002", nomeCompleto: "Maria Oliveira Costa", cpf: "987.654.321-99" },
-];
-
-const placeholderOrganizacoes = [
-  { id: "org_001", nome: "Cooperativa Alfa", cnpj: "11.222.333/0001-44" },
-  { id: "org_002", nome: "Associação Beta", cnpj: "22.333.444/0001-55" },
-];
-
-const placeholderVeiculos = [
-  { id: "vei_001", description: "Fiat Uno - ABC-1234" },
-  { id: "vei_002", description: "VW Gol - DEF-5678" },
-];
-
-const placeholderSeguros = [
-  { id: "seg_001", description: "Apólice APOLICE-2024-001 (Fiat Uno - ABC-1234)"},
-  { id: "seg_002", description: "Apólice APOLICE-2024-002 (VW Gol - DEF-5678)"},
-];
+interface GenericOption { id: string; nome: string; [key: string]: any; }
 
 type TipoAssociacao = "nenhum" | "pessoa_fisica" | "organizacao" | "veiculo" | "seguro";
 
-interface DocumentoData {
-  id: string;
-  titulo: string;
-  tipoDocumento: string;
-  observacoes?: string;
-  // Association fields - only one should be non-null
-  id_pessoa_fisica_associada?: string | null;
-  id_entidade_associada?: string | null;
-  id_veiculo_associada?: string | null;
-  id_seguro_associada?: string | null;
-  // Placeholder for other fields like nome_arquivo, data_upload etc.
-  nome_arquivo_original?: string;
+interface DocumentoDataFromDB {
+  id_arquivo: string;
+  nome_arquivo: string;
+  tipo_documento: string;
+  observacoes?: string | null;
+  id_pessoa_fisica_associada?: number | null;
+  id_entidade_associada?: number | null;
+  id_veiculo?: number | null; 
+  id_seguro?: number | null; 
+  caminho_armazenamento?: string;
   data_upload?: string;
 }
-
-// Placeholder function to fetch document data
-async function getDocumentoById(docId: string): Promise<DocumentoData | null> {
-  console.log(`Fetching documento data for ID: ${docId} (placeholder)`);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  // Supabase: Fetch from public.Arquivos where id = docId
-  if (docId === "doc_001") {
-    return {
-      id: "doc_001",
-      titulo: "Contrato Cliente Alfa Atualizado",
-      tipoDocumento: "contrato",
-      id_pessoa_fisica_associada: "pf_001",
-      nome_arquivo_original: "contrato_alfa_v2.pdf",
-      data_upload: "2025-07-05",
-      observacoes: "Versão final do contrato."
-    };
-  }
-   if (docId === "doc_002") {
-    return {
-      id: "doc_002",
-      titulo: "Laudo Veículo XYZ Detalhado",
-      tipoDocumento: "laudo",
-      id_veiculo_associada: "vei_001",
-      nome_arquivo_original: "laudo_vei_001_det.pdf",
-      data_upload: "2025-07-10",
-    };
-  }
-  // Add more cases as needed or a default for testing
-  return null;
-}
-
 
 export default function EditarDocumentoPage() {
   const router = useRouter();
   const params = useParams();
   const documentoId = params.id as string;
-  // const { toast } = useToast();
+  const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
   const [docFound, setDocFound] = useState<boolean | null>(null);
@@ -111,43 +62,104 @@ export default function EditarDocumentoPage() {
     idAssociado: '',
   });
 
+  // State for dynamic select options
+  const [pessoasFisicasOptions, setPessoasFisicasOptions] = useState<GenericOption[]>([]);
+  const [organizacoesOptions, setOrganizacoesOptions] = useState<GenericOption[]>([]);
+  const [veiculosOptions, setVeiculosOptions] = useState<GenericOption[]>([]);
+  const [segurosOptions, setSegurosOptions] = useState<GenericOption[]>([]);
+
+  const [isLoadingPessoasFisicas, setIsLoadingPessoasFisicas] = useState(false);
+  const [isLoadingOrganizacoes, setIsLoadingOrganizacoes] = useState(false);
+  const [isLoadingVeiculos, setIsLoadingVeiculos] = useState(false);
+  const [isLoadingSeguros, setIsLoadingSeguros] = useState(false);
+
   useEffect(() => {
-    if (documentoId) {
-      setIsLoading(true);
-      getDocumentoById(documentoId)
-        .then(data => {
-          if (data) {
-            setFormData({
-              titulo: data.titulo,
-              tipoDocumento: data.tipoDocumento,
-              observacoes: data.observacoes || '',
-              tipoAssociacao: 
-                data.id_pessoa_fisica_associada ? 'pessoa_fisica' :
-                data.id_entidade_associada ? 'organizacao' :
-                data.id_veiculo_associada ? 'veiculo' :
-                data.id_seguro_associada ? 'seguro' : 'nenhum',
-              idAssociado: 
-                data.id_pessoa_fisica_associada ||
-                data.id_entidade_associada ||
-                data.id_veiculo_associada ||
-                data.id_seguro_associada || '',
-            });
-            setOriginalFileName(data.nome_arquivo_original || 'Nome não disponível');
-            setOriginalUploadDate(data.data_upload ? new Date(data.data_upload).toLocaleDateString('pt-BR') : 'Data não disponível');
-            setDocFound(true);
-          } else {
-            setDocFound(false);
-            // toast({ title: "Erro", description: "Documento não encontrado.", variant: "destructive" });
-          }
-        })
-        .catch(err => {
-          console.error("Failed to fetch documento data:", err);
-          setDocFound(false);
-          // toast({ title: "Erro", description: "Falha ao carregar dados do documento.", variant: "destructive" });
-        })
-        .finally(() => setIsLoading(false));
+    if (!documentoId || !supabase) {
+      setIsLoading(false);
+      setDocFound(false);
+      if (!documentoId) toast({ title: "Erro", description: "ID do documento não fornecido.", variant: "destructive" });
+      return;
     }
-  }, [documentoId]);
+
+    const fetchAllDropdownData = async () => {
+      setIsLoadingPessoasFisicas(true);
+      supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro Pessoas Físicas", description: error.message, variant: "destructive" });
+          else setPessoasFisicasOptions(data.map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
+          setIsLoadingPessoasFisicas(false);
+        });
+
+      setIsLoadingOrganizacoes(true);
+      supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro Organizações", description: error.message, variant: "destructive" });
+          else setOrganizacoesOptions(data.map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
+          setIsLoadingOrganizacoes(false);
+        });
+      
+      setIsLoadingVeiculos(true);
+      supabase.from('Veiculos').select('id_veiculo, placa_atual, marca, modelo').order('placa_atual')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro Veículos", description: error.message, variant: "destructive" });
+          else setVeiculosOptions(data.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca || ''} ${v.modelo || ''})`.trim() })));
+          setIsLoadingVeiculos(false);
+        });
+
+      setIsLoadingSeguros(true);
+      supabase.from('Seguros').select('id_seguro, numero_apolice, PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey(nome_completo), Entidades!Seguros_id_titular_entidade_fkey(nome)').order('numero_apolice')
+        .then(({ data, error }) => {
+          if (error) toast({ title: "Erro Seguros", description: error.message, variant: "destructive" });
+          else setSegurosOptions(data.map(s => ({ 
+            id: s.id_seguro.toString(), 
+            nome: `${s.numero_apolice} (Titular: ${s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A'})`
+          })));
+          setIsLoadingSeguros(false);
+        });
+    };
+
+    const fetchDocumentData = async () => {
+      setIsLoading(true);
+      setDocFound(null);
+
+      // Fetch Document Data
+      const { data: docData, error: docError } = await supabase
+        .from('Arquivos')
+        .select('*')
+        .eq('id_arquivo', documentoId)
+        .single<DocumentoDataFromDB>();
+
+      if (docError || !docData) {
+        console.error("Erro ao buscar documento:", docError);
+        toast({ title: "Erro ao Carregar Documento", description: docError?.message || "Documento não encontrado.", variant: "destructive" });
+        setDocFound(false);
+      } else {
+        setFormData({
+          titulo: docData.nome_arquivo || '',
+          tipoDocumento: docData.tipo_documento || '',
+          observacoes: docData.observacoes || '',
+          tipoAssociacao: 
+            docData.id_pessoa_fisica_associada ? 'pessoa_fisica' :
+            docData.id_entidade_associada ? 'organizacao' :
+            docData.id_veiculo ? 'veiculo' :
+            docData.id_seguro ? 'seguro' : 'nenhum',
+          idAssociado: 
+            (docData.id_pessoa_fisica_associada ||
+            docData.id_entidade_associada ||
+            docData.id_veiculo ||
+            docData.id_seguro || '').toString(),
+        });
+        setOriginalFileName(docData.nome_arquivo || 'Nome não disponível'); // Assuming nome_arquivo from DB is original
+        setOriginalUploadDate(docData.data_upload ? new Date(docData.data_upload).toLocaleDateString('pt-BR') : 'Data não disponível');
+        setDocFound(true);
+      }
+      setIsLoading(false);
+    };
+    
+    fetchAllDropdownData();
+    fetchDocumentData();
+
+  }, [documentoId, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -164,42 +176,63 @@ export default function EditarDocumentoPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!supabase) {
+      toast({ title: "Erro de Configuração", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      return;
+    }
     setIsLoading(true);
 
     if (!formData.titulo || !formData.tipoDocumento) {
-      // toast({ title: "Campos Obrigatórios", description: "Título e Tipo são obrigatórios.", variant: "destructive" });
-      console.error("Validação: Título e Tipo são obrigatórios.");
+      toast({ title: "Campos Obrigatórios", description: "Título e Tipo de Documento são obrigatórios.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
      if (formData.tipoAssociacao !== 'nenhum' && !formData.idAssociado) {
-      // toast({ title: "Campo Obrigatório", description: "Selecione a entidade a ser associada.", variant: "destructive" });
-      console.error("Validação: Selecione a entidade a ser associada se um tipo de associação foi escolhido.");
+      toast({ title: "Campo Obrigatório", description: "Selecione a entidade específica para associar ou marque 'Nenhum'.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     const updatePayload = {
-      titulo: formData.titulo,
-      tipo_documento: formData.tipoDocumento, // ensure this matches DB column name
-      observacoes: formData.observacoes,
-      id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' ? formData.idAssociado : null,
-      id_entidade_associada: formData.tipoAssociacao === 'organizacao' ? formData.idAssociado : null,
-      id_veiculo_associada: formData.tipoAssociacao === 'veiculo' ? formData.idAssociado : null,
-      id_seguro_associada: formData.tipoAssociacao === 'seguro' ? formData.idAssociado : null,
-      // Supabase: This request would be a PATCH/PUT to public.Arquivos WHERE id = documentoId
+      nome_arquivo: formData.titulo, // Assuming nome_arquivo is the display title in your DB
+      tipo_documento: formData.tipoDocumento,
+      observacoes: formData.observacoes || null,
+      id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+      id_entidade_associada: formData.tipoAssociacao === 'organizacao' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+      id_veiculo: formData.tipoAssociacao === 'veiculo' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+      id_seguro: formData.tipoAssociacao === 'seguro' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
     };
     console.log('Form data to be submitted for update (Documento):', updatePayload);
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated document metadata update finished');
-    // toast({ title: "Documento Atualizado! (Simulado)", description: "Os metadados do documento foram salvos." });
+    const { error } = await supabase
+        .from('Arquivos')
+        .update(updatePayload)
+        .eq('id_arquivo', documentoId);
+
+    if (error) {
+        console.error("Erro ao atualizar metadados do documento:", JSON.stringify(error, null, 2));
+        toast({ title: "Erro ao Atualizar", description: error.message, variant: "destructive" });
+    } else {
+        toast({ title: "Documento Atualizado!", description: "Os metadados do documento foram salvos com sucesso." });
+        router.push('/admin/documentos'); 
+    }
     setIsLoading(false);
-    router.push('/admin/documentos'); 
   };
 
+  const getDynamicOptions = () => {
+    switch (formData.tipoAssociacao) {
+      case 'pessoa_fisica': return { options: pessoasFisicasOptions, isLoading: isLoadingPessoasFisicas };
+      case 'organizacao': return { options: organizacoesOptions, isLoading: isLoadingOrganizacoes };
+      case 'veiculo': return { options: veiculosOptions, isLoading: isLoadingVeiculos };
+      case 'seguro': return { options: segurosOptions, isLoading: isLoadingSeguros };
+      default: return { options: [], isLoading: false };
+    }
+  };
+
+  const dynamicSelectData = getDynamicOptions();
+
   if (isLoading && docFound === null) {
-    return <div className="container mx-auto px-4 py-8 md:py-12 text-center">Carregando dados do documento...</div>;
+    return <div className="container mx-auto px-4 py-8 md:py-12 text-center"><Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" /> Carregando dados do documento...</div>;
   }
 
   if (docFound === false) {
@@ -232,7 +265,7 @@ export default function EditarDocumentoPage() {
         </div>
          {originalFileName && (
           <p className="text-sm text-muted-foreground mt-1">
-            Editando metadados para: <strong>{originalFileName}</strong> (Upload em: {originalUploadDate})
+            Editando metadados para: <strong>{originalFileName}</strong> {originalUploadDate && `(Upload em: ${originalUploadDate})`}
           </p>
         )}
       </header>
@@ -241,7 +274,7 @@ export default function EditarDocumentoPage() {
         <Card className="shadow-lg mb-6">
           <CardHeader>
             <CardTitle>Informações do Documento</CardTitle>
-            <CardDescription>Atualize o título, tipo e observações do documento.</CardDescription>
+            <CardDescription>Atualize o título, tipo e observações do documento. O arquivo em si não pode ser alterado aqui.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -261,7 +294,7 @@ export default function EditarDocumentoPage() {
             </div>
              <div className="space-y-2">
               <Label htmlFor="observacoes">Observações</Label>
-              <Input id="observacoes" name="observacoes" value={formData.observacoes} onChange={handleInputChange} placeholder="Adicione observações relevantes..." />
+              <Textarea id="observacoes" name="observacoes" value={formData.observacoes} onChange={handleInputChange} placeholder="Adicione observações relevantes..." />
             </div>
           </CardContent>
         </Card>
@@ -294,14 +327,24 @@ export default function EditarDocumentoPage() {
                   formData.tipoAssociacao === 'veiculo' ? 'Veículo' :
                   formData.tipoAssociacao === 'seguro' ? 'Seguro' : 'Entidade'
                 } <span className="text-destructive">*</span></Label>
-                 {/* Supabase: Options for these selects should be loaded dynamically from their respective tables. */}
-                <Select name="idAssociado" value={formData.idAssociado} onValueChange={(value) => handleSelectChange('idAssociado', value)} required={formData.tipoAssociacao !== 'nenhum'}>
-                  <SelectTrigger id="idAssociado"><SelectValue placeholder="Selecione a entidade específica" /></SelectTrigger>
+                <Select 
+                  name="idAssociado" 
+                  value={formData.idAssociado} 
+                  onValueChange={(value) => handleSelectChange('idAssociado', value)} 
+                  required={formData.tipoAssociacao !== 'nenhum'}
+                  disabled={dynamicSelectData.isLoading}
+                >
+                  <SelectTrigger id="idAssociado">
+                    <SelectValue placeholder={dynamicSelectData.isLoading ? "Carregando..." : "Selecione a entidade específica"} />
+                  </SelectTrigger>
                   <SelectContent>
-                    {formData.tipoAssociacao === 'pessoa_fisica' && placeholderPessoasFisicas.map(pf => <SelectItem key={pf.id} value={pf.id}>{pf.nomeCompleto} ({pf.cpf})</SelectItem>)}
-                    {formData.tipoAssociacao === 'organizacao' && placeholderOrganizacoes.map(org => <SelectItem key={org.id} value={org.id}>{org.nome} ({org.cnpj})</SelectItem>)}
-                    {formData.tipoAssociacao === 'veiculo' && placeholderVeiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.description}</SelectItem>)}
-                    {formData.tipoAssociacao === 'seguro' && placeholderSeguros.map(s => <SelectItem key={s.id} value={s.id}>{s.description}</SelectItem>)}
+                    {dynamicSelectData.isLoading ? (
+                        <SelectItem value="loading" disabled>Carregando opções...</SelectItem>
+                    ) : dynamicSelectData.options.length > 0 ? (
+                        dynamicSelectData.options.map(opt => <SelectItem key={opt.id} value={opt.id}>{opt.nome}</SelectItem>)
+                    ) : (
+                        <SelectItem value="none" disabled>Nenhuma opção encontrada</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -324,18 +367,17 @@ export default function EditarDocumentoPage() {
 
 // Supabase Integration Notes:
 // - On page load (useEffect with documentoId):
-//   - Fetch document metadata from public.Arquivos where id = documentoId.
-//   - This fetch should include id_pessoa_fisica_associada, id_entidade_associada, id_veiculo_associada, id_seguro_associada.
+//   - Fetch document metadata from public.Arquivos where id_arquivo = documentoId.
+//   - This fetch should include id_pessoa_fisica_associada, id_entidade_associada, id_veiculo, id_seguro.
 //   - Pre-fill formData.titulo, formData.tipoDocumento, formData.observacoes.
 //   - Determine formData.tipoAssociacao based on which of the _associada fields is non-null.
 //   - Set formData.idAssociado to the value of that non-null _associada field.
 //   - Fetch options for PessoasFisicas, Organizacoes, Veiculos, Seguros dynamically for the association selects.
 // - On submit (handleSubmit):
 //   - Send a PUT/PATCH request to public.Arquivos for the current documentoId.
-//   - Update: titulo, tipo_documento, observacoes.
+//   - Update: nome_arquivo (from formData.titulo), tipo_documento, observacoes.
 //   - Association IDs: Based on formData.tipoAssociacao and formData.idAssociado, set the corresponding _associada field and NULLIFY the others.
 //     Example: if tipoAssociacao is 'pessoa_fisica', set id_pessoa_fisica_associada = formData.idAssociado, and set
-//              id_entidade_associada = NULL, id_veiculo_associada = NULL, id_seguro_associada = NULL.
+//              id_entidade_associada = NULL, id_veiculo = NULL, id_seguro = NULL.
 // - The actual file in Supabase Storage is NOT re-uploaded or changed on this screen. Only metadata and associations.
 
-    

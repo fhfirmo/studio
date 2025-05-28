@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent, type ChangeEvent } from 'react';
+import { useState, type FormEvent, type ChangeEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UploadCloud, Save, XCircle, FileText, Link2, User, Building, Car, ShieldCheck } from 'lucide-react';
-// import { useToast } from "@/hooks/use-toast";
+import { UploadCloud, Save, XCircle, FileText, Link2, User, Building, Car, ShieldCheck, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
 const documentTypes = [
   { value: "contrato", label: "Contrato" },
@@ -24,41 +25,101 @@ const documentTypes = [
   { value: "outro", label: "Outro" },
 ];
 
-const placeholderPessoasFisicas = [
-  { id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00" },
-  { id: "pf_002", nomeCompleto: "Maria Oliveira Costa", cpf: "987.654.321-99" },
-];
+interface GenericOption { id: string; nome: string; [key: string]: any; }
 
-const placeholderOrganizacoes = [
-  { id: "org_001", nome: "Cooperativa Alfa", cnpj: "11.222.333/0001-44" },
-  { id: "org_002", nome: "Associação Beta", cnpj: "22.333.444/0001-55" },
-];
-
-const placeholderVeiculos = [
-  { id: "vei_001", description: "Fiat Uno - ABC-1234" },
-  { id: "vei_002", description: "VW Gol - DEF-5678" },
-];
-
-const placeholderSeguros = [
-  { id: "seg_001", description: "Apólice APOLICE-2024-001 (Fiat Uno - ABC-1234)"},
-  { id: "seg_002", description: "Apólice APOLICE-2024-002 (VW Gol - DEF-5678)"},
-];
+// Placeholder options for dynamic 'Associado a' select - will be replaced by fetched data
+const placeholderPessoasFisicas: GenericOption[] = [ { id: "pf_001", nome: "João da Silva Sauro (123.456.789-00)" }];
+const placeholderVeiculos: GenericOption[] = [ { id: "vei_001", nome: "ABC-1234 (Fiat Uno)" }];
+const placeholderSeguros: GenericOption[] = [ { id: "seg_001", nome: "AP-2024-001 (Titular: João)" }];
 
 type TipoAssociacao = "nenhum" | "pessoa_fisica" | "organizacao" | "veiculo" | "seguro";
 
 export default function NovoDocumentoPage() {
   const router = useRouter();
-  // const { toast } = useToast();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const [formData, setFormData] = useState({
     titulo: '',
-    tipoDocumento: '', // Changed from tipo to tipoDocumento for clarity
-    observacoes: '',
+    tipoDocumento: '',
+    observacoes: '', // Added from original prompt logic, though not explicitly in this specific prompt's form. Assuming it might be desired.
     tipoAssociacao: 'nenhum' as TipoAssociacao,
     idAssociado: '',
   });
+
+  // State for dynamic select options
+  const [pessoasFisicasOptions, setPessoasFisicasOptions] = useState<GenericOption[]>([]);
+  const [organizacoesOptions, setOrganizacoesOptions] = useState<GenericOption[]>([]);
+  const [veiculosOptions, setVeiculosOptions] = useState<GenericOption[]>([]);
+  const [segurosOptions, setSegurosOptions] = useState<GenericOption[]>([]);
+
+  const [isLoadingPessoasFisicas, setIsLoadingPessoasFisicas] = useState(false);
+  const [isLoadingOrganizacoes, setIsLoadingOrganizacoes] = useState(false);
+  const [isLoadingVeiculos, setIsLoadingVeiculos] = useState(false);
+  const [isLoadingSeguros, setIsLoadingSeguros] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Fetch Pessoas Fisicas
+    setIsLoadingPessoasFisicas(true);
+    supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo')
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Erro ao buscar Pessoas Físicas:", error);
+          toast({ title: "Erro ao Carregar Pessoas Físicas", description: error.message, variant: "destructive" });
+        } else {
+          setPessoasFisicasOptions(data.map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
+        }
+        setIsLoadingPessoasFisicas(false);
+      });
+
+    // Fetch Organizacoes
+    setIsLoadingOrganizacoes(true);
+    supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome')
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Erro ao buscar Organizações:", error);
+          toast({ title: "Erro ao Carregar Organizações", description: error.message, variant: "destructive" });
+        } else {
+          setOrganizacoesOptions(data.map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
+        }
+        setIsLoadingOrganizacoes(false);
+      });
+
+    // Fetch Veiculos
+    setIsLoadingVeiculos(true);
+    supabase.from('Veiculos').select('id_veiculo, placa_atual, marca, modelo').order('placa_atual')
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Erro ao buscar Veículos:", error);
+          toast({ title: "Erro ao Carregar Veículos", description: error.message, variant: "destructive" });
+        } else {
+          setVeiculosOptions(data.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca || ''} ${v.modelo || ''})`.trim() })));
+        }
+        setIsLoadingVeiculos(false);
+      });
+
+    // Fetch Seguros
+    setIsLoadingSeguros(true);
+    supabase.from('Seguros').select('id_seguro, numero_apolice, PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey(nome_completo), Entidades!Seguros_id_titular_entidade_fkey(nome)').order('numero_apolice')
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Erro ao buscar Seguros:", error);
+          toast({ title: "Erro ao Carregar Seguros", description: error.message, variant: "destructive" });
+        } else {
+          setSegurosOptions(data.map(s => ({ 
+            id: s.id_seguro.toString(), 
+            nome: `${s.numero_apolice} (Titular: ${s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A'})`
+          })));
+        }
+        setIsLoadingSeguros(false);
+      });
+
+  }, [toast]);
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -77,8 +138,9 @@ export default function NovoDocumentoPage() {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
+      // Auto-fill titulo if it's empty
       if (!formData.titulo) {
-        setFormData(prev => ({ ...prev, titulo: file.name }));
+        setFormData(prev => ({ ...prev, titulo: file.name.replace(/\.[^/.]+$/, "") })); // Remove extension
       }
     } else {
       setSelectedFile(null);
@@ -88,41 +150,92 @@ export default function NovoDocumentoPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedFile || !formData.titulo || !formData.tipoDocumento) {
-      // toast({ title: "Campos Obrigatórios", description: "Arquivo, Título e Tipo são obrigatórios.", variant: "destructive" });
-      console.error("Validação: Arquivo, Título e Tipo são obrigatórios.");
+      toast({ title: "Campos Obrigatórios", description: "Arquivo, Título e Tipo de Documento são obrigatórios.", variant: "destructive" });
       return;
     }
     if (formData.tipoAssociacao !== 'nenhum' && !formData.idAssociado) {
-      // toast({ title: "Campo Obrigatório", description: "Selecione a entidade a ser associada.", variant: "destructive" });
-      console.error("Validação: Selecione a entidade a ser associada se um tipo de associação foi escolhido.");
+      toast({ title: "Campo Obrigatório", description: "Selecione a entidade específica para associar ou marque 'Nenhum'.", variant: "destructive" });
+      return;
+    }
+    if (!supabase) {
+      toast({ title: "Erro de Configuração", description: "Cliente Supabase não inicializado.", variant: "destructive" });
       return;
     }
     setIsLoading(true);
+    setUploadProgress(0); // Reset progress
 
-    const submissionPayload = {
-      titulo: formData.titulo,
-      tipoDocumento: formData.tipoDocumento,
-      observacoes: formData.observacoes,
-      id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' ? formData.idAssociado : null,
-      id_entidade_associada: formData.tipoAssociacao === 'organizacao' ? formData.idAssociado : null,
-      id_veiculo_associada: formData.tipoAssociacao === 'veiculo' ? formData.idAssociado : null,
-      id_seguro_associada: formData.tipoAssociacao === 'seguro' ? formData.idAssociado : null,
-      // Supabase: After file upload to Storage, add:
-      // nome_arquivo_storage: selectedFile.name (or generated name),
-      // caminho_storage: path_from_supabase_storage,
-      // mime_type: selectedFile.type,
-      // tamanho_bytes: selectedFile.size,
-      // data_upload: new Date().toISOString(),
-    };
-    console.log('Form data to be submitted (Documento):', submissionPayload);
-    console.log('File to be uploaded:', selectedFile);
+    try {
+      // 1. Upload file to Supabase Storage
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `documentos/${fileName}`; // Example path: bucket_name/documentos/timestamp.ext
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('Simulated document upload and metadata save finished');
-    // toast({ title: "Documento Enviado! (Simulado)", description: "O documento foi salvo com sucesso." });
-    setIsLoading(false);
-    router.push('/admin/documentos'); 
+      console.log(`NovoDocumentoPage: Iniciando upload para Supabase Storage. Path: ${filePath}`);
+      
+      // For Storage RLS, ensure authenticated users (or specific roles) have INSERT permission on 'documentos_bucket' (or your chosen bucket name).
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documentos_bucket') // Replace with your actual bucket name
+        .upload(filePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false,
+          // contentType: selectedFile.type // Supabase client usually infers this correctly
+        });
+
+      if (uploadError) {
+        console.error("NovoDocumentoPage: Erro no upload para Supabase Storage:", JSON.stringify(uploadError, null, 2), uploadError);
+        throw uploadError;
+      }
+
+      console.log("NovoDocumentoPage: Upload para Supabase Storage bem-sucedido:", uploadData);
+      setUploadProgress(100); // Simulate full progress for now
+
+      // 2. Save metadata to 'Arquivos' table
+      const arquivoPayload = {
+        nome_arquivo: formData.titulo, // Using the user-defined title as nome_arquivo
+        caminho_armazenamento: uploadData.path, // Path returned from storage
+        tipo_mime: selectedFile.type,
+        tamanho_bytes: selectedFile.size,
+        tipo_documento: formData.tipoDocumento,
+        id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' ? parseInt(formData.idAssociado) : null,
+        id_entidade_associada: formData.tipoAssociacao === 'organizacao' ? parseInt(formData.idAssociado) : null,
+        id_veiculo: formData.tipoAssociacao === 'veiculo' ? parseInt(formData.idAssociado) : null,
+        id_seguro: formData.tipoAssociacao === 'seguro' ? parseInt(formData.idAssociado) : null,
+        // user_id_upload: (await supabase.auth.getUser()).data.user?.id, // Get current user ID
+        observacoes: formData.observacoes || null, // Added from original assumption
+      };
+      
+      console.log('NovoDocumentoPage: Payload para tabela "Arquivos":', arquivoPayload);
+      const { error: dbError } = await supabase.from('Arquivos').insert(arquivoPayload);
+
+      if (dbError) {
+        console.error("NovoDocumentoPage: Erro ao salvar metadados no DB:", JSON.stringify(dbError, null, 2), dbError);
+        // Consider deleting the uploaded file from storage if DB insert fails to avoid orphaned files
+        // await supabase.storage.from('documentos_bucket').remove([filePath]);
+        throw dbError;
+      }
+
+      toast({ title: "Documento Enviado!", description: "O documento foi salvo com sucesso." });
+      router.push('/admin/documentos'); 
+
+    } catch (error: any) {
+      console.error('NovoDocumentoPage: Falha no envio do documento:', error);
+      toast({ title: "Erro ao Enviar Documento", description: error.message || "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const getDynamicOptions = () => {
+    switch (formData.tipoAssociacao) {
+      case 'pessoa_fisica': return { options: pessoasFisicasOptions, isLoading: isLoadingPessoasFisicas };
+      case 'organizacao': return { options: organizacoesOptions, isLoading: isLoadingOrganizacoes };
+      case 'veiculo': return { options: veiculosOptions, isLoading: isLoadingVeiculos };
+      case 'seguro': return { options: segurosOptions, isLoading: isLoadingSeguros };
+      default: return { options: [], isLoading: false };
+    }
+  };
+
+  const dynamicSelectData = getDynamicOptions();
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -163,16 +276,20 @@ export default function NovoDocumentoPage() {
                 </Select>
               </div>
             </div>
-             <div className="space-y-2">
+            <div className="space-y-2">
                 <Label htmlFor="fileUpload">Arquivo <span className="text-destructive">*</span></Label>
                 <Input id="fileUpload" name="fileUpload" type="file" onChange={handleFileChange} required className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/>
                 {selectedFile && <p className="text-sm text-muted-foreground mt-1">Selecionado: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)</p>}
             </div>
-             {isLoading && (
+            <div className="space-y-2">
+              <Label htmlFor="observacoes">Observações</Label>
+              <Textarea id="observacoes" name="observacoes" value={formData.observacoes} onChange={handleInputChange} placeholder="Adicione observações relevantes..." />
+            </div>
+            {isLoading && uploadProgress > 0 && (
                 <div className="space-y-1">
-                    <Label>Progresso do Upload</Label>
+                    <Label>Progresso do Upload: {uploadProgress}%</Label>
                     <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary animate-pulse" style={{ width: `50%`}}></div>
+                        <div className="h-full bg-primary transition-all duration-150" style={{ width: `${uploadProgress}%`}}></div>
                     </div>
                 </div>
             )}
@@ -207,13 +324,24 @@ export default function NovoDocumentoPage() {
                   formData.tipoAssociacao === 'veiculo' ? 'Veículo' :
                   formData.tipoAssociacao === 'seguro' ? 'Seguro' : 'Entidade'
                 } <span className="text-destructive">*</span></Label>
-                <Select name="idAssociado" value={formData.idAssociado} onValueChange={(value) => handleSelectChange('idAssociado', value)} required={formData.tipoAssociacao !== 'nenhum'}>
-                  <SelectTrigger id="idAssociado"><SelectValue placeholder="Selecione a entidade específica" /></SelectTrigger>
+                <Select 
+                  name="idAssociado" 
+                  value={formData.idAssociado} 
+                  onValueChange={(value) => handleSelectChange('idAssociado', value)} 
+                  required={formData.tipoAssociacao !== 'nenhum'}
+                  disabled={dynamicSelectData.isLoading}
+                >
+                  <SelectTrigger id="idAssociado">
+                    <SelectValue placeholder={dynamicSelectData.isLoading ? "Carregando..." : "Selecione a entidade específica"} />
+                  </SelectTrigger>
                   <SelectContent>
-                    {formData.tipoAssociacao === 'pessoa_fisica' && placeholderPessoasFisicas.map(pf => <SelectItem key={pf.id} value={pf.id}>{pf.nomeCompleto} ({pf.cpf})</SelectItem>)}
-                    {formData.tipoAssociacao === 'organizacao' && placeholderOrganizacoes.map(org => <SelectItem key={org.id} value={org.id}>{org.nome} ({org.cnpj})</SelectItem>)}
-                    {formData.tipoAssociacao === 'veiculo' && placeholderVeiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.description}</SelectItem>)}
-                    {formData.tipoAssociacao === 'seguro' && placeholderSeguros.map(s => <SelectItem key={s.id} value={s.id}>{s.description}</SelectItem>)}
+                    {dynamicSelectData.isLoading ? (
+                      <SelectItem value="loading" disabled>Carregando opções...</SelectItem>
+                    ) : dynamicSelectData.options.length > 0 ? (
+                      dynamicSelectData.options.map(opt => <SelectItem key={opt.id} value={opt.id}>{opt.nome}</SelectItem>)
+                    ) : (
+                      <SelectItem value="none" disabled>Nenhuma opção encontrada</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -226,7 +354,8 @@ export default function NovoDocumentoPage() {
             <XCircle className="mr-2 h-5 w-5" /> Cancelar
           </Button>
           <Button type="submit" disabled={isLoading || !selectedFile}>
-            <UploadCloud className="mr-2 h-5 w-5" /> {isLoading ? 'Enviando...' : 'Enviar Arquivo'}
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-5 w-5" />}
+             {isLoading ? 'Enviando...' : 'Enviar Arquivo'}
           </Button>
         </CardFooter>
       </form>
@@ -235,17 +364,15 @@ export default function NovoDocumentoPage() {
 }
     
 // Supabase Integration Notes:
-// - On submit:
-//   1. Upload selectedFile to Supabase Storage (e.g., to a 'documentos_bucket').
+// - Dynamic Selects: Fetch PessoasFisicas, Entidades, Veiculos, Seguros from Supabase.
+// - Form Submission:
+//   1. Upload selectedFile to Supabase Storage (e.g., to a 'documentos_bucket'). Ensure appropriate RLS for Storage.
 //   2. On successful upload, get the file path/URL from Supabase Storage.
-//   3. Save document metadata to a Supabase database table (e.g., 'Arquivos').
-//      - Include: titulo, tipo_documento, observacoes.
-//      - From file: nome_arquivo_storage, caminho_storage, mime_type, tamanho_bytes, data_upload.
-//      - Association IDs: id_pessoa_fisica_associada, id_entidade_associada, id_veiculo_associada, id_seguro_associada.
+//   3. Save document metadata to public."Arquivos" table.
+//      - Include: nome_arquivo (from formData.titulo), caminho_armazenamento, tipo_mime, tamanho_bytes, tipo_documento, observacoes.
+//      - Association IDs: id_pessoa_fisica_associada, id_entidade_associada, id_veiculo, id_seguro.
 //        Only ONE of these should be populated based on formData.tipoAssociacao and formData.idAssociado. The others should be NULL.
-// - Fetch options for PessoasFisicas, Organizacoes, Veiculos, Seguros dynamically for the association selects.
-// - Handle errors for both Storage upload and database insertion.
-// - Consider implementing drag-and-drop functionality for a better UX.
-// - For progress bar, use a real progress value from Supabase storage upload events.
+//      - user_id_upload (from current authenticated user).
+//   (Ideally, Storage upload and DB insert should be managed carefully, perhaps via an Edge Function if atomicity is critical).
+// - Progress bar: Could be implemented using Supabase Storage's upload events if more granular progress is needed than just start/finish.
 
-    
