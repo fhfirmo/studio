@@ -8,13 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// Removed RadioGroup import as it's not used for filters here.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ShieldCheck, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle, Loader2 } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, getMonth, getYear } from 'date-fns'; // Added getMonth, getYear
+import { ptBR } from 'date-fns/locale';
 
 interface GenericOption { value: string; label: string; }
 
@@ -28,7 +28,7 @@ interface SeguroSupabase {
   id_titular_pessoa_fisica: number | null;
   id_titular_entidade: number | null;
   Seguradoras: { nome_seguradora: string } | null;
-  Veiculos: { placa_atual: string, marca?: string | null, modelo?: string | null } | null; // marca and modelo are direct from Veiculos
+  Veiculos: { placa_atual: string, marca?: string | null, modelo?: string | null } | null;
   PessoasFisicas: { nome_completo: string } | null;
   Entidades: { nome: string } | null;
 }
@@ -42,13 +42,22 @@ interface SeguroRow {
   dataFim: string;
   valorIndenizacao: string | null;
   titularNome: string | null;
+  // For client-side filtering
+  _vigenciaFimDate: Date | null; 
 }
+
+const mesesOptions = [
+  { value: "todos", label: "Todos os Meses" },
+  ...Array.from({ length: 12 }, (_, i) => ({ value: (i + 1).toString(), label: format(new Date(2000, i), "MMMM", { locale: ptBR }) }))
+];
 
 const initialFilters = {
   searchTerm: '',
   idSeguradora: 'todos',
   tipoTitular: 'todos' as 'todos' | 'pessoa_fisica' | 'organizacao',
   idTitular: '',
+  mesFimVigencia: 'todos',
+  anoFimVigencia: '',
 };
 
 export default function GerenciamentoSegurosPage() {
@@ -110,25 +119,6 @@ export default function GerenciamentoSegurosPage() {
       });
   };
 
-  useEffect(() => {
-    fetchDropdownOptions();
-    fetchSeguros();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
-
-  // Effect to update currentTitularOptions based on filters.tipoTitular
-  useEffect(() => {
-    console.log("GerenciamentoSegurosPage: Effect for currentTitularOptions. filters.tipoTitular:", filters.tipoTitular);
-    if (filters.tipoTitular === 'pessoa_fisica') {
-      setCurrentTitularOptions(titularPessoaFisicaOptions);
-    } else if (filters.tipoTitular === 'organizacao') {
-      setCurrentTitularOptions(titularOrganizacaoOptions);
-    } else { // 'todos' or empty
-      setCurrentTitularOptions([]);
-    }
-  }, [filters.tipoTitular, titularPessoaFisicaOptions, titularOrganizacaoOptions]);
-
-
   const fetchSeguros = async () => {
     if (!supabase) {
       toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
@@ -182,7 +172,7 @@ export default function GerenciamentoSegurosPage() {
 
       if (error) throw error;
 
-      const formattedData: SeguroRow[] = (data || []).map((s: SeguroSupabase) => ({
+      let formattedData: SeguroRow[] = (data || []).map((s: SeguroSupabase) => ({
         id: s.id_seguro,
         numeroApolice: s.numero_apolice,
         veiculoDesc: s.Veiculos ? `${s.Veiculos.placa_atual} (${s.Veiculos.marca || ''} ${s.Veiculos.modelo || ''})`.trim() : 'N/A',
@@ -191,7 +181,20 @@ export default function GerenciamentoSegurosPage() {
         dataFim: formatDateForDisplay(s.vigencia_fim),
         valorIndenizacao: formatCurrency(s.valor_indenizacao),
         titularNome: s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A',
+        _vigenciaFimDate: s.vigencia_fim && isValid(parseISO(s.vigencia_fim)) ? parseISO(s.vigencia_fim) : null,
       }));
+
+      // Client-side filtering for month/year of vigencia_fim
+      // For large datasets, this should be done server-side for performance.
+      if (filters.mesFimVigencia !== 'todos') {
+        const selectedMonth = parseInt(filters.mesFimVigencia, 10) - 1; // 0-indexed for getMonth()
+        formattedData = formattedData.filter(s => s._vigenciaFimDate && getMonth(s._vigenciaFimDate) === selectedMonth);
+      }
+      if (filters.anoFimVigencia) {
+        const selectedYear = parseInt(filters.anoFimVigencia, 10);
+        formattedData = formattedData.filter(s => s._vigenciaFimDate && getYear(s._vigenciaFimDate) === selectedYear);
+      }
+
       setSeguros(formattedData);
     } catch (error: any) {
       console.error("Erro ao buscar seguros:", JSON.stringify(error, null, 2), error);
@@ -207,6 +210,22 @@ export default function GerenciamentoSegurosPage() {
     }
   };
   
+  useEffect(() => {
+    fetchDropdownOptions();
+    fetchSeguros();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  useEffect(() => {
+    if (filters.tipoTitular === 'pessoa_fisica') {
+      setCurrentTitularOptions(titularPessoaFisicaOptions);
+    } else if (filters.tipoTitular === 'organizacao') {
+      setCurrentTitularOptions(titularOrganizacaoOptions);
+    } else { 
+      setCurrentTitularOptions([]);
+    }
+  }, [filters.tipoTitular, titularPessoaFisicaOptions, titularOrganizacaoOptions]);
+  
   const handleFilterChange = (e: ChangeEvent<HTMLInputElement>) => {
     setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
@@ -215,8 +234,7 @@ export default function GerenciamentoSegurosPage() {
     setFilters(prevFiltros => {
       const newFilters = { ...prevFiltros, [name]: value };
       if (name === 'tipoTitular') {
-        console.log("GerenciamentoSegurosPage: tipoTitular changed, resetting idTitular.");
-        newFilters.idTitular = ''; // Reset idTitular when tipoTitular changes
+        newFilters.idTitular = ''; 
       }
       return newFilters;
     });
@@ -237,8 +255,6 @@ export default function GerenciamentoSegurosPage() {
     
     setIsLoading(true);
     try {
-      // It's safer to rely on DB cascade deletes or handle this in an Edge Function.
-      // For now, attempting client-side sequential delete for related tables.
       const { error: coberturasError } = await supabase.from('SeguroCoberturas').delete().eq('id_seguro', seguroToDelete.id);
       if (coberturasError) console.warn("Erro ao deletar SeguroCoberturas:", JSON.stringify(coberturasError, null, 2));
 
@@ -259,6 +275,11 @@ export default function GerenciamentoSegurosPage() {
         setIsAlertOpen(false);
         setSeguroToDelete(null);
     }
+  };
+
+  const clearFilters = () => {
+    setFilters(initialFilters);
+    fetchSeguros(); // Re-fetch with default filters after clearing
   };
 
   return (
@@ -287,7 +308,7 @@ export default function GerenciamentoSegurosPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearchSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
               <div className="space-y-1">
                 <Label htmlFor="searchTerm">Nº Apólice / Placa Veículo</Label>
                 <Input
@@ -358,9 +379,23 @@ export default function GerenciamentoSegurosPage() {
                   </Select>
                 </div>
               )}
+               <div className="space-y-1">
+                <Label htmlFor="mesFimVigencia">Mês Fim Vigência</Label>
+                <Select name="mesFimVigencia" value={filters.mesFimVigencia} onValueChange={(v) => handleSelectFilterChange('mesFimVigencia', v)} disabled={isLoading}>
+                  <SelectTrigger id="mesFimVigencia"><SelectValue placeholder="Todos os Meses" /></SelectTrigger>
+                  <SelectContent>
+                    {mesesOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="anoFimVigencia">Ano Fim Vigência</Label>
+                <Input id="anoFimVigencia" name="anoFimVigencia" type="number" placeholder="AAAA" value={filters.anoFimVigencia} onChange={handleFilterChange} disabled={isLoading} />
+              </div>
             </div>
-            <div className="flex justify-end">
-              <Button type="submit" disabled={isLoading}>
+            <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2">
+              <Button type="button" variant="outline" onClick={clearFilters} disabled={isLoading} className="w-full sm:w-auto">Limpar Filtros</Button>
+              <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                 <Search className="mr-2 h-4 w-4" /> {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando...</> : 'Buscar'}
               </Button>
             </div>
@@ -397,7 +432,7 @@ export default function GerenciamentoSegurosPage() {
                 ) : !isLoading && seguros.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
-                      {filters.searchTerm || filters.idSeguradora !== 'todos' || filters.idTitular ? `Nenhum seguro encontrado para os filtros aplicados.` : "Nenhum seguro cadastrado."}
+                      {filters.searchTerm || filters.idSeguradora !== 'todos' || filters.idTitular || filters.mesFimVigencia !== 'todos' || filters.anoFimVigencia ? `Nenhum seguro encontrado para os filtros aplicados.` : "Nenhum seguro cadastrado."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -466,5 +501,11 @@ export default function GerenciamentoSegurosPage() {
   );
 }
     
+// Supabase Integration Notes:
+// - Fetch from 'Seguros' table.
+// - JOIN/Select from 'Seguradoras', 'Veiculos' (then 'ModelosVeiculo'), 'PessoasFisicas', 'Entidades'.
+// - Filters: numero_apolice, id_seguradora, id_titular_pessoa_fisica OR id_titular_entidade.
+// - Client-side filtering for month/year of vigencia_fim is a temporary measure. Server-side would be better.
+// - Delete: Needs to handle related 'SeguroCoberturas' and 'SeguroAssistencias' (ideally via DB cascade or Edge Function).
+// - RLS: Ensure user has SELECT on all involved tables, and DELETE on Seguros and linking tables.
 
-    
