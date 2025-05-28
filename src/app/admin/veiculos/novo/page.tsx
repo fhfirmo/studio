@@ -47,6 +47,8 @@ const tipoEspecieOptions: GenericOption[] = [
   { value: "Carro passeio - Automóvel de passeio", label: "Carro passeio - Automóvel de passeio" },
   { value: "Van - Utilitário/ Comercial Leve", label: "Van - Utilitário/ Comercial Leve" },
   { value: "Pickup - Caminhonete (ou Pickup)", label: "Pickup - Caminhonete (ou Pickup)" },
+  { value: "Micro-ônibus - Veículo de transporte coletivo leve", label: "Micro-ônibus - Veículo de transporte coletivo leve" },
+  { value: "Ônibus - Veículo de transporte coletivo pesado", label: "Ônibus - Veículo de transporte coletivo pesado" },
   { value: "Outro", label: "Outro (Especificar em Observações)"},
 ];
 
@@ -331,7 +333,7 @@ export default function NovoVeiculoPage() {
       router.push('/admin/veiculos');
 
     } catch (error: any) {
-        console.error('Erro ao cadastrar veículo:', JSON.stringify(error, null, 2));
+        console.error('Erro ao cadastrar veículo:', JSON.stringify(error, null, 2), error);
         if (error.code === '22001') { 
             toast({ title: "Erro ao Cadastrar", description: `Um dos campos de texto é muito longo para o banco de dados. Verifique os dados e tente novamente. Detalhe: ${error.message}`, variant: "destructive", duration: 7000 });
         } else if (error.code === '23505') { 
@@ -619,11 +621,13 @@ export default function NovoVeiculoPage() {
 /*
 Supabase Integration Notes:
 - Database schema:
-  - `Veiculos` table has `codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`.
-  - `tipo_especie` is a dropdown.
+  - `Veiculos` table now has direct `marca`, `modelo` fields. `versao` is removed.
+  - CRLV fields are incorporated directly.
+  - FIPE fields (`codigo_fipe VARCHAR(20)`, `valor_fipe NUMERIC(10,2)`, `data_consulta_fipe DATE`, `mes_referencia_fipe VARCHAR(50)`) are included.
 - FIPE API (Parallelum): Multi-step fetch logic (Marca -> Modelo/Ano -> Detalhes) is implemented.
-- `handleSubmit`: Saves vehicle data including FIPE fields and linked motoristas (to `VeiculoMotoristas`).
+- `handleSubmit`: Saves vehicle data including direct FIPE fields and linked motoristas (to `VeiculoMotoristas`).
 - Dynamic selects for Proprietário (PessoasFisicas/Entidades) and CNHs (for selected motorista).
+- Tipo/Espécie is now a dropdown.
 */
 
     
