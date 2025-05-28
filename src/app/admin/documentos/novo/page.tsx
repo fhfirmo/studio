@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent, type ChangeEvent, useEffect } from 'react';
@@ -33,7 +34,7 @@ export default function NovoDocumentoPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0); // Placeholder for future progress bar
 
   const [formData, setFormData] = useState({
     titulo: '',
@@ -56,57 +57,59 @@ export default function NovoDocumentoPage() {
   useEffect(() => {
     if (!supabase) return;
 
-    setIsLoadingPessoasFisicas(true);
-    supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo')
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Erro ao buscar Pessoas Físicas:", error);
-          toast({ title: "Erro ao Carregar Pessoas Físicas", description: error.message, variant: "destructive" });
-        } else {
-          setPessoasFisicasOptions((data || []).map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
-        }
-        setIsLoadingPessoasFisicas(false);
-      });
+    const fetchAllOptions = async () => {
+      setIsLoadingPessoasFisicas(true);
+      supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar Pessoas Físicas:", error);
+            toast({ title: "Erro ao Carregar Pessoas Físicas", description: error.message, variant: "destructive" });
+          } else {
+            setPessoasFisicasOptions((data || []).map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
+          }
+          setIsLoadingPessoasFisicas(false);
+        });
 
-    setIsLoadingOrganizacoes(true);
-    supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome')
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Erro ao buscar Organizações:", error);
-          toast({ title: "Erro ao Carregar Organizações", description: error.message, variant: "destructive" });
-        } else {
-          setOrganizacoesOptions((data || []).map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
-        }
-        setIsLoadingOrganizacoes(false);
-      });
+      setIsLoadingOrganizacoes(true);
+      supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar Organizações:", error);
+            toast({ title: "Erro ao Carregar Organizações", description: error.message, variant: "destructive" });
+          } else {
+            setOrganizacoesOptions((data || []).map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
+          }
+          setIsLoadingOrganizacoes(false);
+        });
 
-    setIsLoadingVeiculos(true);
-    supabase.from('Veiculos').select('id_veiculo, placa_atual, marca, modelo').order('placa_atual')
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Erro ao buscar Veículos:", error);
-          toast({ title: "Erro ao Carregar Veículos", description: error.message, variant: "destructive" });
-        } else {
-          setVeiculosOptions((data || []).map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca || ''} ${v.modelo || ''})`.trim() })));
-        }
-        setIsLoadingVeiculos(false);
-      });
+      setIsLoadingVeiculos(true);
+      supabase.from('Veiculos').select('id_veiculo, placa_atual, marca, modelo').order('placa_atual')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar Veículos:", error);
+            toast({ title: "Erro ao Carregar Veículos", description: error.message, variant: "destructive" });
+          } else {
+            setVeiculosOptions((data || []).map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca || ''} ${v.modelo || ''})`.trim() })));
+          }
+          setIsLoadingVeiculos(false);
+        });
 
-    setIsLoadingSeguros(true);
-    supabase.from('Seguros').select('id_seguro, numero_apolice, PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey(nome_completo), Entidades!Seguros_id_titular_entidade_fkey(nome)').order('numero_apolice')
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Erro ao buscar Seguros:", error);
-          toast({ title: "Erro ao Carregar Seguros", description: error.message, variant: "destructive" });
-        } else {
-          setSegurosOptions((data || []).map(s => ({ 
-            id: s.id_seguro.toString(), 
-            nome: `${s.numero_apolice} (Titular: ${s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A'})`
-          })));
-        }
-        setIsLoadingSeguros(false);
-      });
-
+      setIsLoadingSeguros(true);
+      supabase.from('Seguros').select('id_seguro, numero_apolice, PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey(nome_completo), Entidades!Seguros_id_titular_entidade_fkey(nome)').order('numero_apolice')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar Seguros:", error);
+            toast({ title: "Erro ao Carregar Seguros", description: error.message, variant: "destructive" });
+          } else {
+            setSegurosOptions((data || []).map(s => ({ 
+              id: s.id_seguro.toString(), 
+              nome: `${s.numero_apolice} (Titular: ${s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A'})`
+            })));
+          }
+          setIsLoadingSeguros(false);
+        });
+    };
+    fetchAllOptions();
   }, [toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -153,20 +156,23 @@ export default function NovoDocumentoPage() {
 
     try {
       const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`; 
-      const filePath = `documentos/${fileName}`; 
+      const fileNameInStorage = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`; 
+      const filePath = `documentos/${fileNameInStorage}`; 
 
       console.log(`NovoDocumentoPage: Iniciando upload para Supabase Storage. Bucket: documentos_bucket, Path: ${filePath}`);
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documentos_bucket') 
+        .from('documentos_bucket') // <<<< ENSURE THIS IS CORRECT
         .upload(filePath, selectedFile, {
           cacheControl: '3600',
           upsert: false,
+          // onUploadProgress: (progress) => { // This feature might not be directly available or might need a different setup
+          //   setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
+          // }
         });
 
       if (uploadError) {
         console.error("NovoDocumentoPage: Erro no upload para Supabase Storage:", JSON.stringify(uploadError, null, 2), uploadError);
-        throw uploadError; 
+        throw uploadError; // Throw to be caught by the outer catch block
       }
 
       console.log("NovoDocumentoPage: Upload para Supabase Storage bem-sucedido:", uploadData);
@@ -176,8 +182,8 @@ export default function NovoDocumentoPage() {
       const userIdUpload = user?.id;
 
       const arquivoPayload = {
-        nome_arquivo: formData.titulo,
-        caminho_armazenamento: uploadData.path,
+        nome_arquivo: formData.titulo, // User-defined title
+        caminho_armazenamento: uploadData.path, // Path in Supabase Storage
         tipo_mime: selectedFile.type,
         tamanho_bytes: selectedFile.size,
         tipo_documento: formData.tipoDocumento,
@@ -186,7 +192,7 @@ export default function NovoDocumentoPage() {
         id_veiculo: formData.tipoAssociacao === 'veiculo' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
         id_seguro: formData.tipoAssociacao === 'seguro' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
         user_id_upload: userIdUpload || null,
-        observacoes: formData.observacoes || null,
+        observacoes: formData.observacoes || null, // Include observations
       };
       
       console.log('NovoDocumentoPage: Payload para tabela "Arquivos":', arquivoPayload);
@@ -194,9 +200,10 @@ export default function NovoDocumentoPage() {
 
       if (dbError) {
         console.error("NovoDocumentoPage: Erro ao salvar metadados no DB:", JSON.stringify(dbError, null, 2), dbError);
+        // Attempt to delete the orphaned file from storage
         console.log("NovoDocumentoPage: Tentando deletar arquivo do Storage devido a erro no DB:", filePath);
-        await supabase.storage.from('documentos_bucket').remove([filePath]);
-        throw dbError;
+        await supabase.storage.from('documentos_bucket').remove([filePath]); // <<<< ENSURE THIS IS CORRECT
+        throw dbError; // Throw to be caught by the outer catch block
       }
 
       toast({ title: "Documento Enviado!", description: "O documento foi salvo com sucesso." });
@@ -205,7 +212,8 @@ export default function NovoDocumentoPage() {
     } catch (error: any) {
       console.error('NovoDocumentoPage: Falha no envio do documento:', error);
       const errorMessage = error.message || error.error || "Ocorreu um erro inesperado.";
-      if (errorMessage.toLowerCase().includes('bucket not found')) {
+      // Check for the specific "Bucket not found" error message
+      if (typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('bucket not found')) {
         toast({
           title: "Erro de Configuração do Storage",
           description: `O bucket 'documentos_bucket' não foi encontrado no Supabase. Verifique se ele existe e se as políticas de acesso estão corretas.`,
@@ -360,17 +368,10 @@ export default function NovoDocumentoPage() {
 }
     
 // Supabase Integration Notes:
-// - Storage Bucket: Ensure 'documentos_bucket' exists in your Supabase Storage.
-// - Storage Policies: Set up policies on 'documentos_bucket' to allow uploads (INSERT) for authenticated users.
-// - Arquivos Table RLS: Ensure RLS on public."Arquivos" allows INSERT for the user performing the upload.
-// - User ID for Upload: Fetches current user's ID via supabase.auth.getUser() to store in user_id_upload.
-// - Atomic Operations: Ideally, file upload to Storage and metadata insert to "Arquivos" table should be atomic.
-//   If DB insert fails after file upload, the file should be deleted from Storage.
-//   This is best handled via a Supabase Edge Function. The current client-side attempt to delete is a fallback.
-// - Progress Bar: Supabase JS v2 client's .upload() method doesn't directly offer an onUploadProgress callback in the same way
-//   older versions or other libraries might. For true progress, you might need to use XHR or a library that wraps it,
-//   or if Supabase JS client offers a different mechanism (like resumable uploads with progress) explore that.
-//   For now, setUploadProgress(100) is a simple simulation on success.
-// - Dynamic Selects: Fetch options for PessoasFisicas, Entidades, Veiculos, Seguros for association.
-// - Payload to "Arquivos": Includes nome_arquivo (user-defined title), caminho_armazenamento (from Storage upload), 
-//   tipo_mime, tamanho_bytes, tipo_documento, user_id_upload, observacoes, and only ONE of the association IDs (id_pessoa_fisica_associada, etc.).
+// - Storage Bucket: Ensure 'documentos_bucket' exists. Corrected name from 'documento_buker'.
+// - Storage Policies: Allow uploads for authenticated users.
+// - Arquivos Table RLS: Allow INSERT for the user performing the upload.
+// - Payload to "Arquivos": Includes nome_arquivo (user-defined title), caminho_armazenamento, 
+//   tipo_mime, tamanho_bytes, tipo_documento, user_id_upload, observacoes, and ONE association ID.
+// - Error handling for "Bucket not found" made more specific.
+
