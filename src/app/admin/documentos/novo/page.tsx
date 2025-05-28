@@ -34,7 +34,7 @@ export default function NovoDocumentoPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0); // Placeholder for progress
+  const [uploadProgress, setUploadProgress] = useState(0); 
 
   const [formData, setFormData] = useState({
     titulo: '',
@@ -153,13 +153,13 @@ export default function NovoDocumentoPage() {
     }
     setIsLoading(true);
     setUploadProgress(0); 
-
+    
     console.log("NovoDocumentoPage: Supabase URL from env for this operation:", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
     try {
       const fileExt = selectedFile.name.split('.').pop();
       const fileNameInStorage = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`; 
-      const filePath = `documentos/${fileNameInStorage}`; 
+      const filePath = `public/${fileNameInStorage}`; // Path within the bucket
 
       console.log(`NovoDocumentoPage: Iniciando upload para Supabase Storage. Bucket: documentos-bucket, Path: ${filePath}`);
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -182,7 +182,7 @@ export default function NovoDocumentoPage() {
 
       const arquivoPayload = {
         nome_arquivo: formData.titulo,
-        caminho_armazenamento: uploadData.path,
+        caminho_armazenamento: uploadData.path, // Use the path returned by storage
         tipo_mime: selectedFile.type,
         tamanho_bytes: selectedFile.size,
         tipo_documento: formData.tipoDocumento,
@@ -209,17 +209,25 @@ export default function NovoDocumentoPage() {
 
     } catch (error: any) {
       console.error('NovoDocumentoPage: Falha no envio do documento:', JSON.stringify(error, null, 2), error);
-      const errorMessageContent = (error.message || error.error || "Ocorreu um erro inesperado.").toLowerCase();
+      const errorMessageContent = (error.message || error.error || "Ocorreu um erro inesperado.");
       
-      if (errorMessageContent.includes('bucket not found')) {
+      if (errorMessageContent.includes('Bucket not found')) {
         toast({
           title: "Erro de Configuração do Storage",
           description: `O bucket 'documentos-bucket' não foi encontrado no Supabase. Verifique o nome EXATO do bucket e se ele existe no seu projeto Supabase em Storage > Buckets. As políticas de acesso também devem permitir uploads.`,
           variant: "destructive",
           duration: 12000,
         });
-      } else {
-        toast({ title: "Erro ao Enviar Documento", description: error.message || "Ocorreu um erro inesperado.", variant: "destructive" });
+      } else if (error.statusCode === '403' && errorMessageContent.includes('row-level security policy')) {
+        toast({
+          title: "Erro de Permissão (Storage)",
+          description: "Acesso negado ao tentar fazer upload. Verifique as políticas de Row Level Security (RLS) do Supabase Storage para o bucket 'documentos-bucket' e certifique-se de que o usuário autenticado tem permissão de INSERT (upload).",
+          variant: "destructive",
+          duration: 12000,
+        });
+      }
+      else {
+        toast({ title: "Erro ao Enviar Documento", description: errorMessageContent, variant: "destructive" });
       }
     } finally {
       setIsLoading(false);
@@ -366,13 +374,14 @@ export default function NovoDocumentoPage() {
 }
     
 // Supabase Integration Notes:
-// - Storage Bucket: Ensure 'documentos-bucket' exists. (Corrected from _bucket to -bucket)
-// - Storage Policies: Allow uploads for authenticated users.
+// - Storage Bucket: Ensure 'documentos-bucket' exists and has correct policies. (Corrected from _bucket to -bucket)
+// - Storage Policies: Allow uploads (INSERT on storage.objects) for authenticated users to 'documentos-bucket'.
 // - Arquivos Table RLS: Allow INSERT for the user performing the upload.
-// - Payload to "Arquivos": Includes nome_arquivo (user-defined title), caminho_armazenamento, 
+// - Payload to "Arquivos": Includes nome_arquivo, caminho_armazenamento, 
 //   tipo_mime, tamanho_bytes, tipo_documento, user_id_upload, observacoes, and ONE association ID.
-// - Error handling for "Bucket not found" is specific.
+// - Error handling for "Bucket not found" and "RLS violation" (403) for storage is specific.
 // - Dynamic select options for associated entities are fetched from Supabase.
+// - The 'filePath' within the bucket now includes a 'public/' prefix for easier public access if bucket policies allow.
+//   If your bucket or policies require a different path structure, adjust `filePath` accordingly.
+//   For truly private files, you'd omit 'public/' and use signed URLs for access.
 
-
-    
