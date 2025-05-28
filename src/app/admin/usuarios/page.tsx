@@ -2,23 +2,27 @@
 "use client"; 
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react'; // Added useState and useEffect
+import { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { UserPlus, Edit3, Trash2, Users, AlertTriangle } from "lucide-react"; // Added AlertTriangle
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UserPlus, Edit3, Trash2, Users, AlertTriangle, Search, Loader2 } from "lucide-react";
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
+import { format, parseISO, isValid } from 'date-fns';
 
-// Placeholder data - In a real app, this would come from Supabase
-const initialUsers = [
-  { id: "usr_001", nome: "Administrador Principal", email: "admin@inbm.com.br", perfil: "Administrador", dataCadastro: "2024-01-15" },
-  { id: "usr_002", nome: "Consultor Firmo", email: "consultor.firmo@inbm.com.br", perfil: "Operador", dataCadastro: "2024-02-20" },
-  { id: "usr_003", nome: "Cliente Exemplo Alfa", email: "cliente.alfa@example.com", perfil: "Cliente", dataCadastro: "2024-03-10" },
-  { id: "usr_004", nome: "Joana Silva", email: "joana.silva@example.com", perfil: "Cliente", dataCadastro: "2024-05-01" },
-  { id: "usr_005", nome: "Carlos Pereira", email: "carlos.pereira@example.com", perfil: "Operador", dataCadastro: "2024-06-22" },
-];
+interface UserFromSupabase {
+  id: string;
+  full_name: string | null;
+  email: string | null; // Assuming email is fetched if available (e.g., via a view or if in profiles)
+  role: string | null;
+  created_at: string; // Supabase timestamp
+}
 
-interface User {
+interface UserRow {
   id: string;
   nome: string;
   email: string;
@@ -26,50 +30,109 @@ interface User {
   dataCadastro: string;
 }
 
+// Updated to match database roles
+const userProfilesForFilter = [
+  { value: "todos", label: "Todos os Perfis" },
+  { value: "admin", label: "Administrador" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "operator", label: "Operador" },
+  { value: "client", label: "Cliente" },
+];
+
 export default function GerenciamentoUsuariosPage() {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [profileFilter, setProfileFilter] = useState('todos');
+  const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{ id: string; nome: string } | null>(null);
-  // const { toast } = useToast(); // Uncomment for feedback
+  const { toast } = useToast();
 
-  // In a real app, users would be fetched from Supabase:
-  // useEffect(() => {
-  //   async function fetchUsers() {
-  //     // const { data, error } = await supabase.from('users_table_name').select('*');
-  //     // if (error) { /* handle error, toast({ title: "Erro", description: "Não foi possível carregar usuários."}) */ }
-  //     // else { setUsers(data || []); }
-  //   }
-  //   fetchUsers();
-  // }, []);
+  const fetchUsers = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setIsLoading(false);
+      setUsers([]);
+      return;
+    }
+    setIsLoading(true);
+    console.log("GerenciamentoUsuariosPage: Fetching users from Supabase. Search:", searchTerm, "Profile Filter:", profileFilter);
 
-  const handleDeleteClick = (user: User) => {
+    let query = supabase
+      .from('profiles')
+      .select('id, full_name, email, role, created_at') // Ensure 'email' is in your 'profiles' table or accessible via RLS from auth.users
+      .order('full_name', { ascending: true });
+
+    if (searchTerm) {
+      // Assuming email is stored in profiles or accessible through a view/function
+      // If email is only in auth.users, searching it here directly with 'profiles' source is tricky without a view or function
+      query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+    }
+    if (profileFilter !== 'todos') {
+      query = query.eq('role', profileFilter);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("GerenciamentoUsuariosPage: Erro ao buscar usuários:", JSON.stringify(error, null, 2), error);
+      toast({ title: "Erro ao Buscar Usuários", description: error.message || "Não foi possível carregar os usuários.", variant: "destructive" });
+      setUsers([]);
+    } else {
+      console.log("GerenciamentoUsuariosPage: Usuários recebidos do Supabase:", data);
+      const formattedUsers: UserRow[] = (data || []).map((user: UserFromSupabase) => ({
+        id: user.id,
+        nome: user.full_name || 'N/A',
+        email: user.email || 'E-mail não disponível', // Handle if email is not directly in profiles
+        perfil: user.role || 'N/A',
+        dataCadastro: user.created_at ? format(parseISO(user.created_at), 'dd/MM/yyyy HH:mm') : 'N/A',
+      }));
+      setUsers(formattedUsers);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileFilter]); // Re-fetch when profileFilter changes
+
+  const handleSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    fetchUsers(); 
+  };
+  
+  const handleProfileFilterChange = (value: string) => {
+    setProfileFilter(value);
+    // fetchUsers will be called by the useEffect dependency on profileFilter
+  };
+
+  const handleDeleteClick = (user: UserRow) => {
     setUserToDelete({ id: user.id, nome: user.nome });
     setIsAlertOpen(true);
   };
 
   const confirmDeleteUser = async () => {
-    if (!userToDelete) return;
+    if (!userToDelete || !supabase) return;
+    setIsLoading(true);
     
-    console.log(`Attempting to delete user ID: ${userToDelete.id}, Name: ${userToDelete.nome}`);
-    // Placeholder for Supabase API call to delete user
-    // try {
-    //   // const { error } = await supabase.from('users_table_name').delete().eq('id', userToDelete.id);
-    //   // if (error) throw error;
-    //   setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete.id));
-    //   // toast({ title: "Usuário Excluído!", description: `O usuário ${userToDelete.nome} foi excluído com sucesso.` });
-    // } catch (error: any) {
-    //   console.error('Failed to delete user:', error.message);
-    //   // toast({ title: "Erro ao Excluir", description: error.message, variant: "destructive" });
-    // } finally {
-    //   setIsAlertOpen(false);
-    //   setUserToDelete(null);
-    // }
+    console.log(`GerenciamentoUsuariosPage: Attempting to delete user profile ID: ${userToDelete.id}`);
+    
+    // This deletes from the 'profiles' table. Deleting from auth.users requires admin privileges and typically an Edge Function.
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', userToDelete.id);
 
-    // Simulate API call and update UI
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete!.id));
-    console.log(`User ${userToDelete.nome} (ID: ${userToDelete.id}) deleted (simulated).`);
-    // toast({ title: "Usuário Excluído! (Simulado)", description: `O usuário ${userToDelete.nome} foi excluído com sucesso.` });
+    if (error) {
+      console.error('GerenciamentoUsuariosPage: Falha ao excluir perfil do usuário:', JSON.stringify(error, null, 2), error);
+      toast({ title: "Erro ao Excluir Perfil", description: error.message || "Falha ao excluir o perfil do usuário.", variant: "destructive" });
+    } else {
+      toast({ title: "Perfil de Usuário Excluído!", description: `O perfil de ${userToDelete.nome} foi excluído.` });
+      // Note: The auth.users entry is NOT deleted here.
+      fetchUsers(); 
+    }
+    setIsLoading(false);
     setIsAlertOpen(false);
     setUserToDelete(null);
   };
@@ -94,79 +157,112 @@ export default function GerenciamentoUsuariosPage() {
         </div>
       </header>
 
+      <Card className="shadow-lg mb-8">
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar e Filtrar Usuários</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
+            <Input
+                type="text"
+                placeholder="Pesquisar por Nome ou E-mail..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-grow"
+                disabled={isLoading}
+            />
+            <Select value={profileFilter} onValueChange={handleProfileFilterChange} disabled={isLoading}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue placeholder="Filtrar por Perfil" />
+                </SelectTrigger>
+                <SelectContent>
+                {userProfilesForFilter.map(profile => (
+                    <SelectItem key={profile.value} value={profile.value}>{profile.label}</SelectItem>
+                ))}
+                </SelectContent>
+            </Select>
+            <Button type="submit" disabled={isLoading}>
+                <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
+            </Button>
+            </form>
+        </CardContent>
+      </Card>
+
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Lista de Usuários Cadastrados</CardTitle>
           <CardDescription>
             Total de {users.length} usuários no sistema.
-            {/* Implement search/filter controls here in the future */}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
+            {isLoading && users.length === 0 && !searchTerm && profileFilter === 'todos' ? (
+                 <div className="flex justify-center items-center h-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span className="ml-2 text-muted-foreground">Carregando usuários...</span>
+                </div>
+            ) : !isLoading && users.length === 0 ? (
+                 <p className="text-center text-muted-foreground py-10">
+                    {searchTerm || profileFilter !== 'todos' ? `Nenhum usuário encontrado para os filtros aplicados.` : "Nenhum usuário cadastrado."}
+                </p>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
-                  <TableHead>Nome</TableHead>
+                  <TableHead className="w-[250px]">Nome</TableHead>
                   <TableHead className="hidden md:table-cell">E-mail</TableHead>
                   <TableHead>Perfil</TableHead>
-                  <TableHead className="w-[150px] text-center hidden lg:table-cell">Data de Cadastro</TableHead>
+                  <TableHead className="w-[180px] text-center hidden lg:table-cell">Data de Cadastro</TableHead>
                   <TableHead className="text-right w-[180px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.length > 0 ? (
-                  users.map((user) => (
+                {users.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium text-xs hidden sm:table-cell">{user.id}</TableCell>
-                      <TableCell>{user.nome}</TableCell>
-                      <TableCell className="hidden md:table-cell">{user.email}</TableCell>
-                      <TableCell>
+                    <TableCell className="font-medium">{user.nome}</TableCell>
+                    <TableCell className="hidden md:table-cell">{user.email}</TableCell>
+                    <TableCell>
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          user.perfil === 'Administrador' ? 'bg-primary/10 text-primary-foreground dark:text-primary' :
-                          user.perfil === 'Operador' ? 'bg-accent/10 text-accent-foreground dark:text-accent' :
-                          'bg-muted text-muted-foreground'
+                        user.perfil === 'admin' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                        user.perfil === 'supervisor' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                        user.perfil === 'operator' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                        user.perfil === 'client' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                        'bg-muted text-muted-foreground'
                         }`}>
-                          {user.perfil}
+                        {user.perfil}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground hidden lg:table-cell">
-                        {new Date(user.dataCadastro).toLocaleDateString('pt-BR')}
-                      </TableCell>
-                      <TableCell className="text-right space-x-1 sm:space-x-2">
+                    </TableCell>
+                    <TableCell className="text-center text-sm text-muted-foreground hidden lg:table-cell">
+                        {user.dataCadastro}
+                    </TableCell>
+                    <TableCell className="text-right space-x-1 sm:space-x-2">
                         <Button variant="outline" size="sm" asChild aria-label={`Editar usuário ${user.nome}`}>
-                          <Link href={`/admin/usuarios/${user.id}/editar`}>
+                        <Link href={`/admin/usuarios/${user.id}/editar`}>
                             <Edit3 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Editar</span>
-                          </Link>
+                        </Link>
                         </Button>
                         <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteClick(user)}
-                          aria-label={`Excluir usuário ${user.nome}`}
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteClick(user)}
+                        aria-label={`Excluir usuário ${user.nome}`}
+                        disabled={isLoading}
                         >
-                          <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
+                        <Trash2 className="h-4 w-4" /> <span className="ml-1 sm:ml-2 hidden sm:inline">Excluir</span>
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
-                      Nenhum usuário cadastrado no momento.
                     </TableCell>
-                  </TableRow>
-                )}
+                    </TableRow>
+                ))}
               </TableBody>
             </Table>
+            )}
           </div>
-          {/* Add pagination controls here in the future if needed */}
         </CardContent>
       </Card>
 
       {userToDelete && (
-        <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+        <AlertDialog open={isAlertOpen} onOpenChange={(open) => { if (!isLoading) setIsAlertOpen(open); }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <div className="flex items-center">
@@ -174,30 +270,27 @@ export default function GerenciamentoUsuariosPage() {
                 <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
               </div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o usuário <strong>{userToDelete.nome}</strong> (ID: {userToDelete.id})? Esta ação é irreversível e todos os dados associados serão perdidos.
+                Tem certeza que deseja excluir o perfil do usuário <strong>{userToDelete.nome}</strong> (ID: {userToDelete.id})? Esta ação removerá o perfil do banco de dados, mas não a conta de autenticação do usuário.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setUserToDelete(null)}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteUser} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                Confirmar Exclusão
+              <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setUserToDelete(null); }} disabled={isLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteUser} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
+                {isLoading ? "Excluindo..." : "Confirmar Exclusão do Perfil"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/*
-        Supabase Integration Notes:
-        - User list will be fetched from a Supabase table (e.g., 'profiles' or 'users').
-        - "Cadastrar Novo Usuário" button will navigate to a form page which, upon submission,
-          will call Supabase to insert a new user (e.g., using Supabase Auth and a 'profiles' table).
-        - "Editar" button will navigate to a form page pre-filled with user data (fetched from Supabase by ID),
-          which upon submission will call Supabase to update the user's record.
-        - "Excluir" button will trigger a Supabase API call to delete the user's record,
-          likely after a confirmation modal.
-        - Search/filter functionality will query the Supabase table.
+      {/* 
+        Supabase Integration RLS Notes:
+        - SELECT on public.profiles: Admins/Supervisors can see all. Operators/Clients see own.
+        - DELETE on public.profiles: Admins/Supervisors can delete.
+        - Deleting from public.profiles DOES NOT delete from auth.users automatically unless cascade is set up differently.
+          True user deletion needs `supabase.auth.admin.deleteUser(userId)` via an Edge Function.
       */}
     </div>
   );
 }
+
+    
