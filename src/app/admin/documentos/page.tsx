@@ -22,7 +22,7 @@ interface DocumentoSupabase {
   caminho_armazenamento: string;
   PessoasFisicas?: { nome_completo: string } | null;
   Entidades?: { nome: string } | null;
-  Veiculos?: { placa_atual: string, marca?: string | null, modelo?: string | null } | null;
+  Veiculos?: { placa_atual: string, marca?: string | null, modelo?: string | null } | null; // marca and modelo are now direct
   Seguros?: { numero_apolice: string } | null;
 }
 
@@ -87,9 +87,6 @@ export default function GerenciamentoDocumentosPage() {
       .order('data_upload', { ascending: false });
 
     if (searchTerm) {
-      // Simplified search on direct columns of Arquivos table for now.
-      // Searching on related entity names (PessoasFisicas.nome_completo, etc.) would require a more complex query
-      // or a database view/function, especially with an OR condition across multiple nullable relations.
       query = query.or(
         `nome_arquivo.ilike.%${searchTerm}%,` +
         `tipo_documento.ilike.%${searchTerm}%`
@@ -212,7 +209,6 @@ export default function GerenciamentoDocumentosPage() {
         const url = URL.createObjectURL(data);
         const a = document.createElement('a');
         a.href = url;
-        // Suggest filename based on original title, ensuring it's safe for a filename
         const safeTitle = documento.titulo.replace(/[^a-z0-9._-\s]/gi, '_').replace(/\s+/g, '_');
         const fileExtension = documento.storagePath.split('.').pop() || 'bin';
         a.download = `${safeTitle}.${fileExtension}`; 
@@ -240,7 +236,6 @@ export default function GerenciamentoDocumentosPage() {
             console.log("Public URL for view:", data.publicUrl);
             window.open(data.publicUrl, '_blank');
         } else {
-            // Attempt to download as a fallback if public URL isn't available or view isn't direct
             console.warn("Visualização direta não disponível ou URL pública não configurada. Tentando download como fallback.");
             toast({ title: "Visualização Indisponível", description: "Tentando download do arquivo.", variant: "default" });
             await handleDownload(documento);
@@ -280,7 +275,7 @@ export default function GerenciamentoDocumentosPage() {
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
               type="text"
-              placeholder="Pesquisar por Título, Tipo ou Entidade..."
+              placeholder="Pesquisar por Título ou Tipo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-grow"
@@ -402,18 +397,11 @@ export default function GerenciamentoDocumentosPage() {
     
 // Supabase Integration Notes:
 // - Fetch from public."Arquivos" table.
-// - JOINs needed for associated entities to display "Associado a" column:
-//   - public."PessoasFisicas" ON Arquivos.id_pessoa_fisica_associada = PessoasFisicas.id_pessoa_fisica
-//   - public."Entidades" ON Arquivos.id_entidade_associada = Entidades.id_entidade
-//   - public."Veiculos" ON Arquivos.id_veiculo = Veiculos.id_veiculo (fetch placa_atual, marca, modelo)
-//   - public."Seguros" ON Arquivos.id_seguro = Seguros.id_seguro
-// - Search: Simplistic search on 'nome_arquivo', 'tipo_documento'. Full cross-entity search is complex.
-// - View/Download: Use Supabase Storage methods (getPublicUrl, download). Bucket name 'documentos_bucket'.
-// - Delete: Delete from Supabase Storage AND from the 'Arquivos' database table.
+// - Conditionally JOIN/Select from public."PessoasFisicas", "Entidades", "Veiculos", "Seguros" for "Associado a".
+//   - For Veiculos, select placa_atual, marca, modelo directly as these are now direct columns.
+// - Search: On 'nome_arquivo', 'tipo_documento'. Consider DB view/function for searching across associated entity names.
+// - View/Download: Use Supabase Storage methods. Bucket name 'documentos_bucket'.
+// - Delete: Delete from Supabase Storage AND 'Arquivos' table.
 // - RLS: Ensure user has SELECT on Arquivos and related tables, and DELETE on Arquivos and Storage.
 // - Filename for download: Made safer and tries to preserve extension.
 // - View Fallback: If direct view (public URL) isn't working, it attempts a download.
-```
-I've removed the extraneous text from the end of `src/app/admin/documentos/page.tsx`. The actual code changes for selecting `placa_atual, marca, modelo` directly from the `Veiculos` relation within `fetchDocumentos` were correctly applied in the previous step and are still present.
-
-The file should now parse correctly.
