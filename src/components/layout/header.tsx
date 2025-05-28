@@ -45,9 +45,9 @@ export function Header() {
 
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true); // True initially
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [isManuallyLoggingOut, setIsManuallyLoggingOut] = useState(false); // New state
+  const [isManuallyLoggingOut, setIsManuallyLoggingOut] = useState(false);
 
   const allowedAdminPortalRoles = ['admin', 'supervisor'];
   const allowedGeneralAdminRoles = ['admin', 'supervisor', 'operator'];
@@ -66,8 +66,8 @@ export function Header() {
         .single();
 
       if (error) {
-        console.error('Header (fetchUserProfile): Erro ao buscar perfil do usuário:', error.message, error);
-        // toast({ title: "Erro de Perfil", description: "Não foi possível carregar seu perfil.", variant: "destructive" });
+        console.error('Header (fetchUserProfile): Erro ao buscar perfil do usuário:', JSON.stringify(error, null, 2));
+        // Don't toast here usually, as it might be a normal case (profile not yet created for new signup)
         return null;
       }
       if (profile) {
@@ -83,14 +83,17 @@ export function Header() {
   };
 
   const handleAuthStateChange = async (event: string, session: Session | null) => {
-    console.log(`Header (handleAuthStateChange): Evento recebido: ${event}. Session user: ${session?.user?.email || 'null'}`);
-    setAuthLoading(true);
+    console.log(`Header (handleAuthStateChange): Evento recebido: ${event}. Session:`, session ? session.user?.email : 'null');
+    setAuthLoading(true); 
+
     const user = session?.user ?? null;
     setCurrentUser(user);
+
     const profile = await fetchUserProfile(user);
     setUserProfile(profile);
-    console.log(`Header (handleAuthStateChange): Auth loading set to false. CurrentUser: ${user?.email || 'null'} Profile: ${JSON.stringify(profile)}`);
-    setAuthLoading(false);
+
+    console.log(`Header (handleAuthStateChange): Auth loading set to false. CurrentUser: ${user?.email || 'null'} Profile: ${profile ? JSON.stringify(profile) : 'null'}`);
+    setAuthLoading(false); 
   };
 
   useEffect(() => {
@@ -110,7 +113,7 @@ export function Header() {
       if (sessionError) {
         console.error("Header (checkInitialSession): Erro ao obter sessão inicial:", sessionError.message);
       }
-      console.log(`Header (checkInitialSession): Sessão inicial user: ${session?.user?.email || 'null'}. AuthLoading will be set by handleAuthStateChange.`);
+      console.log(`Header (checkInitialSession): Sessão inicial user: ${session?.user?.email || 'null'}.`);
       await handleAuthStateChange(session ? 'INITIAL_SESSION_SUCCESS' : 'INITIAL_SESSION_NO_SESSION', session);
     };
 
@@ -126,10 +129,10 @@ export function Header() {
 
   useEffect(() => {
     if (authLoading) {
-      console.log("Header (Redirect Effect): Auth loading or manually logging out, aguardando...");
-      return;
+      console.log("Header (Redirect Effect): Auth loading, aguardando...");
+      return; 
     }
-    if (isManuallyLoggingOut && pathname === '/') { // Reset flag if logout successfully navigated to home
+    if (isManuallyLoggingOut && pathname === '/') {
         setIsManuallyLoggingOut(false);
     }
     if (isManuallyLoggingOut) {
@@ -137,13 +140,11 @@ export function Header() {
         return;
     }
 
-
     console.log(`Header (Redirect Effect): Auth carregado. CurrentUser: ${currentUser?.email || "null"}, UserProfile Role: ${userProfile?.role}, Pathname: ${pathname}`);
 
     const isLoginPage = pathname === '/login' || pathname === '/admin-auth';
     const isAdminRoute = pathname.startsWith('/admin/');
 
-    // Scenario 1: User is authenticated
     if (currentUser && userProfile) {
       if (isLoginPage) {
         console.log(`Header (Redirect Effect): Usuário autenticado (${currentUser.email}, role: ${userProfile.role}) em página de login: ${pathname}. Redirecionando...`);
@@ -152,13 +153,13 @@ export function Header() {
             console.log(`Header (Redirect Effect): Role '${userProfile.role}' permitido para /admin-auth. Redirecionando para /admin/usuarios`);
             router.push('/admin/usuarios');
           } else {
-            console.log(`Header (Redirect Effect): Role '${userProfile.role}' NÃO permitido para /admin-auth. Deslogando.`);
-            toast({ title: "Acesso Negado", description: "Você não tem permissão para usar este portal de login.", variant: "destructive" });
-            supabase.auth.signOut().then(() => router.push('/admin-auth')); // Sign out and stay/return to admin-auth
+            console.log(`Header (Redirect Effect): Role '${userProfile.role}' NÃO permitido para /admin-auth. Deslogando e redirecionando para /admin-auth com erro.`);
+            toast({ title: "Acesso Negado", description: "Você não tem permissão para usar este portal de login administrativo.", variant: "destructive" });
+            supabase.auth.signOut().then(() => router.push('/admin-auth')); 
           }
-        } else { // General /login page
+        } else { 
           if (allowedGeneralAdminRoles.includes(userProfile.role)) {
-            console.log(`Header (Redirect Effect): Role '${userProfile.role}' em /login. Redirecionando para /admin/dashboard`);
+             console.log(`Header (Redirect Effect): Role '${userProfile.role}' em /login. Redirecionando para /admin/dashboard`);
             router.push('/admin/dashboard');
           } else if (userProfile.role === 'client') {
             toast({ title: "Área do Cliente", description: "Área do cliente em desenvolvimento.", duration: 4000 });
@@ -177,9 +178,7 @@ export function Header() {
           return;
         }
       }
-    }
-    // Scenario 2: User is NOT authenticated
-    else if (!currentUser) {
+    } else if (!currentUser) {
       if (isAdminRoute && !isLoginPage) {
         console.log('Header (Redirect Effect): Usuário NÃO autenticado em rota administrativa. Redirecionando para /login.');
         router.push('/login');
@@ -187,12 +186,13 @@ export function Header() {
       }
     }
     console.log("Header (Redirect Effect): Nenhuma condição de redirecionamento principal atendida.");
-  }, [authLoading, currentUser, userProfile, pathname, router, toast, isManuallyLoggingOut]); // Added isManuallyLoggingOut
+  }, [authLoading, currentUser, userProfile, pathname, router, toast, isManuallyLoggingOut, allowedAdminPortalRoles, allowedGeneralAdminRoles]); // Added userProfile and role arrays to dependencies
+
 
   let itemsToDisplay: { href: string; label: string, icon: React.ElementType }[] = [];
-  const isSpecialPage = pathname === '/' || pathname === '/login' || pathname === '/admin-auth' || pathname === '/quem-somos' || pathname === '/servicos' || pathname === '/contato';
+  const isPublicPage = pathname === '/' || pathname === '/login' || pathname === '/admin-auth' || pathname === '/quem-somos' || pathname === '/servicos' || pathname === '/contato';
   
-  if (!isSpecialPage && currentUser) {
+  if (!isPublicPage && currentUser) {
     if (pathname.startsWith('/admin/usuarios') || pathname.startsWith('/admin/configuracoes')) {
       itemsToDisplay = userManagementNavItems;
     } else if (pathname.startsWith('/admin/')) {
@@ -200,8 +200,8 @@ export function Header() {
     }
   }
 
-  const showLogoutButton = !!currentUser && !isSpecialPage;
-  const showUserInfo = !!currentUser && !isSpecialPage;
+  const showLogoutButton = !!currentUser && !isPublicPage;
+  const showUserInfo = !!currentUser && !isPublicPage;
   const showNavigationArea = itemsToDisplay.length > 0 || showLogoutButton || showUserInfo;
 
   const handleLogout = () => {
@@ -212,7 +212,7 @@ export function Header() {
   const confirmLogout = async () => {
     console.log('Header: Confirmando logout...');
     setShowLogoutConfirm(false); 
-    setIsManuallyLoggingOut(true); // Signal manual logout
+    setIsManuallyLoggingOut(true); 
 
     if (!supabase) {
       console.error("Header (confirmLogout): Cliente Supabase não inicializado.");
@@ -231,10 +231,8 @@ export function Header() {
       toast({ title: "Logout Efetuado", description: "Você foi desconectado."});
       console.log('Header (confirmLogout): Logout bem-sucedido. Redirecionando para / ...');
       router.push('/'); 
-      // setIsManuallyLoggingOut will be reset by the useEffect when pathname becomes '/'
     }
   };
-
 
   if (!isMounted) {
     return (
@@ -245,7 +243,7 @@ export function Header() {
               <InbmBrandLogo className="h-8 md:h-10 w-auto" />
             </div>
           </Link>
-           <div className="h-8 w-24 bg-muted rounded animate-pulse"></div> {/* Simple consistent skeleton */}
+          <div className="h-8 w-24 bg-muted rounded animate-pulse"></div>
         </div>
       </header>
     );
@@ -261,7 +259,7 @@ export function Header() {
             </div>
           </Link>
 
-          {authLoading && !isMobile && !isSpecialPage && (
+          {authLoading && !currentUser && !isMobile && !isPublicPage && ( // Show "Verificando..." only if loading and no user yet
               <div className="hidden md:flex text-sm text-muted-foreground">Verificando autenticação...</div>
           )}
 
@@ -335,13 +333,13 @@ export function Header() {
             </Sheet>
           ) : (
             !authLoading && !isMobile && showNavigationArea && (
-              <nav className="flex items-center space-x-1"> {/* Reduced space for more nav items */}
+              <nav className="flex items-center space-x-1"> 
                 {itemsToDisplay.length > 0 && (
-                  <ul className="flex space-x-0.5 items-center"> {/* Reduced space for more nav items */}
+                  <ul className="flex space-x-0.5 items-center"> 
                     {itemsToDisplay.map((item) => (
                       <li key={item.href}>
                         <Button variant={pathname === item.href ? "secondary" : "ghost"} size="sm" asChild>
-                            <Link href={item.href} className="flex items-center gap-1 px-2"> {/* Reduced gap and padding */}
+                            <Link href={item.href} className="flex items-center gap-1 px-2"> 
                                 <item.icon className="h-4 w-4" />
                                 {item.label}
                             </Link>
@@ -351,7 +349,7 @@ export function Header() {
                   </ul>
                 )}
                 {showUserInfo && (
-                  <div className="flex items-center gap-2 text-sm border-l border-border pl-3 ml-2"> {/* Adjusted padding/margin */}
+                  <div className="flex items-center gap-2 text-sm border-l border-border pl-3 ml-2"> 
                     <UserCircle className="h-6 w-6 text-primary" />
                     <div>
                       <span className="font-medium">{userProfile?.full_name || currentUser?.email}</span>
@@ -360,20 +358,24 @@ export function Header() {
                   </div>
                 )}
                 {showLogoutButton && (
-                  <Button onClick={handleLogout} variant="outline" size="sm" className="ml-2"> {/* Adjusted margin */}
+                  <Button onClick={handleLogout} variant="outline" size="sm" className="ml-2"> 
                     <LogOut className="mr-1.5 h-4 w-4" /> Logout
                   </Button>
                 )}
               </nav>
             )
           )}
+          {/* Fallback for when no specific nav area conditions are met but not loading and not mobile */}
           {!isMobile && !showNavigationArea && !authLoading && (
-            <div></div> 
+            <div></div> // Empty div to maintain layout structure if needed
           )}
         </div>
       </header>
 
-      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+      <AlertDialog open={showLogoutConfirm} onOpenChange={(open) => {
+        setShowLogoutConfirm(open);
+        if (!open) setIsManuallyLoggingOut(false); // Reset if dialog is cancelled
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Logout</AlertDialogTitle>
@@ -392,5 +394,3 @@ export function Header() {
     </>
   );
 }
-
-    
