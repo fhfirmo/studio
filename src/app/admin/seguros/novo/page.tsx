@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, type FormEvent, useEffect } from 'react';
@@ -8,56 +7,38 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShieldPlus, Save, XCircle, CalendarDays, Car, User, Building, DollarSign, Library, ShieldQuestion, Sparkles } from 'lucide-react';
+import { ShieldPlus, Save, XCircle, CalendarDays, Car, User, Building, Library, ShieldQuestion, Sparkles, Loader2 } from 'lucide-react';
 import { format } from "date-fns";
-// import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
-// Placeholder data - In a real app, these would come from Supabase
-const placeholderSeguradoras = [
-  { id: "seguradora_001", nome: "Porto Seguro" },
-  { id: "seguradora_002", nome: "Bradesco Seguros" },
-  { id: "seguradora_003", nome: "Tokio Marine" },
-];
+interface GenericOption {
+  id: string;
+  nome: string;
+  [key: string]: any; // Allow other properties like 'cpf', 'cnpj', 'description'
+}
 
-const placeholderPessoasFisicas = [
-  { id: "pf_001", nomeCompleto: "João da Silva Sauro", cpf: "123.456.789-00" },
-  { id: "pf_002", nomeCompleto: "Maria Oliveira Costa", cpf: "987.654.321-99" },
-];
+interface AssistenciaOption extends GenericOption {
+  tipo_assistencia?: string;
+}
 
-const placeholderOrganizacoes = [
-  { id: "org_001", nome: "Cooperativa Alfa", cnpj: "11.222.333/0001-44" },
-  { id: "org_002", nome: "Associação Beta", cnpj: "22.333.444/0001-55" },
-];
-
-const placeholderVeiculos = [
-  { id: "vei_001", description: "Fiat Uno - ABC-1234" },
-  { id: "vei_002", description: "VW Gol - DEF-5678" },
-  { id: "vei_003", description: "Chevrolet Onix - GHI-9012" },
-];
-
-const placeholderCoberturas = [
-  { id: "cob_001", nome: "Colisão, Incêndio e Roubo (Compreensiva)" },
-  { id: "cob_002", nome: "Danos a Terceiros (RCF-V)" },
-  { id: "cob_003", nome: "Cobertura para Vidros" },
-  { id: "cob_004", nome: "Carro Reserva" },
-];
-
-const placeholderAssistencias = [
-  { id: "ass_001", nome: "Assistência 24h (Guincho, Chaveiro)" },
-  { id: "ass_002", nome: "Reparo Residencial" },
-  { id: "ass_003", nome: "Assistência Pet" },
-];
+const initialPessoasFisicas: GenericOption[] = [];
+const initialOrganizacoes: GenericOption[] = [];
+const initialVeiculos: GenericOption[] = [];
+const initialSeguradoras: GenericOption[] = [];
+const initialCoberturas: GenericOption[] = [];
+const initialAssistencias: AssistenciaOption[] = [];
 
 
 export default function NovoSeguroPage() {
   const router = useRouter();
-  // const { toast } = useToast();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [tipoTitular, setTipoTitular] = useState<'pessoa_fisica' | 'organizacao' | ''>('');
 
@@ -70,15 +51,74 @@ export default function NovoSeguroPage() {
     franquia: '',
     dataContratacao: new Date() as Date | undefined,
     observacoes: '',
-    id_titular: '', // Will store ID of selected PessoaFisica or Entidade
-    id_veiculo: '', // Optional
+    id_titular: '',
+    id_veiculo: '',
     coberturasSelecionadas: [] as string[],
     assistenciasSelecionadas: [] as string[],
   });
 
+  const [pessoasFisicasOptions, setPessoasFisicasOptions] = useState<GenericOption[]>(initialPessoasFisicas);
+  const [organizacoesOptions, setOrganizacoesOptions] = useState<GenericOption[]>(initialOrganizacoes);
+  const [veiculosOptions, setVeiculosOptions] = useState<GenericOption[]>(initialVeiculos);
+  const [seguradorasOptions, setSeguradorasOptions] = useState<GenericOption[]>(initialSeguradoras);
+  const [coberturasOptions, setCoberturasOptions] = useState<GenericOption[]>(initialCoberturas);
+  const [assistenciasOptions, setAssistenciasOptions] = useState<AssistenciaOption[]>(initialAssistencias);
+
+  const [isLoadingPessoasFisicas, setIsLoadingPessoasFisicas] = useState(false);
+  const [isLoadingOrganizacoes, setIsLoadingOrganizacoes] = useState(false);
+  const [isLoadingVeiculos, setIsLoadingVeiculos] = useState(false);
+  const [isLoadingSeguradoras, setIsLoadingSeguradoras] = useState(false);
+  const [isLoadingCoberturas, setIsLoadingCoberturas] = useState(false);
+  const [isLoadingAssistencias, setIsLoadingAssistencias] = useState(false);
+
+
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      if (!supabase) return;
+
+      setIsLoadingPessoasFisicas(true);
+      const { data: pfData, error: pfError } = await supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo');
+      if (pfError) toast({ title: "Erro ao Carregar Pessoas Físicas", description: pfError.message, variant: "destructive" });
+      else setPessoasFisicasOptions(pfData.map(pf => ({ id: pf.id_pessoa_fisica.toString(), nome: `${pf.nome_completo} (${pf.cpf})` })));
+      setIsLoadingPessoasFisicas(false);
+
+      setIsLoadingOrganizacoes(true);
+      const { data: orgData, error: orgError } = await supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome');
+      if (orgError) toast({ title: "Erro ao Carregar Organizações", description: orgError.message, variant: "destructive" });
+      else setOrganizacoesOptions(orgData.map(org => ({ id: org.id_entidade.toString(), nome: `${org.nome} (${org.cnpj})` })));
+      setIsLoadingOrganizacoes(false);
+      
+      setIsLoadingVeiculos(true);
+      const { data: veiculosData, error: veiculosError } = await supabase.from('Veiculos').select('id_veiculo, placa_atual, modelo, marca').order('placa_atual');
+      if (veiculosError) toast({ title: "Erro ao Carregar Veículos", description: veiculosError.message, variant: "destructive" });
+      else setVeiculosOptions(veiculosData.map(v => ({ id: v.id_veiculo.toString(), nome: `${v.placa_atual} (${v.marca} ${v.modelo})` })));
+      setIsLoadingVeiculos(false);
+
+      setIsLoadingSeguradoras(true);
+      const { data: segData, error: segError } = await supabase.from('Seguradoras').select('id_seguradora, nome_seguradora').order('nome_seguradora');
+      if (segError) toast({ title: "Erro ao Carregar Seguradoras", description: segError.message, variant: "destructive" });
+      else setSeguradorasOptions(segData.map(s => ({ id: s.id_seguradora.toString(), nome: s.nome_seguradora })));
+      setIsLoadingSeguradoras(false);
+
+      setIsLoadingCoberturas(true);
+      const { data: cobData, error: cobError } = await supabase.from('Coberturas').select('id_cobertura, nome_cobertura').order('nome_cobertura');
+      if (cobError) toast({ title: "Erro ao Carregar Coberturas", description: cobError.message, variant: "destructive" });
+      else setCoberturasOptions(cobData.map(c => ({ id: c.id_cobertura.toString(), nome: c.nome_cobertura })));
+      setIsLoadingCoberturas(false);
+
+      setIsLoadingAssistencias(true);
+      const { data: assData, error: assError } = await supabase.from('Assistencias').select('id_assistencia, nome_assistencia, tipo_assistencia').order('nome_assistencia');
+      if (assError) toast({ title: "Erro ao Carregar Assistências", description: assError.message, variant: "destructive" });
+      else setAssistenciasOptions(assData.map(a => ({ id: a.id_assistencia.toString(), nome: a.nome_assistencia, tipo_assistencia: a.tipo_assistencia })));
+      setIsLoadingAssistencias(false);
+    };
+    fetchDropdownData();
+  }, [toast]);
+
+
   const handleTipoTitularChange = (value: 'pessoa_fisica' | 'organizacao' | '') => {
     setTipoTitular(value);
-    setFormData(prev => ({ ...prev, id_titular: '' })); // Reset titularId when type changes
+    setFormData(prev => ({ ...prev, id_titular: '' })); 
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -107,55 +147,77 @@ export default function NovoSeguroPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!supabase) {
+        toast({ title: "Erro de Configuração", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+        return;
+    }
     setIsLoading(true);
 
-    // Client-side validation placeholder
     if (!formData.numeroApolice || !formData.id_seguradora || !formData.vigenciaInicio || !formData.vigenciaFim || !tipoTitular || !formData.id_titular) {
-      // toast({ title: "Campos Obrigatórios", description: "Verifique os campos obrigatórios.", variant: "destructive" });
-      console.error("Validação: Campos obrigatórios não preenchidos.");
+      toast({ title: "Campos Obrigatórios", description: "Apólice, Seguradora, Vigências e Titular são obrigatórios.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
     if (formData.vigenciaFim && formData.vigenciaInicio && formData.vigenciaFim <= formData.vigenciaInicio) {
-      // toast({ title: "Data Inválida", description: "A Data de Fim da Vigência deve ser posterior à Data de Início.", variant: "destructive" });
-      console.error("Validação: A Data de Fim da Vigência deve ser posterior à Data de Início.");
+      toast({ title: "Data Inválida", description: "A Data de Fim da Vigência deve ser posterior à Data de Início.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
     
-    const payload = {
-      ...formData,
-      valorIndenizacao: formData.valorIndenizacao ? parseFloat(formData.valorIndenizacao.replace(',', '.')) : null,
+    const seguroPayload = {
+      numero_apolice: formData.numeroApolice,
+      id_seguradora: parseInt(formData.id_seguradora),
+      vigencia_inicio: formData.vigenciaInicio ? format(formData.vigenciaInicio, "yyyy-MM-dd") : null,
+      vigencia_fim: formData.vigenciaFim ? format(formData.vigenciaFim, "yyyy-MM-dd") : null,
+      valor_indenizacao: formData.valorIndenizacao ? parseFloat(formData.valorIndenizacao.replace(',', '.')) : null,
       franquia: formData.franquia ? parseFloat(formData.franquia.replace(',', '.')) : null,
-      vigenciaInicio: formData.vigenciaInicio ? format(formData.vigenciaInicio, "yyyy-MM-dd") : null,
-      vigenciaFim: formData.vigenciaFim ? format(formData.vigenciaFim, "yyyy-MM-dd") : null,
-      dataContratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
-      id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? formData.id_titular : null,
-      id_titular_entidade: tipoTitular === 'organizacao' ? formData.id_titular : null,
-      id_veiculo: formData.id_veiculo === '--none--' ? null : (formData.id_veiculo || null),
-      // coberturasSelecionadas and assistenciasSelecionadas will be handled separately for linking tables
+      data_contratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
+      observacoes: formData.observacoes || null,
+      id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? parseInt(formData.id_titular) : null,
+      id_titular_entidade: tipoTitular === 'organizacao' ? parseInt(formData.id_titular) : null,
+      id_veiculo: formData.id_veiculo && formData.id_veiculo !== '--none--' ? parseInt(formData.id_veiculo) : null,
     };
-    // Remove id_titular from main payload as it's split
-    // @ts-ignore
-    delete payload.id_titular; 
 
-    console.log('Form data to be submitted (Seguro):', payload);
-    console.log('Coberturas Selecionadas IDs:', formData.coberturasSelecionadas);
-    console.log('Assistências Selecionadas IDs:', formData.assistenciasSelecionadas);
+    try {
+        console.log('Salvando Seguro:', seguroPayload);
+        const { data: newSeguro, error: seguroError } = await supabase
+            .from('Seguros')
+            .insert(seguroPayload)
+            .select('id_seguro')
+            .single();
 
+        if (seguroError) throw seguroError;
+        if (!newSeguro?.id_seguro) throw new Error("Falha ao obter ID do novo seguro.");
+        
+        const newSeguroId = newSeguro.id_seguro;
 
-    // Supabase:
-    // 1. Insert into public.Seguros table with payload.
-    // 2. Get the ID of the newly created seguro.
-    // 3. For each ID in formData.coberturasSelecionadas, insert into public.SeguroCoberturas (id_seguro, id_cobertura).
-    // 4. For each ID in formData.assistenciasSelecionadas, insert into public.SeguroAssistencias (id_seguro, id_assistencia).
-    // (This should ideally be done in a transaction if your Supabase setup allows)
+        if (formData.coberturasSelecionadas.length > 0) {
+            const seguroCoberturasPayload = formData.coberturasSelecionadas.map(cobId => ({
+                id_seguro: newSeguroId,
+                id_cobertura: parseInt(cobId),
+            }));
+            const { error: scError } = await supabase.from('SeguroCoberturas').insert(seguroCoberturasPayload);
+            if (scError) console.warn("Erro ao salvar Coberturas:", scError.message); // Non-critical, log and continue
+        }
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Simulated seguro creation finished');
-    // toast({ title: "Seguro Cadastrado! (Simulado)", description: "O novo seguro foi adicionado com sucesso." });
-    setIsLoading(false);
-    router.push('/admin/seguros'); 
+        if (formData.assistenciasSelecionadas.length > 0) {
+            const seguroAssistenciasPayload = formData.assistenciasSelecionadas.map(assId => ({
+                id_seguro: newSeguroId,
+                id_assistencia: parseInt(assId),
+            }));
+            const { error: saError } = await supabase.from('SeguroAssistencias').insert(seguroAssistenciasPayload);
+             if (saError) console.warn("Erro ao salvar Assistências:", saError.message); // Non-critical, log and continue
+        }
+        
+        toast({ title: "Seguro Cadastrado!", description: "Novo seguro adicionado com sucesso." });
+        router.push('/admin/seguros');
+
+    } catch (error: any) {
+        console.error('Erro ao cadastrar Seguro:', JSON.stringify(error, null, 2), error);
+        toast({ title: "Erro ao Cadastrar Seguro", description: error.message || "Verifique os dados e as permissões (RLS).", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -198,11 +260,13 @@ export default function NovoSeguroPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="id_seguradora">Seguradora <span className="text-destructive">*</span></Label>
-                    {/* Supabase: Options for this select should be loaded from public.Seguradoras */}
-                    <Select name="id_seguradora" value={formData.id_seguradora} onValueChange={(value) => handleSelectChange('id_seguradora', value)} required>
-                      <SelectTrigger id="id_seguradora"><Library className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione a seguradora" /></SelectTrigger>
+                    <Select name="id_seguradora" value={formData.id_seguradora} onValueChange={(value) => handleSelectChange('id_seguradora', value)} required disabled={isLoadingSeguradoras}>
+                      <SelectTrigger id="id_seguradora">
+                        <Library className="mr-2 h-4 w-4 text-muted-foreground" />
+                        <SelectValue placeholder={isLoadingSeguradoras ? "Carregando..." : "Selecione a seguradora"} />
+                      </SelectTrigger>
                       <SelectContent>
-                        {placeholderSeguradoras.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                        {seguradorasOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -243,7 +307,7 @@ export default function NovoSeguroPage() {
                     <Input id="franquia" name="franquia" value={formData.franquia} onChange={handleChange} placeholder="Ex: 2500,00" />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <Label htmlFor="dataContratacao">Data de Contratação</Label>
                         <Popover>
@@ -282,14 +346,17 @@ export default function NovoSeguroPage() {
                 {tipoTitular && (
                   <div className="space-y-2">
                     <Label htmlFor="id_titular">Titular <span className="text-destructive">*</span></Label>
-                    {/* Supabase: Options load from public.PessoasFisicas or public.Entidades */}
-                    <Select name="id_titular" value={formData.id_titular} onValueChange={(value) => handleSelectChange('id_titular', value)} required>
+                    <Select name="id_titular" value={formData.id_titular} onValueChange={(value) => handleSelectChange('id_titular', value)} required disabled={tipoTitular === 'pessoa_fisica' ? isLoadingPessoasFisicas : isLoadingOrganizacoes}>
                       <SelectTrigger id="id_titular">
-                        <SelectValue placeholder={`Selecione ${tipoTitular === 'pessoa_fisica' ? 'a Pessoa Física' : 'a Organização'}`} />
+                        <SelectValue placeholder={
+                            (tipoTitular === 'pessoa_fisica' && isLoadingPessoasFisicas) || (tipoTitular === 'organizacao' && isLoadingOrganizacoes) 
+                            ? "Carregando..." 
+                            : `Selecione ${tipoTitular === 'pessoa_fisica' ? 'a Pessoa Física' : 'a Organização'}`
+                        } />
                       </SelectTrigger>
                       <SelectContent>
-                        {tipoTitular === 'pessoa_fisica' && placeholderPessoasFisicas.map(pf => <SelectItem key={pf.id} value={pf.id}>{pf.nomeCompleto} ({pf.cpf})</SelectItem>)}
-                        {tipoTitular === 'organizacao' && placeholderOrganizacoes.map(org => <SelectItem key={org.id} value={org.id}>{org.nome} ({org.cnpj})</SelectItem>)}
+                        {tipoTitular === 'pessoa_fisica' && pessoasFisicasOptions.map(pf => <SelectItem key={pf.id} value={pf.id}>{pf.nome}</SelectItem>)}
+                        {tipoTitular === 'organizacao' && organizacoesOptions.map(org => <SelectItem key={org.id} value={org.id}>{org.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -303,12 +370,14 @@ export default function NovoSeguroPage() {
               <CardHeader><CardTitle>Veículo Associado (Opcional)</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 <Label htmlFor="id_veiculo">Veículo</Label>
-                {/* Supabase: Options load from public.Veiculos */}
-                <Select name="id_veiculo" value={formData.id_veiculo} onValueChange={(value) => handleSelectChange('id_veiculo', value)}>
-                  <SelectTrigger id="id_veiculo"><Car className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Selecione o veículo (se aplicável)" /></SelectTrigger>
+                <Select name="id_veiculo" value={formData.id_veiculo} onValueChange={(value) => handleSelectChange('id_veiculo', value)} disabled={isLoadingVeiculos}>
+                  <SelectTrigger id="id_veiculo">
+                    <Car className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder={isLoadingVeiculos ? "Carregando..." : "Selecione o veículo (se aplicável)"} />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="--none--">Nenhum Veículo</SelectItem>
-                    {placeholderVeiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.description}</SelectItem>)}
+                    {veiculosOptions.map(v => <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </CardContent>
@@ -320,33 +389,35 @@ export default function NovoSeguroPage() {
                 <Card className="shadow-lg">
                     <CardHeader><CardTitle className="flex items-center"><ShieldQuestion className="mr-2 h-5 w-5 text-primary"/> Coberturas</CardTitle></CardHeader>
                     <CardContent className="space-y-3 max-h-60 overflow-y-auto">
-                        {/* Supabase: Options load from public.Coberturas */}
-                        {placeholderCoberturas.map(item => (
-                        <div key={item.id} className="flex items-center space-x-2">
-                            <Checkbox
-                            id={`cobertura-${item.id}`}
-                            checked={formData.coberturasSelecionadas.includes(item.id)}
-                            onCheckedChange={(checked) => handleCheckboxChange('coberturasSelecionadas', item.id, checked as boolean)}
-                            />
-                            <Label htmlFor={`cobertura-${item.id}`} className="font-normal cursor-pointer">{item.nome}</Label>
-                        </div>
-                        ))}
+                        {isLoadingCoberturas ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin text-primary" /> : coberturasOptions.length > 0 ? (
+                            coberturasOptions.map(item => (
+                            <div key={item.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                id={`cobertura-${item.id}`}
+                                checked={formData.coberturasSelecionadas.includes(item.id)}
+                                onCheckedChange={(checked) => handleCheckboxChange('coberturasSelecionadas', item.id, checked as boolean)}
+                                />
+                                <Label htmlFor={`cobertura-${item.id}`} className="font-normal cursor-pointer">{item.nome}</Label>
+                            </div>
+                            ))
+                        ) : <p className="text-sm text-muted-foreground">Nenhuma cobertura encontrada.</p>}
                     </CardContent>
                 </Card>
                 <Card className="shadow-lg">
                     <CardHeader><CardTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary"/> Assistências</CardTitle></CardHeader>
                     <CardContent className="space-y-3 max-h-60 overflow-y-auto">
-                        {/* Supabase: Options load from public.Assistencias */}
-                        {placeholderAssistencias.map(item => (
-                        <div key={item.id} className="flex items-center space-x-2">
-                            <Checkbox
-                            id={`assistencia-${item.id}`}
-                            checked={formData.assistenciasSelecionadas.includes(item.id)}
-                            onCheckedChange={(checked) => handleCheckboxChange('assistenciasSelecionadas', item.id, checked as boolean)}
-                            />
-                            <Label htmlFor={`assistencia-${item.id}`} className="font-normal cursor-pointer">{item.nome}</Label>
-                        </div>
-                        ))}
+                        {isLoadingAssistencias ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin text-primary" /> : assistenciasOptions.length > 0 ? (
+                            assistenciasOptions.map(item => (
+                            <div key={item.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                id={`assistencia-${item.id}`}
+                                checked={formData.assistenciasSelecionadas.includes(item.id)}
+                                onCheckedChange={(checked) => handleCheckboxChange('assistenciasSelecionadas', item.id, checked as boolean)}
+                                />
+                                <Label htmlFor={`assistencia-${item.id}`} className="font-normal cursor-pointer">{item.nome} {item.tipo_assistencia && `(${item.tipo_assistencia})`}</Label>
+                            </div>
+                            ))
+                        ) : <p className="text-sm text-muted-foreground">Nenhuma assistência encontrada.</p>}
                     </CardContent>
                 </Card>
             </div>
@@ -357,7 +428,7 @@ export default function NovoSeguroPage() {
           <Button type="button" variant="outline" onClick={() => router.push('/admin/seguros')} disabled={isLoading}>
             <XCircle className="mr-2 h-5 w-5" /> Cancelar
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || isLoadingPessoasFisicas || isLoadingOrganizacoes || isLoadingVeiculos || isLoadingSeguradoras || isLoadingCoberturas || isLoadingAssistencias}>
             <Save className="mr-2 h-5 w-5" /> {isLoading ? 'Cadastrando...' : 'Cadastrar Seguro'}
           </Button>
         </CardFooter>
@@ -366,3 +437,11 @@ export default function NovoSeguroPage() {
   );
 }
     
+// Supabase Integration Notes:
+// - Dynamic Selects: Fetch PessoasFisicas, Entidades, Veiculos, Seguradoras, Coberturas, Assistencias from Supabase.
+// - Form Submission:
+//   1. INSERT into public.Seguros. Get the new id_seguro.
+//   2. INSERT selected coberturas into public.SeguroCoberturas (id_seguro, id_cobertura).
+//   3. INSERT selected assistencias into public.SeguroAssistencias (id_seguro, id_assistencia).
+//   (Ideally, these three steps should be in a transaction via a Supabase Edge Function).
+// - RLS: Ensure user has INSERT permissions on Seguros, SeguroCoberturas, SeguroAssistencias and SELECT on related tables.
