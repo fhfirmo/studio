@@ -2,10 +2,13 @@
 "use client";
 
 import Link from 'next/link';
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ShieldCheck, Edit3, Trash2, Search, Info, AlertTriangle, PlusCircle, Loader2 } from "lucide-react";
@@ -13,14 +16,19 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, isValid } from 'date-fns';
 
+interface GenericOption { value: string; label: string; }
+
 interface SeguroSupabase {
   id_seguro: number;
   numero_apolice: string;
   vigencia_inicio: string;
   vigencia_fim: string;
   valor_indenizacao: number | null;
+  id_seguradora: number; // For filtering
+  id_titular_pessoa_fisica: number | null; // For filtering
+  id_titular_entidade: number | null; // For filtering
   Seguradoras: { nome_seguradora: string } | null;
-  Veiculos: { placa_atual: string, marca?: string, modelo?: string } | null; // marca and modelo are now direct on Veiculos
+  Veiculos: { placa_atual: string, marca?: string, modelo?: string } | null;
   PessoasFisicas: { nome_completo: string } | null;
   Entidades: { nome: string } | null;
 }
@@ -32,16 +40,33 @@ interface SeguroRow {
   seguradoraNome: string | null;
   dataInicio: string;
   dataFim: string;
-  valorIndenizacao: string | null; // Formatted currency
+  valorIndenizacao: string | null;
   titularNome: string | null;
 }
 
+const initialFilters = {
+  searchTerm: '',
+  idSeguradora: 'todos',
+  tipoTitular: 'todos' as 'todos' | 'pessoa_fisica' | 'organizacao',
+  idTitular: '',
+};
+
 export default function GerenciamentoSegurosPage() {
   const [seguros, setSeguros] = useState<SeguroRow[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState(initialFilters);
   const [isLoading, setIsLoading] = useState(true);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [seguroToDelete, setSeguroToDelete] = useState<{ id: number; numeroApolice: string } | null>(null);
+  
+  const [seguradoraOptions, setSeguradoraOptions] = useState<GenericOption[]>([]);
+  const [titularPessoaFisicaOptions, setTitularPessoaFisicaOptions] = useState<GenericOption[]>([]);
+  const [titularOrganizacaoOptions, setTitularOrganizacaoOptions] = useState<GenericOption[]>([]);
+  const [currentTitularOptions, setCurrentTitularOptions] = useState<GenericOption[]>([]);
+
+  const [isLoadingSeguradoras, setIsLoadingSeguradoras] = useState(false);
+  const [isLoadingTitularesPF, setIsLoadingTitularesPF] = useState(false);
+  const [isLoadingTitularesOrg, setIsLoadingTitularesOrg] = useState(false);
+
   const { toast } = useToast();
 
   const formatDateForDisplay = (dateString: string | null) => {
@@ -57,63 +82,108 @@ export default function GerenciamentoSegurosPage() {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
+  const fetchDropdownOptions = async () => {
+    if (!supabase) return;
+    setIsLoadingSeguradoras(true);
+    supabase.from('Seguradoras').select('id_seguradora, nome_seguradora').order('nome_seguradora')
+      .then(({ data, error }) => {
+        if (error) toast({ title: "Erro ao buscar Seguradoras", description: error.message, variant: "destructive" });
+        else setSeguradoraOptions([{ value: 'todos', label: 'Todas Seguradoras' }, ...data.map(s => ({ value: s.id_seguradora.toString(), label: s.nome_seguradora }))]);
+        setIsLoadingSeguradoras(false);
+      });
+
+    setIsLoadingTitularesPF(true);
+    supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo').order('nome_completo')
+      .then(({ data, error }) => {
+        if (error) toast({ title: "Erro ao buscar Pessoas Físicas", description: error.message, variant: "destructive" });
+        else setTitularPessoaFisicaOptions(data.map(pf => ({ value: pf.id_pessoa_fisica.toString(), label: pf.nome_completo })));
+        setIsLoadingTitularesPF(false);
+      });
+    
+    setIsLoadingTitularesOrg(true);
+    supabase.from('Entidades').select('id_entidade, nome').order('nome')
+      .then(({ data, error }) => {
+        if (error) toast({ title: "Erro ao buscar Organizações", description: error.message, variant: "destructive" });
+        else setTitularOrganizacaoOptions(data.map(org => ({ value: org.id_entidade.toString(), label: org.nome })));
+        setIsLoadingTitularesOrg(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchDropdownOptions();
+    fetchSeguros();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  useEffect(() => {
+    if (filters.tipoTitular === 'pessoa_fisica') {
+      setCurrentTitularOptions(titularPessoaFisicaOptions);
+    } else if (filters.tipoTitular === 'organizacao') {
+      setCurrentTitularOptions(titularOrganizacaoOptions);
+    } else {
+      setCurrentTitularOptions([]);
+    }
+    // Reset idTitular if the current selection is no longer valid for the new type
+    if (filters.idTitular && !currentTitularOptions.find(opt => opt.value === filters.idTitular)) {
+        setFilters(prev => ({ ...prev, idTitular: '' }));
+    }
+  }, [filters.tipoTitular, titularPessoaFisicaOptions, titularOrganizacaoOptions, filters.idTitular, currentTitularOptions]);
+
+
   const fetchSeguros = async () => {
     if (!supabase) {
       toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
       setIsLoading(false); setSeguros([]); return;
     }
     setIsLoading(true);
-    console.log(`GerenciamentoSegurosPage: Fetching Seguros. Search: "${searchTerm}"`);
-
-    // Diagnostic: Check current user role via RPC
-    try {
-      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role');
-      if (roleError) {
-        console.error("GerenciamentoSegurosPage: Erro ao chamar RPC get_user_role:", JSON.stringify(roleError, null, 2));
-      } else {
-        console.log("GerenciamentoSegurosPage: Papel do usuário:", roleData);
-      }
-    } catch (e: any) {
-      console.error("GerenciamentoSegurosPage: Exceção ao chamar RPC get_user_role:", e.message);
-    }
+    console.log(`GerenciamentoSegurosPage: Fetching Seguros. Filters:`, filters);
     
-    let query = supabase
-      .from('Seguros')
-      .select(`
-        id_seguro,
-        numero_apolice,
-        vigencia_inicio,
-        vigencia_fim,
-        valor_indenizacao,
-        Seguradoras ( nome_seguradora ),
-        Veiculos ( placa_atual, marca, modelo ), 
-        PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey ( nome_completo ),
-        Entidades!Seguros_id_titular_entidade_fkey ( nome )
-      `)
-      .order('numero_apolice', { ascending: true });
+    try {
+      let query = supabase
+        .from('Seguros')
+        .select(`
+          id_seguro,
+          numero_apolice,
+          vigencia_inicio,
+          vigencia_fim,
+          valor_indenizacao,
+          id_seguradora,
+          id_titular_pessoa_fisica,
+          id_titular_entidade,
+          Seguradoras ( nome_seguradora ),
+          Veiculos ( placa_atual, marca, modelo ), 
+          PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey ( nome_completo ),
+          Entidades!Seguros_id_titular_entidade_fkey ( nome )
+        `)
+        .order('numero_apolice', { ascending: true });
 
-    if (searchTerm) {
-      const LIKESearchTerm = `%${searchTerm}%`;
-      query = query.or(
-        `numero_apolice.ilike.${LIKESearchTerm},` +
-        `Veiculos.placa_atual.ilike.${LIKESearchTerm}` 
-        // Note: Searching on titular name would require a more complex query or a database view.
-      );
-    }
+      if (filters.searchTerm) {
+        const LIKESearchTerm = `%${filters.searchTerm}%`;
+        query = query.or(
+          `numero_apolice.ilike.${LIKESearchTerm},` +
+          `Veiculos.placa_atual.ilike.${LIKESearchTerm}` 
+        );
+      }
 
-    const { data, error } = await query;
+      if (filters.idSeguradora !== 'todos') {
+        query = query.eq('id_seguradora', parseInt(filters.idSeguradora));
+      }
 
-    if (error) {
-      console.error("Erro ao buscar seguros:", JSON.stringify(error, null, 2), error);
-      toast({ 
-          title: "Erro ao Buscar Dados", 
-          description: error.message || "Falha ao carregar seguros. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.", 
-          variant: "destructive",
-          duration: 10000 
-      });
-      setSeguros([]);
-    } else {
-      console.log("GerenciamentoSegurosPage: Dados brutos de seguros recebidos:", data);
+      if (filters.tipoTitular === 'pessoa_fisica' && filters.idTitular) {
+        query = query.eq('id_titular_pessoa_fisica', parseInt(filters.idTitular));
+      } else if (filters.tipoTitular === 'organizacao' && filters.idTitular) {
+        query = query.eq('id_titular_entidade', parseInt(filters.idTitular));
+      } else if (filters.tipoTitular === 'pessoa_fisica' && !filters.idTitular) {
+        query = query.not('id_titular_pessoa_fisica', 'is', null);
+      } else if (filters.tipoTitular === 'organizacao' && !filters.idTitular) {
+        query = query.not('id_titular_entidade', 'is', null);
+      }
+
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
       const formattedData: SeguroRow[] = (data || []).map((s: SeguroSupabase) => ({
         id: s.id_seguro,
         numeroApolice: s.numero_apolice,
@@ -124,16 +194,31 @@ export default function GerenciamentoSegurosPage() {
         valorIndenizacao: formatCurrency(s.valor_indenizacao),
         titularNome: s.PessoasFisicas?.nome_completo || s.Entidades?.nome || 'N/A',
       }));
-      console.log("GerenciamentoSegurosPage: Dados formatados para a tabela:", formattedData);
       setSeguros(formattedData);
+    } catch (error: any) {
+      console.error("Erro ao buscar seguros:", JSON.stringify(error, null, 2), error);
+      toast({ 
+          title: "Erro ao Buscar Dados", 
+          description: error.message || "Falha ao carregar seguros. Verifique as permissões (RLS) e a estrutura da consulta. Detalhes no console.", 
+          variant: "destructive",
+          duration: 10000 
+      });
+      setSeguros([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
   
-  useEffect(() => {
-    fetchSeguros();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  const handleFilterChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSelectFilterChange = (name: keyof typeof initialFilters, value: string) => {
+    setFilters(prev => ({ ...prev, [name]: value }));
+    if (name === 'tipoTitular') { // Reset idTitular when tipoTitular changes
+      setFilters(prev => ({ ...prev, idTitular: '' }));
+    }
+  };
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -148,29 +233,16 @@ export default function GerenciamentoSegurosPage() {
   const confirmDeleteSeguro = async () => {
     if (!seguroToDelete || !supabase) return;
     
-    setIsLoading(true); // Disable buttons during operation
-
-    // It's often better to handle cascading deletes (SeguroCoberturas, SeguroAssistencias)
-    // via database constraints (ON DELETE CASCADE) or an Edge Function for atomicity.
-    // For client-side, we'll attempt to delete these first, then the main seguro.
+    setIsLoading(true);
     try {
-      console.log(`Attempting to delete related SeguroCoberturas for id_seguro: ${seguroToDelete.id}`);
       const { error: coberturasError } = await supabase.from('SeguroCoberturas').delete().eq('id_seguro', seguroToDelete.id);
-      if (coberturasError) console.warn("Erro ao deletar SeguroCoberturas (pode não existir):", JSON.stringify(coberturasError, null, 2));
+      if (coberturasError) console.warn("Erro ao deletar SeguroCoberturas:", JSON.stringify(coberturasError, null, 2));
 
-      console.log(`Attempting to delete related SeguroAssistencias for id_seguro: ${seguroToDelete.id}`);
       const { error: assistenciasError } = await supabase.from('SeguroAssistencias').delete().eq('id_seguro', seguroToDelete.id);
-      if (assistenciasError) console.warn("Erro ao deletar SeguroAssistencias (pode não existir):", JSON.stringify(assistenciasError, null, 2));
+      if (assistenciasError) console.warn("Erro ao deletar SeguroAssistencias:", JSON.stringify(assistenciasError, null, 2));
 
-      console.log(`Attempting to delete Seguro ID: ${seguroToDelete.id}`);
-      const { error } = await supabase
-        .from('Seguros')
-        .delete()
-        .eq('id_seguro', seguroToDelete.id);
-
-      if (error) {
-        throw error; // This will be caught by the outer catch block
-      }
+      const { error } = await supabase.from('Seguros').delete().eq('id_seguro', seguroToDelete.id);
+      if (error) throw error;
 
       toast({ title: "Seguro Excluído!", description: `O seguro ${seguroToDelete.numeroApolice} foi excluído.` });
       fetchSeguros(); 
@@ -207,22 +279,87 @@ export default function GerenciamentoSegurosPage() {
 
       <Card className="shadow-lg mb-8">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar Seguros</CardTitle>
-          <CardDescription>Filtre seguros por número da apólice ou placa do veículo.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5"/> Pesquisar e Filtrar Seguros</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
-            <Input
-              type="text"
-              placeholder="Pesquisar por Nº Apólice ou Placa..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-grow"
-              disabled={isLoading}
-            />
-            <Button type="submit" disabled={isLoading}>
-              <Search className="mr-2 h-4 w-4" /> {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando...</> : 'Buscar'}
-            </Button>
+          <form onSubmit={handleSearchSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="searchTerm">Nº Apólice / Placa Veículo</Label>
+                <Input
+                  id="searchTerm"
+                  name="searchTerm"
+                  placeholder="Pesquisar..."
+                  value={filters.searchTerm}
+                  onChange={handleFilterChange}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="idSeguradora">Seguradora</Label>
+                <Select 
+                  name="idSeguradora" 
+                  value={filters.idSeguradora} 
+                  onValueChange={(v) => handleSelectFilterChange('idSeguradora', v)}
+                  disabled={isLoading || isLoadingSeguradoras}
+                >
+                  <SelectTrigger id="idSeguradora">
+                    <SelectValue placeholder={isLoadingSeguradoras ? "Carregando..." : "Todas Seguradoras"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {seguradoraOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Tipo de Titular</Label>
+                <Select 
+                  name="tipoTitular" 
+                  value={filters.tipoTitular} 
+                  onValueChange={(v) => handleSelectFilterChange('tipoTitular', v as any)}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger id="tipoTitular">
+                    <SelectValue placeholder="Todos os Tipos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os Tipos</SelectItem>
+                    <SelectItem value="pessoa_fisica">Pessoa Física</SelectItem>
+                    <SelectItem value="organizacao">Organização</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {filters.tipoTitular !== 'todos' && (
+                <div className="space-y-1">
+                  <Label htmlFor="idTitular">Nome do Titular</Label>
+                  <Select 
+                    name="idTitular" 
+                    value={filters.idTitular} 
+                    onValueChange={(v) => handleSelectFilterChange('idTitular', v)}
+                    disabled={isLoading || (filters.tipoTitular === 'pessoa_fisica' && isLoadingTitularesPF) || (filters.tipoTitular === 'organizacao' && isLoadingTitularesOrg) || currentTitularOptions.length === 0}
+                  >
+                    <SelectTrigger id="idTitular">
+                      <SelectValue placeholder={
+                        (filters.tipoTitular === 'pessoa_fisica' && isLoadingTitularesPF) || (filters.tipoTitular === 'organizacao' && isLoadingTitularesOrg) 
+                        ? "Carregando..." 
+                        : currentTitularOptions.length === 0 ? "Nenhum titular disponível" : "Selecione o Titular"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currentTitularOptions.length > 0 ? 
+                        currentTitularOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)
+                        : <SelectItem value="" disabled>Nenhuma opção</SelectItem>
+                      }
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={isLoading}>
+                <Search className="mr-2 h-4 w-4" /> {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando...</> : 'Buscar'}
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -251,12 +388,12 @@ export default function GerenciamentoSegurosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && seguros.length === 0 && !searchTerm ? (
+                {isLoading && seguros.length === 0 && !filters.searchTerm ? (
                   <TableRow><TableCell colSpan={9} className="text-center h-24"><Loader2 className="inline-block mr-2 h-5 w-5 animate-spin" />Carregando...</TableCell></TableRow>
                 ) : !isLoading && seguros.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
-                      {searchTerm ? `Nenhum seguro encontrado para "${searchTerm}".` : "Nenhum seguro cadastrado."}
+                      {filters.searchTerm || filters.idSeguradora !== 'todos' || filters.idTitular ? `Nenhum seguro encontrado para os filtros aplicados.` : "Nenhum seguro cadastrado."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -325,12 +462,12 @@ export default function GerenciamentoSegurosPage() {
         - Fetch from 'Seguros'.
         - JOINs/Nested Selects needed for:
           - 'Seguradoras' (for nome_seguradora)
-          - 'Veiculos' (for placa_atual, marca, modelo) -> FK: Seguros.id_veiculo = Veiculos.id_veiculo
-          - 'PessoasFisicas' (for nome_completo as titular) -> FK: Seguros.id_titular_pessoa_fisica = PessoasFisicas.id_pessoa_fisica
-          - 'Entidades' (for nome as titular) -> FK: Seguros.id_titular_entidade = Entidades.id_entidade
+          - 'Veiculos' (for placa_atual, marca, modelo)
+          - 'PessoasFisicas' (for nome_completo as titular)
+          - 'Entidades' (for nome as titular)
         - Search: On numero_apolice (Seguros) and Veiculos.placa_atual.
-        - Delete: Deletes from 'Seguros'. Ensure related 'SeguroCoberturas' and 'SeguroAssistencias' are handled (CASCADE or explicit deletes before main record).
-        - RLS: Ensure user has SELECT permissions on all these tables and DELETE on Seguros (and related junction tables if explicit delete).
+        - Delete: Deletes from 'Seguros', 'SeguroCoberturas', 'SeguroAssistencias'.
+        - RLS: Ensure SELECT/DELETE permissions for authenticated users.
       */}
     </div>
   );
