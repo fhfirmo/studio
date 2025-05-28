@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -89,6 +90,7 @@ export default function GerenciamentoDocumentosPage() {
       query = query.or(
         `nome_arquivo.ilike.%${searchTerm}%,` +
         `tipo_documento.ilike.%${searchTerm}%`
+        // Note: Searching on associated entity names would require more complex queries or DB views.
       );
       console.log("GerenciamentoDocumentosPage: Filtro OR aplicado para nome_arquivo e tipo_documento.");
     }
@@ -158,9 +160,9 @@ export default function GerenciamentoDocumentosPage() {
     
     setIsLoading(true);
     try {
-      console.log(`Attempting to delete from Storage: bucket 'documentos_bucket', path '${documentoToDelete.storagePath}'`);
+      console.log(`Attempting to delete from Storage: bucket 'documentos-bucket', path '${documentoToDelete.storagePath}'`);
       const { error: storageError } = await supabase.storage
-        .from('documentos_bucket') 
+        .from('documentos-bucket') 
         .remove([documentoToDelete.storagePath]);
 
       if (storageError) {
@@ -196,10 +198,10 @@ export default function GerenciamentoDocumentosPage() {
 
   const handleDownload = async (documento: DocumentoRow) => {
     if (!supabase) return;
-    console.log(`Attempting download: bucket 'documentos_bucket', path '${documento.storagePath}'`);
+    console.log(`Attempting download: bucket 'documentos-bucket', path '${documento.storagePath}'`);
     try {
         const { data, error } = await supabase.storage
-        .from('documentos_bucket') 
+        .from('documentos-bucket') 
         .download(documento.storagePath);
 
         if (error) throw error;
@@ -225,10 +227,10 @@ export default function GerenciamentoDocumentosPage() {
 
   const handleView = async (documento: DocumentoRow) => {
      if (!supabase) return;
-     console.log(`Attempting view: bucket 'documentos_bucket', path '${documento.storagePath}'`);
+     console.log(`Attempting view: bucket 'documentos-bucket', path '${documento.storagePath}'`);
      try {
         const { data } = supabase.storage
-        .from('documentos_bucket') 
+        .from('documentos-bucket') 
         .getPublicUrl(documento.storagePath);
 
         if (data?.publicUrl) {
@@ -399,8 +401,11 @@ export default function GerenciamentoDocumentosPage() {
 // - Conditionally JOIN/Select from public."PessoasFisicas", "Entidades", "Veiculos", "Seguros" for "Associado a".
 //   - For Veiculos, select placa_atual, marca, modelo directly as these are now direct columns.
 // - Search: On 'nome_arquivo', 'tipo_documento'. Consider DB view/function for searching across associated entity names.
-// - View/Download: Use Supabase Storage methods. Bucket name 'documentos_bucket'.
+// - View/Download: Use Supabase Storage methods. Bucket name 'documentos-bucket'. (Corrected)
 // - Delete: Delete from Supabase Storage AND 'Arquivos' table.
 // - RLS: Ensure user has SELECT on Arquivos and related tables, and DELETE on Arquivos and Storage.
 // - Filename for download: Made safer and tries to preserve extension.
 // - View Fallback: If direct view (public URL) isn't working, it attempts a download.
+
+
+    

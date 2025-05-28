@@ -34,7 +34,7 @@ export default function NovoDocumentoPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0); // Placeholder for progress
 
   const [formData, setFormData] = useState({
     titulo: '',
@@ -154,7 +154,6 @@ export default function NovoDocumentoPage() {
     setIsLoading(true);
     setUploadProgress(0); 
 
-    // Log the Supabase URL being used by the client
     console.log("NovoDocumentoPage: Supabase URL from env for this operation:", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
     try {
@@ -162,9 +161,9 @@ export default function NovoDocumentoPage() {
       const fileNameInStorage = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`; 
       const filePath = `documentos/${fileNameInStorage}`; 
 
-      console.log(`NovoDocumentoPage: Iniciando upload para Supabase Storage. Bucket: documentos_bucket, Path: ${filePath}`);
+      console.log(`NovoDocumentoPage: Iniciando upload para Supabase Storage. Bucket: documentos-bucket, Path: ${filePath}`);
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documentos_bucket') // Ensure this is the correct bucket name
+        .from('documentos-bucket') 
         .upload(filePath, selectedFile, {
           cacheControl: '3600',
           upsert: false,
@@ -201,7 +200,7 @@ export default function NovoDocumentoPage() {
       if (dbError) {
         console.error("NovoDocumentoPage: Erro ao salvar metadados no DB:", JSON.stringify(dbError, null, 2), dbError);
         console.log("NovoDocumentoPage: Tentando deletar arquivo do Storage devido a erro no DB:", filePath);
-        await supabase.storage.from('documentos_bucket').remove([filePath]);
+        await supabase.storage.from('documentos-bucket').remove([filePath]);
         throw dbError;
       }
 
@@ -210,17 +209,17 @@ export default function NovoDocumentoPage() {
 
     } catch (error: any) {
       console.error('NovoDocumentoPage: Falha no envio do documento:', JSON.stringify(error, null, 2), error);
-      const errorMessage = error.message || error.error || "Ocorreu um erro inesperado.";
+      const errorMessageContent = (error.message || error.error || "Ocorreu um erro inesperado.").toLowerCase();
       
-      if (typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('bucket not found')) {
+      if (errorMessageContent.includes('bucket not found')) {
         toast({
           title: "Erro de Configuração do Storage",
-          description: `O bucket 'documentos_bucket' não foi encontrado no Supabase. Verifique o nome EXATO do bucket e se ele existe no seu projeto Supabase em Storage > Buckets. As políticas de acesso também devem permitir uploads.`,
+          description: `O bucket 'documentos-bucket' não foi encontrado no Supabase. Verifique o nome EXATO do bucket e se ele existe no seu projeto Supabase em Storage > Buckets. As políticas de acesso também devem permitir uploads.`,
           variant: "destructive",
           duration: 12000,
         });
       } else {
-        toast({ title: "Erro ao Enviar Documento", description: errorMessage, variant: "destructive" });
+        toast({ title: "Erro ao Enviar Documento", description: error.message || "Ocorreu um erro inesperado.", variant: "destructive" });
       }
     } finally {
       setIsLoading(false);
@@ -367,10 +366,13 @@ export default function NovoDocumentoPage() {
 }
     
 // Supabase Integration Notes:
-// - Storage Bucket: Ensure 'documentos_bucket' exists.
+// - Storage Bucket: Ensure 'documentos-bucket' exists. (Corrected from _bucket to -bucket)
 // - Storage Policies: Allow uploads for authenticated users.
 // - Arquivos Table RLS: Allow INSERT for the user performing the upload.
 // - Payload to "Arquivos": Includes nome_arquivo (user-defined title), caminho_armazenamento, 
 //   tipo_mime, tamanho_bytes, tipo_documento, user_id_upload, observacoes, and ONE association ID.
 // - Error handling for "Bucket not found" is specific.
+// - Dynamic select options for associated entities are fetched from Supabase.
 
+
+    

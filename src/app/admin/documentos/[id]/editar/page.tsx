@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, type FormEvent } from 'react';
@@ -378,3 +379,7 @@ export default function EditarDocumentoPage() {
 //     Example: if tipoAssociacao is 'pessoa_fisica', set id_pessoa_fisica_associada = formData.idAssociado, and set
 //              id_entidade_associada = NULL, id_veiculo = NULL, id_seguro = NULL.
 // - The actual file in Supabase Storage is NOT re-uploaded or changed on this screen. Only metadata and associations.
+// - Bucket name 'documentos-bucket' (Corrected)
+
+
+    
