@@ -14,23 +14,24 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, isValid } from 'date-fns';
 
+// Interface for data directly from Supabase profiles table
 interface UserFromSupabase {
   id: string;
   full_name: string | null;
-  email: string | null; // Assuming email is fetched if available (e.g., via a view or if in profiles)
+  // email is not directly on profiles, would need a JOIN or view
   role: string | null;
-  created_at: string; // Supabase timestamp
+  created_at: string; 
 }
 
+// Interface for data displayed in the table row
 interface UserRow {
   id: string;
   nome: string;
-  email: string;
+  email: string; // Will be a placeholder if not fetched
   perfil: string;
   dataCadastro: string;
 }
 
-// Updated to match database roles
 const userProfilesForFilter = [
   { value: "todos", label: "Todos os Perfis" },
   { value: "admin", label: "Administrador" },
@@ -56,17 +57,28 @@ export default function GerenciamentoUsuariosPage() {
       return;
     }
     setIsLoading(true);
-    console.log("GerenciamentoUsuariosPage: Fetching users from Supabase. Search:", searchTerm, "Profile Filter:", profileFilter);
+    console.log("GerenciamentoUsuariosPage: Fetching users. Search:", searchTerm, "Profile Filter:", profileFilter);
+
+    // Diagnostic: Check current user role via RPC
+    try {
+      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role');
+      if (roleError) {
+        console.error("GerenciamentoUsuariosPage: Erro ao chamar RPC get_user_role:", JSON.stringify(roleError, null, 2));
+      } else {
+        console.log("GerenciamentoUsuariosPage: Papel do usuário (antes da query de profiles):", roleData);
+      }
+    } catch (e: any) {
+      console.error("GerenciamentoUsuariosPage: Exceção ao chamar RPC get_user_role:", e.message);
+    }
 
     let query = supabase
       .from('profiles')
-      .select('id, full_name, email, role, created_at') // Ensure 'email' is in your 'profiles' table or accessible via RLS from auth.users
+      .select('id, full_name, role, created_at') 
       .order('full_name', { ascending: true });
 
     if (searchTerm) {
-      // Assuming email is stored in profiles or accessible through a view/function
-      // If email is only in auth.users, searching it here directly with 'profiles' source is tricky without a view or function
-      query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      // Simplified search to direct 'profiles' columns. Email search would require a view or different approach.
+      query = query.ilike('full_name', `%${searchTerm}%`);
     }
     if (profileFilter !== 'todos') {
       query = query.eq('role', profileFilter);
@@ -75,19 +87,25 @@ export default function GerenciamentoUsuariosPage() {
     const { data, error } = await query;
 
     if (error) {
-      console.error("GerenciamentoUsuariosPage: Erro ao buscar usuários:", JSON.stringify(error, null, 2), error);
-      toast({ title: "Erro ao Buscar Usuários", description: error.message || "Não foi possível carregar os usuários.", variant: "destructive" });
+      console.error("GerenciamentoUsuariosPage: Erro ao buscar usuários (full error object):", JSON.stringify(error, null, 2), error);
+      toast({ 
+        title: "Erro ao Buscar Usuários", 
+        description: error.message || "Não foi possível carregar os usuários. Verifique o console e as RLS.", 
+        variant: "destructive",
+        duration: 7000
+      });
       setUsers([]);
     } else {
       console.log("GerenciamentoUsuariosPage: Usuários recebidos do Supabase:", data);
       const formattedUsers: UserRow[] = (data || []).map((user: UserFromSupabase) => ({
         id: user.id,
         nome: user.full_name || 'N/A',
-        email: user.email || 'E-mail não disponível', // Handle if email is not directly in profiles
+        email: 'E-mail não disponível', // Placeholder as email is not directly in profiles
         perfil: user.role || 'N/A',
         dataCadastro: user.created_at ? format(parseISO(user.created_at), 'dd/MM/yyyy HH:mm') : 'N/A',
       }));
       setUsers(formattedUsers);
+      console.log("GerenciamentoUsuariosPage: Usuários formatados para tabela:", formattedUsers);
     }
     setIsLoading(false);
   };
@@ -95,7 +113,7 @@ export default function GerenciamentoUsuariosPage() {
   useEffect(() => {
     fetchUsers();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileFilter]); // Re-fetch when profileFilter changes
+  }, [profileFilter]); 
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -118,7 +136,6 @@ export default function GerenciamentoUsuariosPage() {
     
     console.log(`GerenciamentoUsuariosPage: Attempting to delete user profile ID: ${userToDelete.id}`);
     
-    // This deletes from the 'profiles' table. Deleting from auth.users requires admin privileges and typically an Edge Function.
     const { error } = await supabase
       .from('profiles')
       .delete()
@@ -129,7 +146,6 @@ export default function GerenciamentoUsuariosPage() {
       toast({ title: "Erro ao Excluir Perfil", description: error.message || "Falha ao excluir o perfil do usuário.", variant: "destructive" });
     } else {
       toast({ title: "Perfil de Usuário Excluído!", description: `O perfil de ${userToDelete.nome} foi excluído.` });
-      // Note: The auth.users entry is NOT deleted here.
       fetchUsers(); 
     }
     setIsLoading(false);
@@ -165,7 +181,7 @@ export default function GerenciamentoUsuariosPage() {
             <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-4">
             <Input
                 type="text"
-                placeholder="Pesquisar por Nome ou E-mail..."
+                placeholder="Pesquisar por Nome..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="flex-grow"
@@ -182,7 +198,7 @@ export default function GerenciamentoUsuariosPage() {
                 </SelectContent>
             </Select>
             <Button type="submit" disabled={isLoading}>
-                <Search className="mr-2 h-4 w-4" /> {isLoading ? 'Buscando...' : 'Buscar'}
+                <Search className="mr-2 h-4 w-4" /> {isLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : 'Buscar'}
             </Button>
             </form>
         </CardContent>
@@ -270,27 +286,36 @@ export default function GerenciamentoUsuariosPage() {
                 <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
               </div>
               <AlertDialogDescription className="pt-2">
-                Tem certeza que deseja excluir o perfil do usuário <strong>{userToDelete.nome}</strong> (ID: {userToDelete.id})? Esta ação removerá o perfil do banco de dados, mas não a conta de autenticação do usuário.
+                Tem certeza que deseja excluir o perfil do usuário <strong>{userToDelete.nome}</strong> (ID: {userToDelete.id})? 
+                Esta ação removerá o perfil do banco de dados, mas **não** a conta de autenticação do usuário. 
+                A exclusão completa do usuário (Auth + Profile) deve ser feita por um administrador via Supabase Studio ou uma função de backend.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => { setIsAlertOpen(false); setUserToDelete(null); }} disabled={isLoading}>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={confirmDeleteUser} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isLoading}>
-                {isLoading ? "Excluindo..." : "Confirmar Exclusão do Perfil"}
+                {isLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : "Confirmar Exclusão do Perfil"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
       {/* 
-        Supabase Integration RLS Notes:
-        - SELECT on public.profiles: Admins/Supervisors can see all. Operators/Clients see own.
-        - DELETE on public.profiles: Admins/Supervisors can delete.
+        Supabase Integration RLS Notes for public.profiles:
+        - SELECT: Users with 'admin', 'supervisor' roles should be able to read all profiles.
+                  Operators might see some (e.g., clients) or only their own. Clients only see their own.
+                  The `get_user_role()` function and appropriate RLS policies are crucial here.
+        - DELETE on public.profiles: Restricted to 'admin' and/or 'supervisor'.
         - Deleting from public.profiles DOES NOT delete from auth.users automatically unless cascade is set up differently.
-          True user deletion needs `supabase.auth.admin.deleteUser(userId)` via an Edge Function.
+          True user deletion needs `supabase.auth.admin.deleteUser(userId)` via an Edge Function or Supabase Studio.
+        - Email Fetching: To display email, you either need to add an 'email' column to 'profiles' (populated during signup/update, potentially redundant)
+          OR create a database VIEW that joins 'profiles' with 'auth.users' and query that view.
+          The current select `('id, full_name, role, created_at')` does not include email.
       */}
     </div>
   );
 }
+
+    
 
     
