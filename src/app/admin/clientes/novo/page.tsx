@@ -40,6 +40,8 @@ const tiposRelacao = [
   { value: "associado", label: "Associado" },
   { value: "cooperado", label: "Cooperado" },
   { value: "funcionario", label: "Funcionário" },
+  { value: "motorista", label: "Motorista" },
+  { value: "motorista_nao_vinculado", label: "Motorista não Vinculado" },
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
@@ -72,6 +74,7 @@ interface BrasilApiResponse {
 async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
   if (cleanedCep.length !== 8) return null;
+  console.log(`Fetching address for CEP: ${cleanedCep} from BrasilAPI...`);
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
     if (!response.ok) {
@@ -79,12 +82,13 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiRespon
       return null;
     }
     const data: BrasilApiResponse = await response.json();
+    console.log("BrasilAPI CEP response data:", data);
     return {
       street: data.street,
       neighborhood: data.neighborhood,
       city: data.city,
       state: data.state,
-      cep: data.cep,
+      cep: data.cep, // Return the original CEP from API for consistency if needed
     };
   } catch (error) {
     console.error("Error fetching address from CEP:", error);
@@ -108,8 +112,8 @@ export default function NovaPessoaFisicaPage() {
     dataNascimento: undefined as Date | undefined,
     email: '',
     telefone: '',
-    tipoRelacao: '', // This will now be a direct column in PessoasFisicas
-    organizacaoVinculadaId: '', // For MembrosEntidade if tipoRelacao requires it
+    tipoRelacao: '',
+    organizacaoVinculadaId: '',
     logradouro: '',
     numero: '',
     complemento: '',
@@ -118,14 +122,15 @@ export default function NovaPessoaFisicaPage() {
     cidade: '',
     estado_uf: '',
     observacoes: '',
-    cnh: null as CNHDataForForm | null, // Staged CNH data
+    cnh: null as CNHDataForForm | null,
   });
 
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
-  const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create'); // For the CNH modal itself
+  const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create'); 
   const [cnhModalFormData, setCnhModalFormData] = useState<CNHDataForForm>(initialCnhModalFormData);
 
-  const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
+  const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral' && formData.tipoRelacao !== 'motorista_nao_vinculado';
+
 
   useEffect(() => {
     const fetchOrganizacoes = async () => {
@@ -137,18 +142,18 @@ export default function NovaPessoaFisicaPage() {
       setIsLoadingOrganizacoes(true);
       const { data, error } = await supabase
         .from('Entidades')
-        .select('id_entidade, nome')
+        .select('id_entidade, nome, cnpj')
         .order('nome', { ascending: true });
 
       if (error) {
         console.error("Erro ao buscar organizações:", error);
         toast({ title: "Erro ao Carregar Organizações", description: error.message, variant: "destructive" });
         setOrganizacoesOptions([]);
-      } else {
+      } else if (data) {
         setOrganizacoesOptions(
           data.map(org => ({
             value: org.id_entidade.toString(),
-            label: org.nome,
+            label: `${org.nome} (${org.cnpj})`,
           }))
         );
       }
@@ -159,8 +164,7 @@ export default function NovaPessoaFisicaPage() {
 
 
   useEffect(() => {
-    // If tipoRelacao is 'cliente_geral', clear organizacaoVinculadaId as it's not applicable for MembrosEntidade
-    if (formData.tipoRelacao === 'cliente_geral' && formData.organizacaoVinculadaId) {
+    if ((formData.tipoRelacao === 'cliente_geral' || formData.tipoRelacao === 'motorista_nao_vinculado') && formData.organizacaoVinculadaId) {
       setFormData(prev => ({ ...prev, organizacaoVinculadaId: '' }));
     }
   }, [formData.tipoRelacao, formData.organizacaoVinculadaId]);
@@ -205,9 +209,8 @@ export default function NovaPessoaFisicaPage() {
     setFormData(prev => ({...prev, [name]: date }));
   };
 
-  // CNH Modal Handlers
   const handleOpenCnhModal = () => {
-    if (formData.cnh) { // If CNH data is already staged in the main form
+    if (formData.cnh) { 
       setCnhModalMode('edit');
       setCnhModalFormData({ ...formData.cnh });
     } else {
@@ -230,7 +233,6 @@ export default function NovaPessoaFisicaPage() {
      setCnhModalFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // This submit handler for CNH modal only stages data into the main form's 'cnh' field
   const handleCnhSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!cnhModalFormData.numero_registro || !cnhModalFormData.categoria || !cnhModalFormData.data_emissao || !cnhModalFormData.data_validade) {
@@ -267,6 +269,8 @@ export default function NovaPessoaFisicaPage() {
       setIsLoading(false); return;
     }
     
+    // Supabase Real Integration
+    // This section now includes the actual Supabase calls.
     try {
       // Payload for PessoasFisicas table
       const pessoaFisicaPayload = {
@@ -276,6 +280,7 @@ export default function NovaPessoaFisicaPage() {
         data_nascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
         email: formData.email,
         telefone: formData.telefone || null,
+        tipo_relacao: formData.tipoRelacao, // Direct column
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
         complemento: formData.complemento || null,
@@ -283,9 +288,7 @@ export default function NovaPessoaFisicaPage() {
         cep: formData.cep || null,
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
-        tipo_relacao: formData.tipoRelacao, // Directly storing tipo_relacao
-        observacoes: formData.observacoes, // Assuming you have an observacoes column in PessoasFisicas
-        // data_cadastro is usually handled by DB default
+        observacoes: formData.observacoes || null,
       };
 
       console.log("Cadastrando Pessoa Física com payload:", pessoaFisicaPayload);
@@ -306,7 +309,7 @@ export default function NovaPessoaFisicaPage() {
       // If CNH data was staged, insert it into CNHs table
       if (formData.cnh) {
         console.log("Cadastrando CNH para Pessoa Física ID:", newPessoaFisicaId, "Payload CNH:", formData.cnh);
-        const cnhPayload = {
+        const cnhPayloadForDB = {
           id_pessoa_fisica: newPessoaFisicaId,
           numero_registro: formData.cnh.numero_registro,
           categoria: formData.cnh.categoria,
@@ -317,9 +320,14 @@ export default function NovaPessoaFisicaPage() {
           local_emissao_uf: formData.cnh.local_emissao_uf || null, 
           observacoes_cnh: formData.cnh.observacoes_cnh || null,
         };
-        const { error: cnhError } = await supabase.from('CNHs').insert(cnhPayload);
-        if (cnhError) throw cnhError;
-        console.log("CNH cadastrada com sucesso.");
+        const { error: cnhError } = await supabase.from('CNHs').insert(cnhPayloadForDB);
+        if (cnhError) {
+          console.error("Erro ao cadastrar CNH:", cnhError);
+          // Decide if you want to throw cnhError or just warn. For now, warn.
+          toast({ title: "Aviso: Erro ao Salvar CNH", description: cnhError.message, variant: "default", duration: 7000 });
+        } else {
+          console.log("CNH cadastrada com sucesso.");
+        }
       }
 
       // If organizacao is required and selected, insert into MembrosEntidade
@@ -329,11 +337,15 @@ export default function NovaPessoaFisicaPage() {
           id_entidade_pai: parseInt(formData.organizacaoVinculadaId, 10),
           id_membro_pessoa_fisica: newPessoaFisicaId,
           tipo_membro: 'Pessoa Fisica', 
-          funcao_no_membro: formData.tipoRelacao, // Using tipoRelacao from PessoasFisicas as funcao_no_membro
+          funcao_no_membro: formData.tipoRelacao,
         };
         const { error: membroError } = await supabase.from('MembrosEntidade').insert(membroEntidadePayload);
-        if (membroError) throw membroError;
-        console.log("Vínculo MembrosEntidade cadastrado com sucesso.");
+        if (membroError) {
+          console.error("Erro ao cadastrar MembroEntidade:", membroError);
+          toast({ title: "Aviso: Erro ao Vincular Organização", description: membroError.message, variant: "default", duration: 7000 });
+        } else {
+          console.log("Vínculo MembrosEntidade cadastrado com sucesso.");
+        }
       }
       
       toast({ title: "Pessoa Física Cadastrada!", description: `${formData.nomeCompleto} foi adicionado com sucesso.` });
@@ -414,11 +426,10 @@ export default function NovaPessoaFisicaPage() {
                             <SelectValue placeholder={isLoadingOrganizacoes ? "Carregando..." : "Selecione"} />
                           </SelectTrigger>
                           <SelectContent>
-                            {organizacoesOptions.length > 0 ? (
-                              organizacoesOptions.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))
-                            ) : (
-                              <SelectItem value="none" disabled>Nenhuma organização encontrada</SelectItem>
-                            )}
+                            {isLoadingOrganizacoes && <SelectItem value="loading" disabled>Carregando...</SelectItem>}
+                            {!isLoadingOrganizacoes && organizacoesOptions.length === 0 && <SelectItem value="none" disabled>Nenhuma organização encontrada</SelectItem>}
+                            {!isLoadingOrganizacoes && organizacoesOptions.length > 0 && organizacoesOptions.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))
+                            }
                           </SelectContent>
                         </Select>
                     </div>
@@ -531,6 +542,5 @@ export default function NovaPessoaFisicaPage() {
     </div>
   );
 }
-
     
   

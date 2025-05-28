@@ -24,9 +24,9 @@ interface CNHData {
   id_cnh?: string;
   numero_registro: string;
   categoria: string;
-  data_emissao: string; // YYYY-MM-DD
-  data_validade: string; // YYYY-MM-DD
-  primeira_habilitacao: string | null; // YYYY-MM-DD
+  data_emissao: string; 
+  data_validade: string; 
+  primeira_habilitacao: string | null; 
   local_emissao_cidade: string | null;
   local_emissao_uf: string | null;
   observacoes_cnh: string | null;
@@ -41,6 +41,8 @@ const tiposRelacao = [
   { value: "associado", label: "Associado" },
   { value: "cooperado", label: "Cooperado" },
   { value: "funcionario", label: "Funcionário" },
+  { value: "motorista", label: "Motorista" },
+  { value: "motorista_nao_vinculado", label: "Motorista não Vinculado" },
   { value: "cliente_geral", label: "Cliente Geral" },
 ];
 
@@ -66,10 +68,10 @@ interface PessoaFisicaDataFromDB {
   nome_completo: string;
   cpf: string;
   rg?: string | null;
-  data_nascimento?: string | null; // YYYY-MM-DD
+  data_nascimento?: string | null; 
   email: string;
   telefone?: string | null;
-  tipo_relacao?: string; // Now a direct column
+  tipo_relacao?: string;
   logradouro?: string | null;
   numero?: string | null;
   complemento?: string | null;
@@ -78,9 +80,9 @@ interface PessoaFisicaDataFromDB {
   cidade?: string | null;
   estado_uf?: string | null;
   observacoes?: string | null; 
-  data_cadastro?: string; // YYYY-MM-DD or full timestamp
-  MembrosEntidade?: { id_entidade_pai: number }[] | null; // For organization ID if linked
-  CNHs?: CNHData | null; // Single CNH object or null
+  data_cadastro?: string; 
+  MembrosEntidade?: { id_entidade_pai: number }[] | null; 
+  CNHs?: CNHData | null; 
 }
 
 
@@ -107,9 +109,6 @@ async function getPessoaFisicaById(id: string): Promise<PessoaFisicaDataFromDB |
   }
   if (!pfData) return null;
 
-  // CNHs relation is one-to-one or one-to-none via a foreign key from CNHs to PessoasFisicas.
-  // The query might return an array if not using .maybeSingle() on CNHs, or if it's a view.
-  // Assuming the direct relation gives one CNH or null from the select.
   const cnh = Array.isArray(pfData.CNHs) ? (pfData.CNHs[0] || null) : pfData.CNHs;
   return { ...pfData, CNHs: cnh } as PessoaFisicaDataFromDB;
 }
@@ -127,6 +126,7 @@ interface BrasilApiResponse {
 async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiResponse> | null> {
   const cleanedCep = cep.replace(/\D/g, '');
    if (cleanedCep.length !== 8) return null;
+   console.log(`Fetching address for CEP: ${cleanedCep} from BrasilAPI...`);
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanedCep}`);
     if (!response.ok) {
@@ -134,6 +134,7 @@ async function fetchAddressFromCEP(cep: string): Promise<Partial<BrasilApiRespon
       return null;
     }
     const data: BrasilApiResponse = await response.json();
+    console.log("BrasilAPI CEP response data:", data);
     return { street: data.street, neighborhood: data.neighborhood, city: data.city, state: data.state, cep: data.cep };
   } catch (error) {
     console.error("Error fetching address from CEP:", error);
@@ -157,7 +158,7 @@ export default function EditarPessoaFisicaPage() {
 
   const [formData, setFormData] = useState({
     nomeCompleto: '', cpf: '', rg: '', dataNascimento: undefined as Date | undefined, email: '', 
-    telefone: '', tipoRelacao: '', organizacaoVinculadaId: '', // For MembrosEntidade link
+    telefone: '', tipoRelacao: '', organizacaoVinculadaId: '',
     logradouro: '', numero: '', complemento: '', bairro: '', cep: '', cidade: '', estado_uf: '', 
     observacoes: '',
   });
@@ -165,9 +166,10 @@ export default function EditarPessoaFisicaPage() {
   const [isCnhModalOpen, setIsCnhModalOpen] = useState(false);
   const [cnhModalMode, setCnhModalMode] = useState<'create' | 'edit'>('create');
   const [cnhFormData, setCnhFormData] = useState<CNHData>(initialCnhFormData);
-  const [currentDbCnh, setCurrentDbCnh] = useState<CNHData | null>(null); // CNH data from DB
+  const [currentDbCnh, setCurrentDbCnh] = useState<CNHData | null>(null);
 
-  const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral';
+  const isOrganizacaoRequired = formData.tipoRelacao !== '' && formData.tipoRelacao !== 'cliente_geral' && formData.tipoRelacao !== 'motorista_nao_vinculado';
+
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -184,7 +186,7 @@ export default function EditarPessoaFisicaPage() {
                     dataNascimento: data.data_nascimento && isValid(parseISO(data.data_nascimento)) ? parseISO(data.data_nascimento) : undefined,
                     email: data.email || '', 
                     telefone: data.telefone || '', 
-                    tipoRelacao: data.tipo_relacao || '', // Now direct from PessoasFisicas
+                    tipoRelacao: data.tipo_relacao || '', 
                     organizacaoVinculadaId: data.MembrosEntidade && data.MembrosEntidade.length > 0 ? data.MembrosEntidade[0].id_entidade_pai.toString() : '',
                     logradouro: data.logradouro || '', 
                     numero: data.numero || '', 
@@ -198,7 +200,7 @@ export default function EditarPessoaFisicaPage() {
                     if (data.data_cadastro) {
                     setDataCadastroDisplay(format(parseISO(data.data_cadastro), "dd/MM/yyyy HH:mm"));
                     }
-                    setCurrentDbCnh(data.CNHs || null); // Set CNH data from DB
+                    setCurrentDbCnh(data.CNHs || null); 
                     setPessoaFisicaFound(true);
                 } else { 
                     setPessoaFisicaFound(false);
@@ -210,12 +212,11 @@ export default function EditarPessoaFisicaPage() {
                 toast({ title: "Erro ao carregar dados", description: err.message, variant: "destructive"});
             }
 
-            // Fetch Organizações for select
             if (supabase) {
                 setIsLoadingOrganizacoes(true);
                 const { data: orgsData, error: orgsError } = await supabase
                     .from('Entidades')
-                    .select('id_entidade, nome')
+                    .select('id_entidade, nome, cnpj')
                     .order('nome', { ascending: true });
 
                 if (orgsError) {
@@ -226,7 +227,7 @@ export default function EditarPessoaFisicaPage() {
                     setOrganizacoesOptions(
                     orgsData.map(org => ({
                         value: org.id_entidade.toString(),
-                        label: org.nome,
+                        label: `${org.nome} (${org.cnpj})`,
                     }))
                     );
                 }
@@ -238,9 +239,8 @@ export default function EditarPessoaFisicaPage() {
     fetchInitialData();
   }, [pessoaFisicaId, toast]);
   
-  // Clear organizacaoVinculadaId if tipoRelacao becomes 'cliente_geral'
   useEffect(() => {
-    if (formData.tipoRelacao === 'cliente_geral' && formData.organizacaoVinculadaId) {
+    if ((formData.tipoRelacao === 'cliente_geral' || formData.tipoRelacao === 'motorista_nao_vinculado') && formData.organizacaoVinculadaId) {
       setFormData(prev => ({ ...prev, organizacaoVinculadaId: '' }));
     }
   }, [formData.tipoRelacao, formData.organizacaoVinculadaId]);
@@ -283,14 +283,13 @@ export default function EditarPessoaFisicaPage() {
     setFormData(prev => ({...prev, [name]: date }));
   };
 
-  // CNH Modal Handlers
   const handleOpenCnhModal = () => {
-    if (currentDbCnh) { // If CNH data exists in DB
+    if (currentDbCnh) { 
       setCnhModalMode('edit');
-      setCnhFormData({ ...initialCnhFormData, ...currentDbCnh }); // Pre-fill with DB data
+      setCnhFormData({ ...initialCnhFormData, ...currentDbCnh }); 
     } else {
       setCnhModalMode('create');
-      setCnhFormData(initialCnhFormData); // Start with empty form
+      setCnhFormData(initialCnhFormData); 
     }
     setIsCnhModalOpen(true);
   };
@@ -319,7 +318,6 @@ export default function EditarPessoaFisicaPage() {
       return;
     }
     
-    // Prepare payload for CNHs table
     const cnhPayload = {
         id_pessoa_fisica: parseInt(pessoaFisicaId),
         numero_registro: cnhFormData.numero_registro,
@@ -340,7 +338,6 @@ export default function EditarPessoaFisicaPage() {
         savedCnhData = data as CNHData;
         toast({ title: "CNH Cadastrada!", description: "Dados da CNH salvos com sucesso." });
       } else if (cnhModalMode === 'edit' && currentDbCnh?.id_cnh) {
-        // Exclude id_pessoa_fisica from the CNHs table update payload itself, as it's a FK and usually not changed.
         const { id_pessoa_fisica, ...updatePayload } = cnhPayload; 
         const { data, error } = await supabase.from('CNHs').update(updatePayload).eq('id_cnh', currentDbCnh.id_cnh).select().single();
         if (error) throw error;
@@ -349,7 +346,7 @@ export default function EditarPessoaFisicaPage() {
       } else {
         throw new Error("Modo de operação da CNH inválido ou ID da CNH ausente para edição.");
       }
-      setCurrentDbCnh(savedCnhData); // Update the CNH data displayed on the page
+      setCurrentDbCnh(savedCnhData); 
       setIsCnhModalOpen(false);
     } catch (error: any) {
       console.error("Erro ao salvar CNH:", error);
@@ -375,14 +372,14 @@ export default function EditarPessoaFisicaPage() {
     }
     
     try {
-      // Payload for PessoasFisicas table
       const pessoaFisicaUpdatePayload = {
         nome_completo: formData.nomeCompleto,
         cpf: formData.cpf,
         rg: formData.rg || null,
         data_nascimento: formData.dataNascimento ? format(formData.dataNascimento, "yyyy-MM-dd") : null,
-        email: formData.email, // Assuming email is identifier and not changed here, or handled separately
+        // email: formData.email, // E-mail (identificador) geralmente não é alterado. Se precisar, trate com cuidado.
         telefone: formData.telefone || null,
+        tipo_relacao: formData.tipoRelacao,
         logradouro: formData.logradouro || null,
         numero: formData.numero || null,
         complemento: formData.complemento || null,
@@ -390,8 +387,7 @@ export default function EditarPessoaFisicaPage() {
         cep: formData.cep || null,
         cidade: formData.cidade || null,
         estado_uf: formData.estado_uf || null,
-        tipo_relacao: formData.tipoRelacao, // Direct column
-        observacoes: formData.observacoes, // Direct column
+        observacoes: formData.observacoes || null,
       };
 
       const { error: pfError } = await supabase
@@ -402,35 +398,30 @@ export default function EditarPessoaFisicaPage() {
       if (pfError) throw pfError;
       console.log("Pessoa Física atualizada com sucesso.");
       
-      // Handle MembrosEntidade link
       const numericPessoaFisicaId = parseInt(pessoaFisicaId);
 
-      if (formData.tipoRelacao !== 'cliente_geral' && formData.organizacaoVinculadaId) {
+      if (formData.tipoRelacao !== 'cliente_geral' && formData.tipoRelacao !== 'motorista_nao_vinculado' && formData.organizacaoVinculadaId) {
         const numericOrganizacaoId = parseInt(formData.organizacaoVinculadaId);
-        // Upsert logic: if a link exists, update it; otherwise, insert it.
-        // The onConflict should target your unique constraint for (id_entidade_pai, id_membro_pessoa_fisica).
         const { error: membroError } = await supabase
           .from('MembrosEntidade')
           .upsert({ 
             id_entidade_pai: numericOrganizacaoId,
             id_membro_pessoa_fisica: numericPessoaFisicaId,
             tipo_membro: 'Pessoa Fisica',
-            funcao_no_membro: formData.tipoRelacao // Or a more specific role if you have another field for it
+            funcao_no_membro: formData.tipoRelacao 
           }, { 
-            onConflict: 'id_entidade_pai,id_membro_pessoa_fisica' // Ensure this matches your unique constraint
+            onConflict: 'id_entidade_pai,id_membro_pessoa_fisica'
           });
          if (membroError) {
             console.warn("Aviso/Erro ao atualizar MembrosEntidade:", membroError.message);
-            // Potentially throw membroError if it's critical
          } else {
             console.log("Vínculo MembrosEntidade atualizado/inserido com sucesso.");
          }
       } else {
-        // If tipoRelacao is 'cliente_geral' or no organizacaoVinculadaId, attempt to remove any existing link.
         const { error: deleteMembroError } = await supabase
           .from('MembrosEntidade')
           .delete()
-          .eq('id_membro_pessoa_fisica', numericPessoaFisicaId); // This will remove all links for this person
+          .eq('id_membro_pessoa_fisica', numericPessoaFisicaId); 
         if (deleteMembroError) {
             console.warn("Aviso/Erro ao tentar remover vínculo de MembrosEntidade:", deleteMembroError.message);
         } else {
@@ -522,11 +513,10 @@ export default function EditarPessoaFisicaPage() {
                             <SelectValue placeholder={isLoadingOrganizacoes ? "Carregando..." : "Selecione"} />
                           </SelectTrigger>
                           <SelectContent>
-                            {organizacoesOptions.length > 0 ? (
-                              organizacoesOptions.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))
-                            ): (
-                              <SelectItem value="none" disabled>Nenhuma organização encontrada</SelectItem>
-                            )}
+                            {isLoadingOrganizacoes && <SelectItem value="loading" disabled>Carregando...</SelectItem>}
+                            {!isLoadingOrganizacoes && organizacoesOptions.length === 0 && <SelectItem value="none" disabled>Nenhuma organização encontrada</SelectItem>}
+                            {!isLoadingOrganizacoes && organizacoesOptions.length > 0 && organizacoesOptions.map(org => (<SelectItem key={org.value} value={org.value}>{org.label}</SelectItem>))
+                            }
                           </SelectContent>
                         </Select>
                     </div>)}
@@ -641,6 +631,5 @@ export default function EditarPessoaFisicaPage() {
     </div>
   );
 }
-
     
   
