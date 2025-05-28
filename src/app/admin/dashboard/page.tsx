@@ -3,8 +3,9 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Building2, Car, ShieldCheck, FileText, AlertTriangle, BarChart3, PieChart, Activity } from "lucide-react";
-// import { useToast } from "@/hooks/use-toast"; // Uncomment if you use toasts
+import { Users, Building2, Car, ShieldCheck, FileText, AlertTriangle, BarChart3, PieChart, Activity, Loader2 } from "lucide-react";
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast"; // Added for error feedback
 
 interface DashboardStats {
   totalOrganizacoes: number;
@@ -29,44 +30,79 @@ const initialStats: DashboardStats = {
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>(initialStats);
   const [isLoading, setIsLoading] = useState(true);
-  // const { toast } = useToast();
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Placeholder for fetching dashboard data from Supabase
-    // This would involve multiple queries:
-    // 1. SELECT count(*) FROM public."Entidades";
-    // 2. SELECT count(*) FROM public."PessoasFisicas";
-    // 3. SELECT count(*) FROM public."Veiculos";
-    // 4. SELECT count(*) FROM public."Seguros" WHERE data_vigencia_fim >= now();
-    // 5. SELECT count(*) FROM public."Arquivos";
-    // 6. SELECT count(*) FROM public."CNHs" WHERE data_validade BETWEEN now() AND now() + interval '30 days'; (or configurable interval)
-    // 7. SELECT count(*) FROM public."Seguros" WHERE data_vigencia_fim BETWEEN now() AND now() + interval '30 days'; (or configurable interval)
-    
-    // For charts:
-    // - Tipos de Organização: SELECT TiposEntidade.nome_tipo, count(Entidades.id_entidade) FROM public."Entidades" JOIN public."TiposEntidade" ON Entidades.id_tipo_entidade = TiposEntidade.id_tipo_entidade GROUP BY TiposEntidade.nome_tipo;
-    // - Veículos por Combustível: SELECT combustivel, count(*) FROM public."Veiculos" GROUP BY combustivel;
-    // - Seguros por Seguradora: SELECT Seguradoras.nome_seguradora, count(Seguros.id_seguro) FROM public."Seguros" JOIN public."Seguradoras" ON Seguros.id_seguradora = Seguradoras.id_seguradora GROUP BY Seguradoras.nome_seguradora;
-
     const fetchDashboardData = async () => {
+      if (!supabase) {
+        toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
-      console.log("Fetching dashboard data (placeholder)...");
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      
-      // Simulate fetched data
-      setStats({
-        totalOrganizacoes: 15,
-        totalPessoasFisicas: 123,
-        totalVeiculos: 78,
-        totalApolicesAtivas: 65,
-        totalDocumentos: 250,
-        cnhsProximasVencimento: 7,
-        segurosProximosVencimento: 12,
-      });
-      setIsLoading(false);
+      console.log("Dashboard: Fetching dashboard data from Supabase...");
+
+      try {
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(today.getDate() + 30);
+        const todayISO = today.toISOString().split('T')[0]; // YYYY-MM-DD
+        const thirtyDaysFromNowISO = thirtyDaysFromNow.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        const [
+          organizacoesRes,
+          pessoasFisicasRes,
+          veiculosRes,
+          apolicesAtivasRes,
+          documentosRes,
+          cnhsVencendoRes,
+          segurosVencendoRes,
+        ] = await Promise.all([
+          supabase.from('Entidades').select('*', { count: 'exact', head: true }),
+          supabase.from('PessoasFisicas').select('*', { count: 'exact', head: true }),
+          supabase.from('Veiculos').select('*', { count: 'exact', head: true }),
+          supabase.from('Seguros').select('*', { count: 'exact', head: true }).gte('vigencia_fim', todayISO),
+          supabase.from('Arquivos').select('*', { count: 'exact', head: true }),
+          supabase.from('CNHs').select('*', { count: 'exact', head: true }).gte('data_validade', todayISO).lte('data_validade', thirtyDaysFromNowISO),
+          supabase.from('Seguros').select('*', { count: 'exact', head: true }).gte('vigencia_fim', todayISO).lte('vigencia_fim', thirtyDaysFromNowISO),
+        ]);
+        
+        // Log individual responses for debugging
+        console.log("Organizacoes count response:", organizacoesRes);
+        console.log("Pessoas Fisicas count response:", pessoasFisicasRes);
+        // ... and so on for other responses
+
+        setStats({
+          totalOrganizacoes: organizacoesRes.count ?? 0,
+          totalPessoasFisicas: pessoasFisicasRes.count ?? 0,
+          totalVeiculos: veiculosRes.count ?? 0,
+          totalApolicesAtivas: apolicesAtivasRes.count ?? 0,
+          totalDocumentos: documentosRes.count ?? 0,
+          cnhsProximasVencimento: cnhsVencendoRes.count ?? 0,
+          segurosProximosVencimento: segurosVencendoRes.count ?? 0,
+        });
+
+        // Check for errors in individual calls (Supabase count query returns error in the error property)
+        const errors = [
+            organizacoesRes.error, pessoasFisicasRes.error, veiculosRes.error, 
+            apolicesAtivasRes.error, documentosRes.error, cnhsVencendoRes.error, segurosVencendoRes.error
+        ].filter(Boolean);
+
+        if (errors.length > 0) {
+            errors.forEach(err => console.error("Dashboard data fetch error:", err));
+            toast({ title: "Erro ao Carregar Alguns Dados", description: "Algumas estatísticas do dashboard podem não ter sido carregadas. Verifique o console.", variant: "default" });
+        }
+
+      } catch (error: any) {
+        console.error("Dashboard: General error fetching dashboard data:", error);
+        toast({ title: "Erro ao Carregar Dashboard", description: error.message || "Não foi possível carregar os dados do painel.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchDashboardData();
-  }, []);
+  }, [toast]); // Added toast to dependency array
 
   const StatCard = ({ title, value, icon: Icon, description, isLoadingCard }: { title: string; value: string | number; icon: React.ElementType; description: string; isLoadingCard?: boolean }) => (
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -76,7 +112,9 @@ export default function AdminDashboardPage() {
       </CardHeader>
       <CardContent>
         {isLoadingCard ? (
-          <div className="h-9 w-16 bg-muted animate-pulse rounded-md"></div>
+          <div className="h-9 w-16 bg-muted animate-pulse rounded-md flex items-center justify-center">
+            <Loader2 className="h-5 w-5 text-primary/50 animate-spin" />
+          </div>
         ) : (
           <div className="text-3xl font-bold text-primary">{value}</div>
         )}
@@ -121,6 +159,17 @@ export default function AdminDashboardPage() {
         <StatCard title="Total de Documentos" value={stats.totalDocumentos} icon={FileText} description="Documentos armazenados" isLoadingCard={isLoading} />
         <StatCard title="CNHs Próximas do Vencimento" value={stats.cnhsProximasVencimento} icon={AlertTriangle} description="Nos próximos 30 dias" isLoadingCard={isLoading} />
         <StatCard title="Seguros Próximos do Vencimento" value={stats.segurosProximosVencimento} icon={AlertTriangle} description="Nos próximos 30 dias" isLoadingCard={isLoading} />
+         {/* Placeholder for a new summary card if needed */}
+        <Card className="shadow-lg bg-muted/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Em Breve</CardTitle>
+             <BarChart3 className="h-5 w-5 text-muted-foreground/50" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-muted-foreground/70">-</div>
+            <p className="text-xs text-muted-foreground pt-1">Novas métricas e atalhos</p>
+          </CardContent>
+        </Card>
       </section>
 
       {/* Área de Gráficos */}
@@ -138,16 +187,18 @@ export default function AdminDashboardPage() {
       
       {/* 
         Supabase Integration Comments:
-        - All data for the summary cards needs to be fetched via Supabase API calls.
-          - Total counts: Use `select('id', { count: 'exact' })` on respective tables.
-          - Apólices Ativas: Filter `Seguros` where `data_vigencia_fim >= now()`.
-          - CNHs/Seguros Próximos do Vencimento: Filter `CNHs.data_validade` or `Seguros.data_vigencia_fim` within a date range (e.g., now() to now() + 30 days).
-        - Data for charts will require aggregation queries (e.g., COUNT with GROUP BY).
+        - All data for the summary cards is now fetched using Supabase client.
+          - Total counts: Uses `select('*', { count: 'exact', head: true })`.
+          - Apólices Ativas: Filters `Seguros` where `vigencia_fim >= now()`.
+          - CNHs/Seguros Próximos do Vencimento: Filters `CNHs.data_validade` or `Seguros.vigencia_fim` within a date range (now() to now() + 30 days).
+        - Data for charts will require aggregation queries (e.g., COUNT with GROUP BY) and are currently placeholders.
           - Tipos de Organização: `Entidades` JOIN `TiposEntidade`, GROUP BY `TiposEntidade.nome_tipo`.
           - Veículos por Combustível: `Veiculos`, GROUP BY `combustivel`.
           - Seguros por Seguradora: `Seguros` JOIN `Seguradoras`, GROUP BY `Seguradoras.nome_seguradora`.
-        - Use a charting library like Recharts, Chart.js, or ApexCharts for data visualization.
+        - Use a charting library like Recharts (already installed), Chart.js, or ApexCharts for data visualization when ready.
       */}
     </div>
   );
 }
+
+    
