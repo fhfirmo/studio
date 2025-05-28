@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -22,7 +21,7 @@ interface DocumentoSupabase {
   caminho_armazenamento: string;
   PessoasFisicas?: { nome_completo: string } | null;
   Entidades?: { nome: string } | null;
-  Veiculos?: { placa_atual: string, marca?: string | null, modelo?: string | null } | null; // marca and modelo are now direct
+  Veiculos?: { placa_atual: string, marca?: string | null, modelo?: string | null } | null;
   Seguros?: { numero_apolice: string } | null;
 }
 

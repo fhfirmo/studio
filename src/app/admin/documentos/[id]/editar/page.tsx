@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, type FormEvent } from 'react';
@@ -7,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea'; // Added import
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileEdit, Save, XCircle, AlertTriangle, Link2, User, Building, Car, ShieldCheck, FileText, Loader2 } from 'lucide-react';
@@ -324,7 +323,8 @@ export default function EditarDocumentoPage() {
                   formData.tipoAssociacao === 'organizacao' ? 'Organização' :
                   formData.tipoAssociacao === 'veiculo' ? 'Veículo' :
                   formData.tipoAssociacao === 'seguro' ? 'Seguro' : 'Entidade'
-                } <span className="text-destructive">*</span></Label>
+                } {formData.tipoAssociacao !== 'nenhum' && <span className="text-destructive">*</span>}
+                </Label>
                 <Select 
                   name="idAssociado" 
                   value={formData.idAssociado} 
