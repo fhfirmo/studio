@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea'; // Added import
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Save, XCircle, FileText, Link2, User, Building, Car, ShieldCheck, Loader2 } from 'lucide-react';
@@ -27,11 +28,6 @@ const documentTypes = [
 
 interface GenericOption { id: string; nome: string; [key: string]: any; }
 
-// Placeholder options for dynamic 'Associado a' select - will be replaced by fetched data
-const placeholderPessoasFisicas: GenericOption[] = [ { id: "pf_001", nome: "João da Silva Sauro (123.456.789-00)" }];
-const placeholderVeiculos: GenericOption[] = [ { id: "vei_001", nome: "ABC-1234 (Fiat Uno)" }];
-const placeholderSeguros: GenericOption[] = [ { id: "seg_001", nome: "AP-2024-001 (Titular: João)" }];
-
 type TipoAssociacao = "nenhum" | "pessoa_fisica" | "organizacao" | "veiculo" | "seguro";
 
 export default function NovoDocumentoPage() {
@@ -44,7 +40,7 @@ export default function NovoDocumentoPage() {
   const [formData, setFormData] = useState({
     titulo: '',
     tipoDocumento: '',
-    observacoes: '', // Added from original prompt logic, though not explicitly in this specific prompt's form. Assuming it might be desired.
+    observacoes: '',
     tipoAssociacao: 'nenhum' as TipoAssociacao,
     idAssociado: '',
   });
@@ -63,7 +59,6 @@ export default function NovoDocumentoPage() {
   useEffect(() => {
     if (!supabase) return;
 
-    // Fetch Pessoas Fisicas
     setIsLoadingPessoasFisicas(true);
     supabase.from('PessoasFisicas').select('id_pessoa_fisica, nome_completo, cpf').order('nome_completo')
       .then(({ data, error }) => {
@@ -76,7 +71,6 @@ export default function NovoDocumentoPage() {
         setIsLoadingPessoasFisicas(false);
       });
 
-    // Fetch Organizacoes
     setIsLoadingOrganizacoes(true);
     supabase.from('Entidades').select('id_entidade, nome, cnpj').order('nome')
       .then(({ data, error }) => {
@@ -89,7 +83,6 @@ export default function NovoDocumentoPage() {
         setIsLoadingOrganizacoes(false);
       });
 
-    // Fetch Veiculos
     setIsLoadingVeiculos(true);
     supabase.from('Veiculos').select('id_veiculo, placa_atual, marca, modelo').order('placa_atual')
       .then(({ data, error }) => {
@@ -102,7 +95,6 @@ export default function NovoDocumentoPage() {
         setIsLoadingVeiculos(false);
       });
 
-    // Fetch Seguros
     setIsLoadingSeguros(true);
     supabase.from('Seguros').select('id_seguro, numero_apolice, PessoasFisicas!Seguros_id_titular_pessoa_fisica_fkey(nome_completo), Entidades!Seguros_id_titular_entidade_fkey(nome)').order('numero_apolice')
       .then(({ data, error }) => {
@@ -138,9 +130,8 @@ export default function NovoDocumentoPage() {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
-      // Auto-fill titulo if it's empty
       if (!formData.titulo) {
-        setFormData(prev => ({ ...prev, titulo: file.name.replace(/\.[^/.]+$/, "") })); // Remove extension
+        setFormData(prev => ({ ...prev, titulo: file.name.replace(/\.[^/.]+$/, "") }));
       }
     } else {
       setSelectedFile(null);
@@ -162,23 +153,19 @@ export default function NovoDocumentoPage() {
       return;
     }
     setIsLoading(true);
-    setUploadProgress(0); // Reset progress
+    setUploadProgress(0);
 
     try {
-      // 1. Upload file to Supabase Storage
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `documentos/${fileName}`; // Example path: bucket_name/documentos/timestamp.ext
+      const filePath = `documentos/${fileName}`;
 
       console.log(`NovoDocumentoPage: Iniciando upload para Supabase Storage. Path: ${filePath}`);
-      
-      // For Storage RLS, ensure authenticated users (or specific roles) have INSERT permission on 'documentos_bucket' (or your chosen bucket name).
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documentos_bucket') // Replace with your actual bucket name
+        .from('documentos_bucket')
         .upload(filePath, selectedFile, {
           cacheControl: '3600',
           upsert: false,
-          // contentType: selectedFile.type // Supabase client usually infers this correctly
         });
 
       if (uploadError) {
@@ -187,21 +174,23 @@ export default function NovoDocumentoPage() {
       }
 
       console.log("NovoDocumentoPage: Upload para Supabase Storage bem-sucedido:", uploadData);
-      setUploadProgress(100); // Simulate full progress for now
+      setUploadProgress(100);
 
-      // 2. Save metadata to 'Arquivos' table
+      const { data: authUserResponse } = await supabase.auth.getUser();
+      const userIdUpload = authUserResponse.user?.id;
+
       const arquivoPayload = {
-        nome_arquivo: formData.titulo, // Using the user-defined title as nome_arquivo
-        caminho_armazenamento: uploadData.path, // Path returned from storage
+        nome_arquivo: formData.titulo,
+        caminho_armazenamento: uploadData.path,
         tipo_mime: selectedFile.type,
         tamanho_bytes: selectedFile.size,
         tipo_documento: formData.tipoDocumento,
-        id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' ? parseInt(formData.idAssociado) : null,
-        id_entidade_associada: formData.tipoAssociacao === 'organizacao' ? parseInt(formData.idAssociado) : null,
-        id_veiculo: formData.tipoAssociacao === 'veiculo' ? parseInt(formData.idAssociado) : null,
-        id_seguro: formData.tipoAssociacao === 'seguro' ? parseInt(formData.idAssociado) : null,
-        // user_id_upload: (await supabase.auth.getUser()).data.user?.id, // Get current user ID
-        observacoes: formData.observacoes || null, // Added from original assumption
+        id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+        id_entidade_associada: formData.tipoAssociacao === 'organizacao' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+        id_veiculo: formData.tipoAssociacao === 'veiculo' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+        id_seguro: formData.tipoAssociacao === 'seguro' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
+        user_id_upload: userIdUpload || null,
+        observacoes: formData.observacoes || null,
       };
       
       console.log('NovoDocumentoPage: Payload para tabela "Arquivos":', arquivoPayload);
@@ -209,8 +198,6 @@ export default function NovoDocumentoPage() {
 
       if (dbError) {
         console.error("NovoDocumentoPage: Erro ao salvar metadados no DB:", JSON.stringify(dbError, null, 2), dbError);
-        // Consider deleting the uploaded file from storage if DB insert fails to avoid orphaned files
-        // await supabase.storage.from('documentos_bucket').remove([filePath]);
         throw dbError;
       }
 
@@ -364,15 +351,15 @@ export default function NovoDocumentoPage() {
 }
     
 // Supabase Integration Notes:
-// - Dynamic Selects: Fetch PessoasFisicas, Entidades, Veiculos, Seguros from Supabase.
+// - Dynamic Selects: PessoasFisicas, Entidades, Veiculos, Seguros fetched from Supabase.
 // - Form Submission:
-//   1. Upload selectedFile to Supabase Storage (e.g., to a 'documentos_bucket'). Ensure appropriate RLS for Storage.
-//   2. On successful upload, get the file path/URL from Supabase Storage.
+//   1. Upload selectedFile to Supabase Storage (e.g., to a 'documentos_bucket').
+//   2. On successful upload, get the file path/URL.
 //   3. Save document metadata to public."Arquivos" table.
 //      - Include: nome_arquivo (from formData.titulo), caminho_armazenamento, tipo_mime, tamanho_bytes, tipo_documento, observacoes.
 //      - Association IDs: id_pessoa_fisica_associada, id_entidade_associada, id_veiculo, id_seguro.
-//        Only ONE of these should be populated based on formData.tipoAssociacao and formData.idAssociado. The others should be NULL.
+//        Only ONE of these should be populated. The others should be NULL.
 //      - user_id_upload (from current authenticated user).
-//   (Ideally, Storage upload and DB insert should be managed carefully, perhaps via an Edge Function if atomicity is critical).
-// - Progress bar: Could be implemented using Supabase Storage's upload events if more granular progress is needed than just start/finish.
+// - RLS: Ensure appropriate permissions for Storage upload and 'Arquivos' table insert.
+// - Progress bar: Can be implemented using Supabase Storage's upload events.
 

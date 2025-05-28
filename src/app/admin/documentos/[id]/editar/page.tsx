@@ -7,7 +7,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea'; // Assuming Textarea is available
+import { Textarea } from '@/components/ui/textarea'; // Added import
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileEdit, Save, XCircle, AlertTriangle, Link2, User, Building, Car, ShieldCheck, FileText, Loader2 } from 'lucide-react';
@@ -62,7 +62,6 @@ export default function EditarDocumentoPage() {
     idAssociado: '',
   });
 
-  // State for dynamic select options
   const [pessoasFisicasOptions, setPessoasFisicasOptions] = useState<GenericOption[]>([]);
   const [organizacoesOptions, setOrganizacoesOptions] = useState<GenericOption[]>([]);
   const [veiculosOptions, setVeiculosOptions] = useState<GenericOption[]>([]);
@@ -122,7 +121,6 @@ export default function EditarDocumentoPage() {
       setIsLoading(true);
       setDocFound(null);
 
-      // Fetch Document Data
       const { data: docData, error: docError } = await supabase
         .from('Arquivos')
         .select('*')
@@ -149,7 +147,7 @@ export default function EditarDocumentoPage() {
             docData.id_veiculo ||
             docData.id_seguro || '').toString(),
         });
-        setOriginalFileName(docData.nome_arquivo || 'Nome não disponível'); // Assuming nome_arquivo from DB is original
+        setOriginalFileName(docData.nome_arquivo || 'Nome não disponível');
         setOriginalUploadDate(docData.data_upload ? new Date(docData.data_upload).toLocaleDateString('pt-BR') : 'Data não disponível');
         setDocFound(true);
       }
@@ -194,7 +192,7 @@ export default function EditarDocumentoPage() {
     }
 
     const updatePayload = {
-      nome_arquivo: formData.titulo, // Assuming nome_arquivo is the display title in your DB
+      nome_arquivo: formData.titulo,
       tipo_documento: formData.tipoDocumento,
       observacoes: formData.observacoes || null,
       id_pessoa_fisica_associada: formData.tipoAssociacao === 'pessoa_fisica' && formData.idAssociado ? parseInt(formData.idAssociado) : null,
@@ -380,4 +378,3 @@ export default function EditarDocumentoPage() {
 //     Example: if tipoAssociacao is 'pessoa_fisica', set id_pessoa_fisica_associada = formData.idAssociado, and set
 //              id_entidade_associada = NULL, id_veiculo = NULL, id_seguro = NULL.
 // - The actual file in Supabase Storage is NOT re-uploaded or changed on this screen. Only metadata and associations.
-
