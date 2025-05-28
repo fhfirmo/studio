@@ -11,44 +11,119 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LineChart, ArrowLeft, Filter, XSquare, FileSpreadsheet, FileText as FileTextIcon } from "lucide-react";
+import { LineChart, ArrowLeft, Filter, XSquare, FileSpreadsheet, FileText as FileTextIcon, Loader2 } from "lucide-react";
 import { format, parseISO, isValid, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
+
+interface OrganizacaoSupabase {
+  id_entidade: number;
+  nome: string;
+  cnpj: string;
+  telefone: string | null;
+  data_cadastro: string;
+  id_tipo_entidade: number; // For filtering
+  TiposEntidade: { nome_tipo: string } | null;
+}
 
 interface OrganizacaoReportItem {
   id: string;
   nomeOrganizacao: string;
-  tipoOrganizacaoNome: string;
+  tipoOrganizacaoNome: string | null;
   cnpj: string;
   telefone: string | null;
   dataCadastro: string;
 }
 
-const placeholderTiposOrganizacao = [
-  { value: "todos", label: "Todos" },
-  { value: "coop_principal", label: "Cooperativa Principal" },
-  { value: "associacao_principal", label: "Associação Principal" },
-  { value: "empresa_privada", label: "Empresa Privada" },
-];
-
-const initialOrganizacoes: OrganizacaoReportItem[] = [
-  { id: "org_001", nomeOrganizacao: "Cooperativa Alfa", tipoOrganizacaoNome: "Cooperativa Principal", cnpj: "11.222.333/0001-44", telefone: "(11) 91234-5678", dataCadastro: "2024-01-10" },
-  { id: "org_002", nomeOrganizacao: "Associação Beta", tipoOrganizacaoNome: "Associação Principal", cnpj: "22.333.444/0001-55", telefone: "(22) 92345-6789", dataCadastro: "2023-12-05" },
-  { id: "org_003", nomeOrganizacao: "Empresa Gama Soluções", tipoOrganizacaoNome: "Empresa Privada", cnpj: "33.444.555/0001-66", telefone: "(33) 93456-7890", dataCadastro: "2024-02-20" },
-];
-
 const initialFilters = {
   nomeOrganizacao: '',
   cnpj: '',
-  tipoOrganizacao: 'todos',
+  tipoOrganizacaoId: 'todos',
   dataCadastroInicio: undefined as Date | undefined,
   dataCadastroFim: undefined as Date | undefined,
 };
 
 export default function RelatorioOrganizacoesPage() {
+  console.log("RelatorioOrganizacoesPage: Component Mounting");
+  const { toast } = useToast();
   const [filters, setFilters] = useState(initialFilters);
-  const [filteredResults, setFilteredResults] = useState<OrganizacaoReportItem[]>(initialOrganizacoes);
+  const [filteredResults, setFilteredResults] = useState<OrganizacaoReportItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [tipoEntidadeOptions, setTipoEntidadeOptions] = useState<{ value: string; label: string }[]>([{ value: "todos", label: "Todos" }]);
+
+  useEffect(() => {
+    console.log("RelatorioOrganizacoesPage: Initial useEffect triggered, calling applyFilters and fetchTipoEntidadeOptions.");
+    applyFilters();
+    fetchTipoEntidadeOptions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array to run once on mount
+
+  const fetchTipoEntidadeOptions = async () => {
+    if (!supabase) return;
+    console.log("RelatorioOrganizacoesPage: Fetching TipoEntidade options for filter dropdown.");
+    const { data, error } = await supabase.from('TiposEntidade').select('id_tipo_entidade, nome_tipo').order('nome_tipo');
+    if (error) {
+      toast({ title: "Erro ao buscar Tipos de Entidade", description: error.message, variant: "destructive" });
+    } else if (data) {
+      setTipoEntidadeOptions([{ value: "todos", label: "Todos" }, ...data.map(te => ({ value: te.id_tipo_entidade.toString(), label: te.nome_tipo }))]);
+    }
+  };
+
+  const applyFilters = async () => {
+    if (!supabase) {
+      toast({ title: "Erro de Conexão", description: "Cliente Supabase não inicializado.", variant: "destructive" });
+      setFilteredResults([]);
+      return;
+    }
+    setIsLoading(true);
+    console.log("RelatorioOrganizacoesPage: applyFilters called. Filters:", filters);
+
+    try {
+      let query = supabase
+        .from('Entidades')
+        .select(`
+          id_entidade,
+          nome,
+          cnpj,
+          telefone,
+          data_cadastro,
+          id_tipo_entidade, 
+          TiposEntidade ( nome_tipo )
+        `);
+
+      if (filters.nomeOrganizacao) query = query.ilike('nome', `%${filters.nomeOrganizacao}%`);
+      if (filters.cnpj) query = query.ilike('cnpj', `%${filters.cnpj.replace(/\D/g, '')}%`);
+      if (filters.tipoOrganizacaoId !== 'todos') query = query.eq('id_tipo_entidade', parseInt(filters.tipoOrganizacaoId));
+      if (filters.dataCadastroInicio) query = query.gte('data_cadastro', format(startOfDay(filters.dataCadastroInicio), 'yyyy-MM-dd'));
+      if (filters.dataCadastroFim) query = query.lte('data_cadastro', format(endOfDay(filters.dataCadastroFim), 'yyyy-MM-dd'));
+
+      console.log("RelatorioOrganizacoesPage: Querying Supabase...");
+      const { data, error } = await query;
+      console.log("RelatorioOrganizacoesPage: Supabase response. Error:", error, "Data length:", data?.length);
+
+      if (error) throw error;
+
+      const mappedData = (data || []).map((org: OrganizacaoSupabase): OrganizacaoReportItem => ({
+        id: org.id_entidade.toString(),
+        nomeOrganizacao: org.nome,
+        tipoOrganizacaoNome: org.TiposEntidade?.nome_tipo || null,
+        cnpj: org.cnpj,
+        telefone: org.telefone,
+        dataCadastro: org.data_cadastro ? format(parseISO(org.data_cadastro), 'dd/MM/yyyy') : 'N/A',
+      }));
+      
+      console.log("RelatorioOrganizacoesPage: Setting filteredResults with", mappedData.length, "items.");
+      setFilteredResults(mappedData);
+
+    } catch (error: any) {
+      console.error("RelatorioOrganizacoesPage: Erro ao aplicar filtros/buscar dados:", JSON.stringify(error, null, 2));
+      toast({ title: "Erro ao Buscar Dados", description: error.message || "Falha ao carregar relatório.", variant: "destructive" });
+      setFilteredResults([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleFilterChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -62,58 +137,19 @@ export default function RelatorioOrganizacoesPage() {
   const handleDateFilterChange = (name: keyof typeof initialFilters, date: Date | undefined) => {
     setFilters(prev => ({ ...prev, [name]: date }));
   };
-
-  const applyFilters = () => {
-    setIsLoading(true);
-    console.log("Applying filters for Organizações (placeholder):", filters);
-
-    let results = initialOrganizacoes;
-    if (filters.nomeOrganizacao) {
-      results = results.filter(org => org.nomeOrganizacao.toLowerCase().includes(filters.nomeOrganizacao.toLowerCase()));
-    }
-    if (filters.cnpj) {
-      results = results.filter(org => org.cnpj.replace(/[./-]/g, '').includes(filters.cnpj.replace(/[./-]/g, '')));
-    }
-    if (filters.tipoOrganizacao !== 'todos') {
-      results = results.filter(org => org.tipoOrganizacaoNome === placeholderTiposOrganizacao.find(to => to.value === filters.tipoOrganizacao)?.label);
-    }
-    if (filters.dataCadastroInicio) {
-      const startDate = startOfDay(filters.dataCadastroInicio);
-      results = results.filter(org => {
-        const orgDate = parseISO(org.dataCadastro);
-        return isValid(orgDate) && orgDate >= startDate;
-      });
-    }
-    if (filters.dataCadastroFim) {
-      const endDate = endOfDay(filters.dataCadastroFim);
-      results = results.filter(org => {
-        const orgDate = parseISO(org.dataCadastro);
-        return isValid(orgDate) && orgDate <= endDate;
-      });
-    }
-    
-    setTimeout(() => { 
-      setFilteredResults(results);
-      setIsLoading(false);
-    }, 500);
-  };
-
-  const clearFilters = () => {
-    setFilters(initialFilters);
-    setFilteredResults(initialOrganizacoes); 
+  
+  const clearFilters = () => { 
+    setFilters(initialFilters); 
+    applyFilters();
   };
   
-  useEffect(() => {
-    // applyFilters(); // Optionally apply filters on initial load
-  }, []);
-
-  const handleExportExcel = () => {
-    console.log("Exporting Organizações to Excel (placeholder)... Data:", filteredResults);
+  const handleFormSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    applyFilters();
   };
 
-  const handleExportPDF = () => {
-    console.log("Exporting Organizações to PDF (placeholder)... Data:", filteredResults);
-  };
+  const handleExportExcel = () => { console.log("Exporting Organizações to Excel (placeholder)... Data:", filteredResults); toast({title: "Exportação Iniciada (Excel)"}) };
+  const handleExportPDF = () => { console.log("Exporting Organizações to PDF (placeholder)... Data:", filteredResults); toast({title: "Exportação Iniciada (PDF)"}) };
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -123,134 +159,80 @@ export default function RelatorioOrganizacoesPage() {
                 <LineChart className="mr-3 h-8 w-8" /> Relatório de Organizações
             </h1>
             <Button variant="outline" size="sm" asChild>
-                <Link href="/admin/relatorios">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar para Relatórios
-                </Link>
+                <Link href="/admin/relatorios"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Link>
             </Button>
         </div>
       </header>
 
       <Card className="shadow-lg mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center"><Filter className="mr-2 h-5 w-5 text-primary" /> Filtros do Relatório</CardTitle>
-          <CardDescription>Refine os resultados do relatório aplicando os filtros abaixo.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
-            <div className="space-y-1">
-              <Label htmlFor="nomeOrganizacao">Nome da Organização</Label>
-              <Input id="nomeOrganizacao" name="nomeOrganizacao" value={filters.nomeOrganizacao} onChange={handleFilterChange} placeholder="Pesquisar por nome..." />
+        <CardHeader><CardTitle className="flex items-center"><Filter className="mr-2 h-5 w-5 text-primary" /> Filtros</CardTitle></CardHeader>
+        <CardContent>
+          <form onSubmit={handleFormSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+              <div className="space-y-1"><Label htmlFor="nomeOrganizacao">Nome Organização</Label><Input id="nomeOrganizacao" name="nomeOrganizacao" value={filters.nomeOrganizacao} onChange={handleFilterChange} /></div>
+              <div className="space-y-1"><Label htmlFor="cnpj">CNPJ</Label><Input id="cnpj" name="cnpj" value={filters.cnpj} onChange={handleFilterChange} /></div>
+              <div className="space-y-1">
+                <Label htmlFor="tipoOrganizacaoId">Tipo de Organização</Label>
+                <Select name="tipoOrganizacaoId" value={filters.tipoOrganizacaoId} onValueChange={(v) => handleSelectFilterChange('tipoOrganizacaoId', v)}>
+                  <SelectTrigger id="tipoOrganizacaoId"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{tipoEntidadeOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1"><Label htmlFor="dataCadastroInicio">Data Cadastro (Início)</Label>
+                <Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{filters.dataCadastroInicio ? format(filters.dataCadastroInicio, "PPP", { locale: ptBR }) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={filters.dataCadastroInicio} onSelect={(d) => handleDateFilterChange('dataCadastroInicio', d)} /></PopoverContent></Popover>
+              </div>
+              <div className="space-y-1"><Label htmlFor="dataCadastroFim">Data Cadastro (Fim)</Label>
+                <Popover><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal">{filters.dataCadastroFim ? format(filters.dataCadastroFim, "PPP", { locale: ptBR }) : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={filters.dataCadastroFim} onSelect={(d) => handleDateFilterChange('dataCadastroFim', d)} disabled={(date) => filters.dataCadastroInicio ? date < filters.dataCadastroInicio : false} /></PopoverContent></Popover>
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="cnpj">CNPJ</Label>
-              <Input id="cnpj" name="cnpj" value={filters.cnpj} onChange={handleFilterChange} placeholder="00.000.000/0000-00" />
+            <div className="flex justify-end space-x-2 pt-2">
+              <Button type="button" variant="outline" onClick={clearFilters} disabled={isLoading}><XSquare className="mr-2 h-4 w-4"/> Limpar</Button>
+              <Button type="submit" disabled={isLoading}><Filter className="mr-2 h-4 w-4"/> {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Aplicando...</> : "Aplicar"}</Button>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="tipoOrganizacao">Tipo de Organização</Label>
-              {/* Supabase: Options for this select should be loaded from public.TiposEntidade */}
-              <Select name="tipoOrganizacao" value={filters.tipoOrganizacao} onValueChange={(value) => handleSelectFilterChange('tipoOrganizacao', value)}>
-                <SelectTrigger id="tipoOrganizacao"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-                <SelectContent>
-                  {placeholderTiposOrganizacao.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="dataCadastroInicio">Data de Cadastro (Início)</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal">
-                    {filters.dataCadastroInicio ? format(filters.dataCadastroInicio, "PPP", { locale: ptBR }) : <span>Selecione</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={filters.dataCadastroInicio} onSelect={(d) => handleDateFilterChange('dataCadastroInicio', d)} initialFocus /></PopoverContent>
-              </Popover>
-            </div>
-             <div className="space-y-1">
-              <Label htmlFor="dataCadastroFim">Data de Cadastro (Fim)</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal">
-                    {filters.dataCadastroFim ? format(filters.dataCadastroFim, "PPP", { locale: ptBR }) : <span>Selecione</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0"><CalendarComponent mode="single" selected={filters.dataCadastroFim} onSelect={(d) => handleDateFilterChange('dataCadastroFim', d)} disabled={(date) => filters.dataCadastroInicio ? date < filters.dataCadastroInicio : false} initialFocus /></PopoverContent>
-              </Popover>
-            </div>
-          </div>
-          <div className="flex justify-end space-x-2 pt-2">
-            <Button variant="outline" onClick={clearFilters} disabled={isLoading}><XSquare className="mr-2 h-4 w-4"/> Limpar Filtros</Button>
-            <Button onClick={applyFilters} disabled={isLoading}>
-              <Filter className="mr-2 h-4 w-4"/> {isLoading ? "Aplicando..." : "Aplicar Filtros"}
-            </Button>
-          </div>
+          </form>
         </CardContent>
       </Card>
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Resultados do Relatório</CardTitle>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <CardDescription>
-                Total de {filteredResults.length} Organizações encontradas.
-            </CardDescription>
+          <CardTitle>Resultados</CardTitle>
+           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <CardDescription>Total de {filteredResults.length} Organizações.</CardDescription>
             <div className="flex gap-2">
-                <Button variant="outline" onClick={handleExportExcel} disabled={isLoading || filteredResults.length === 0}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar para Excel
-                </Button>
-                <Button variant="outline" onClick={handleExportPDF} disabled={isLoading || filteredResults.length === 0}>
-                    <FileTextIcon className="mr-2 h-4 w-4" /> Exportar para PDF
-                </Button>
+                <Button variant="outline" onClick={handleExportExcel} disabled={isLoading || filteredResults.length === 0}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                <Button variant="outline" onClick={handleExportPDF} disabled={isLoading || filteredResults.length === 0}><FileTextIcon className="mr-2 h-4 w-4" /> PDF</Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow>
+              <TableHeader><TableRow>
                   <TableHead className="w-[80px] hidden sm:table-cell">ID</TableHead>
-                  <TableHead>Nome da Organização</TableHead>
-                  <TableHead className="hidden md:table-cell">Tipo da Organização</TableHead>
+                  <TableHead>Nome Organização</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo Organização</TableHead>
                   <TableHead className="hidden md:table-cell">CNPJ</TableHead>
                   <TableHead className="hidden lg:table-cell">Telefone</TableHead>
                   <TableHead className="hidden lg:table-cell">Data Cadastro</TableHead>
-                </TableRow>
-              </TableHeader>
+              </TableRow></TableHeader>
               <TableBody>
-                {isLoading ? (
-                    <TableRow><TableCell colSpan={6} className="text-center h-24">Carregando resultados...</TableCell></TableRow>
-                ) : filteredResults.length > 0 ? (
-                  filteredResults.map((org) => (
+                {isLoading ? (<TableRow><TableCell colSpan={6} className="text-center h-24"><Loader2 className="inline-block mr-2 h-6 w-6 animate-spin"/>Carregando...</TableCell></TableRow>)
+                : filteredResults.length > 0 ? (filteredResults.map((org) => (
                     <TableRow key={org.id}>
                       <TableCell className="font-medium text-xs hidden sm:table-cell">{org.id}</TableCell>
                       <TableCell>{org.nomeOrganizacao}</TableCell>
-                      <TableCell className="hidden md:table-cell">{org.tipoOrganizacaoNome}</TableCell>
+                      <TableCell className="hidden md:table-cell">{org.tipoOrganizacaoNome || "N/A"}</TableCell>
                       <TableCell className="hidden md:table-cell">{org.cnpj}</TableCell>
                       <TableCell className="hidden lg:table-cell">{org.telefone || "N/A"}</TableCell>
-                       <TableCell className="hidden lg:table-cell">{format(parseISO(org.dataCadastro), "dd/MM/yyyy")}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{org.dataCadastro}</TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
-                      Nenhuma organização encontrada com os filtros aplicados.
-                    </TableCell>
-                  </TableRow>
-                )}
+                ) : (<TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Nenhuma organização encontrada.</TableCell></TableRow>)}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
-      {/* 
-        Supabase Integration Notes:
-        - Fetch data from public."Entidades".
-        - JOIN with public."TiposEntidade" on "id_tipo_entidade" to get "nome_tipo" for "Tipo da Organização".
-        - Filters (nome_fantasia, cnpj, id_tipo_entidade, data_cadastro) to be applied in Supabase query.
-        - Select for "Tipo de Organização" options: Fetch from public."TiposEntidade".
-        - Export functionality: Send filtered data (or filter params) to backend/Edge Function to generate file.
-      */}
     </div>
   );
 }
