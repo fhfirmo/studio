@@ -38,7 +38,7 @@ interface SeguroDataForForm {
   valorIndenizacao: string;
   franquia: string;
   dataContratacao: Date | undefined;
-  observacoes: string; // Stays in UI form, but not sent to Seguros table
+  observacoes: string;
   id_titular_pessoa_fisica: string | null;
   id_titular_entidade: string | null;
   id_veiculo: string | null;
@@ -73,11 +73,6 @@ async function getSeguroById(seguroId: string, toast: any): Promise<SeguroDataFo
     return null;
   }
 
-  // Assuming 'observacoes' is NOT a column in 'Seguros' based on the error.
-  // If it was intended for another table or just UI notes, we handle it here.
-  // For now, we'll keep it in the form state but not try to save it directly to 'Seguros'.
-  const uiObservacoes = (seguroData as any).observacoes || ''; // If observacoes was ever part of an older schema
-
   return {
     id_seguro: seguroData.id_seguro.toString(),
     numeroApolice: seguroData.numero_apolice,
@@ -87,7 +82,7 @@ async function getSeguroById(seguroId: string, toast: any): Promise<SeguroDataFo
     valorIndenizacao: seguroData.valor_indenizacao?.toString() || '',
     franquia: seguroData.franquia?.toString() || '',
     dataContratacao: seguroData.data_contratacao && isValid(parseISO(seguroData.data_contratacao)) ? parseISO(seguroData.data_contratacao) : undefined,
-    observacoes: uiObservacoes, // Keep for UI if needed, but won't be in payload for 'Seguros' table
+    observacoes: seguroData.observacoes || '', // Added this line
     id_titular_pessoa_fisica: seguroData.id_titular_pessoa_fisica?.toString() || null,
     id_titular_entidade: seguroData.id_titular_entidade?.toString() || null,
     id_veiculo: seguroData.id_veiculo?.toString() || '--none--',
@@ -262,7 +257,7 @@ export default function EditarSeguroPage() {
       valor_indenizacao: formData.valorIndenizacao ? parseFloat(formData.valorIndenizacao.replace(',', '.')) : null,
       franquia: formData.franquia ? parseFloat(formData.franquia.replace(',', '.')) : null,
       data_contratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
-      // observacoes: formData.observacoes || null, // Removed as column doesn't exist in Seguros
+      observacoes: formData.observacoes.trim() || null,
       id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? parseInt(formData.id_titular_pessoa_fisica!) : null,
       id_titular_entidade: tipoTitular === 'organizacao' ? parseInt(formData.id_titular_entidade!) : null,
       id_veiculo: formData.id_veiculo && formData.id_veiculo !== '--none--' ? parseInt(formData.id_veiculo) : null,

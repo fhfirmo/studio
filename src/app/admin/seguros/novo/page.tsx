@@ -43,9 +43,9 @@ export default function NovoSeguroPage() {
     valorIndenizacao: '',
     franquia: '',
     dataContratacao: new Date() as Date | undefined,
-    observacoes: '', // This will remain in UI state but not sent to DB
-    id_titular: '', // Generic ID for selected titular
-    id_veiculo: '--none--', // Default to no vehicle
+    observacoes: '', 
+    id_titular: '', 
+    id_veiculo: '--none--', 
     coberturasSelecionadas: [] as string[],
     assistenciasSelecionadas: [] as string[],
   });
@@ -177,7 +177,7 @@ export default function NovoSeguroPage() {
       valor_indenizacao: formData.valorIndenizacao ? parseFloat(formData.valorIndenizacao.replace(',', '.')) : null,
       franquia: formData.franquia ? parseFloat(formData.franquia.replace(',', '.')) : null,
       data_contratacao: formData.dataContratacao ? format(formData.dataContratacao, "yyyy-MM-dd") : null,
-      // observacoes: formData.observacoes || null, // Removed as column doesn't exist
+      observacoes: formData.observacoes.trim() || null,
       id_titular_pessoa_fisica: tipoTitular === 'pessoa_fisica' ? parseInt(formData.id_titular) : null,
       id_titular_entidade: tipoTitular === 'organizacao' ? parseInt(formData.id_titular) : null,
       id_veiculo: formData.id_veiculo && formData.id_veiculo !== '--none--' ? parseInt(formData.id_veiculo) : null,
@@ -411,7 +411,7 @@ export default function NovoSeguroPage() {
                 <Card className="shadow-lg">
                     <CardHeader><CardTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary"/> Assistências</CardTitle></CardHeader>
                     <CardContent className="space-y-3 max-h-60 overflow-y-auto">
-                        {isLoadingAssistencias ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin text-primary" /> : assistenciasOptions.length > 0 ? (
+                         {isLoadingAssistencias ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin text-primary" /> : assistenciasOptions.length > 0 ? (
                             assistenciasOptions.map(item => (
                             <div key={item.id} className="flex items-center space-x-2">
                                 <Checkbox
